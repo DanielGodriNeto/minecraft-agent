@@ -30,7 +30,7 @@ test('test_no_xray', async () => {
 })
 
 test('test_dig_down', async () => {
-  await h.reset()
+  await h.reset({ x: 200, y: -60, z: 200 }) // outside the tower, so the fill can't suffocate the bot
   await h.fill({ x: 201, y: -60, z: 201 }, { x: 230, y: -45, z: 230 }, 'stone')
   const lava = [[6, 0], [0, 6], [-6, 0], [0, -6]].map(([dx, dz]) => ({ x: CENTER.x + dx, y: -50, z: CENTER.z + dz }))
   for (const p of lava) await h.setblock(p, 'lava')
