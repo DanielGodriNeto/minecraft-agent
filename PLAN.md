@@ -118,14 +118,14 @@ Assumed: N = 10 bots, runs capped at 60 min (`max` mode), ~5 min stop/restore/re
 | Phase 4 gate (RL policy, held-out 0–99) | ~1.5 | 100 | — |
 | Dev-slot tuning passes, Phases 2–4 (~6 × 100 runs) | ~9 | ~600 | — |
 | BC dataset (400 training slots, ~2.5× each) | ~14 | ~1,000 | ~150k |
-| PPO (50% curriculum episodes ≈ 15 min, 50% full runs) | ~14 | ~2,500 | ~250k |
+| PPO (800 curriculum episodes × 15 min + 800 full runs × 60 min, + restores) | ~14 | ~1,600 | ~160k |
 | **Total** | **~41** | | |
 
 Paired gates reuse the previous phase's held-out runs (same slots, same snapshot), so each gate
 costs one new 100-run batch. Nights fit inside the phase windows: Phase 2 (21 nights) holds its
 gate + tuning; Phase 3 (21) holds BC data + gate + tuning; Phase 4 (28) holds PPO + gate + tuning.
 
-250k decisions is small for PPO — which is why Phase 4 uses masking, curriculum starts, a small
+160k decisions is small for PPO — which is why Phase 4 uses masking, curriculum starts, a small
 action menu, a KL anchor, and is a bounded experiment.
 
 ---
@@ -229,7 +229,8 @@ accuracy (return, flee, branch choice) and per-slot variance, not only the aggre
 
 **Gate:** paired comparison of full Runs on held-out slots 0–99 vs the cloned policy: diamonds/hour +20% **or**
 success rate +10 points, paired bootstrap 95% CI excluding 0.
-**Fallback rule:** if the gate isn't met by week 15, the Phase 3 policy (or Phase 2 planner) is the
+**Fallback rule:** if the gate isn't met by week 15 — including because the measured budget
+overran (more PPO nights than the window holds) — the Phase 3 policy (or Phase 2 planner) is the
 final bot; Phase 4 results get written up as findings.
 
 ### Phase 5 — Real-server hardening (week 16, or right after Phase 2 if preferred)
