@@ -18,9 +18,10 @@ agents top out around 20% — see References).
 ## Definitions
 | Term | Meaning |
 |---|---|
-| **Run** | One gameplay episode: bot starts at a spawn slot with empty inventory, ends on (a) ≥1 diamond deposited *and* `!get diamond 1`, (b) 60 **real-time** minutes elapsed, or (c) 3 deaths. In `max` mode only (b) or (c) end it. |
-| **Spawn slot** | One of 200 fixed coordinates in a pre-generated world, ≥1,000 blocks apart. Slots 0–99 = eval set, 100–199 = training set. |
-| **Fresh spawn** | World folder restored from a pristine snapshot before each batch of runs, so no slot is ever reused within a batch and every batch sees identical terrain. |
+| **Run** | One gameplay episode under `!get diamond max`: bot starts at a spawn slot with empty inventory; ends after 60 **real-time** minutes or 3 deaths. **Success** = ≥1 diamond deposited during the run. Success rate and diamonds/hour come from the same runs. |
+| **Spawn slot** | One of 600 fixed coordinates in a pre-generated world, ≥1,000 blocks apart, each pre-generated to a 256-block radius. **Slots 0–99 = held-out gate set** (used only for a phase's final gate check, once per phase), **100–199 = dev set** (all tuning/iteration), **200–599 = training set** (BC/PPO data). |
+| **Fresh spawn** | Before each batch: stop the server → copy the pristine world snapshot over the live world folder → start the server → wait for full startup. No slot is reused within a batch; every batch sees identical terrain. |
+| **Curriculum episode** | PPO training-only episode that starts geared at mining depth. Never counts as a Run and never used for any gate. |
 | **Stuck** | 3 consecutive skill failures with no inventory change and < 5 blocks of movement. Ends the run as a failure. |
 | **Test pass** | The full `tests/` suite passing once. |
 
@@ -100,18 +101,21 @@ Skill rules:
   3. flee vs. keep mining at a given health / mob distance
   4. when to abandon a tunnel direction
 - **Reward:** +1 per diamond deposited · +0.1 per tech-tree milestone (one-shot per run) ·
-  −1 per death · −0.01 per failed skill · **−0.001 per second** (aligns with diamonds/hour).
+  **−5 per death** · −0.01 per failed skill · **−0.001 per second** (aligns with diamonds/hour).
+  Death (−5, plus losing carried items) must always cost more than an entire unproductive
+  60-minute run (−3.6), so the policy can never profit from dying to end a bad run.
 
 ---
 
-## Budget (measured in Phase 2.5, then these numbers are replaced by real ones)
-Assumed: N = 10 bots, full run ≈ 25 min, 8 h unattended per night.
+## Budget (measured in Phase 2.4, then these numbers are replaced by real ones)
+Assumed: N = 10 bots, runs capped at 60 min (`max` mode), ~5 min stop/restore/restart per batch,
+8 h unattended per night → ~7 batches of 10 = ~70 runs/night.
 
-| Use | Runs/night | Nights | Runs | Skill decisions |
-|---|---|---|---|---|
-| Eval (100 slots) | — | ~0.5 | 100 | — |
-| BC dataset | ~190 | 5 | ~1,000 | ~100k |
-| PPO, curriculum starts (≈10 min) | ~480 | 10 | ~4,800 | ~250k |
+| Use | Nights | Runs / episodes | Skill decisions |
+|---|---|---|---|
+| Gate eval (100 held-out slots) | ~1.5 | 100 | — |
+| BC dataset (400 training slots, ~2.5× each) | ~14 | ~1,000 | ~150k |
+| PPO (50% curriculum episodes ≈ 15 min, 50% full runs) | ~14 | ~2,500 | ~250k |
 
 250k decisions is small for PPO — which is why Phase 4 uses masking, curriculum starts, a small
 action menu, a KL anchor, and is a bounded experiment.
@@ -127,7 +131,10 @@ action menu, a KL anchor, and is a bounded experiment.
       exact versions in `package.json`
 - [ ] 0.3 `server.properties`: `online-mode=false`, `server-ip=127.0.0.1`, whitelist on
 - [ ] 0.4 Repo layout: `bot/` (Node), `agent/` (Python), `tests/`
-- **Gate:** bot joins and answers `!status` from the owner; a non-whitelisted client can't join.
+- [ ] 0.5 `require-resource-pack=false`, no forced resource pack
+- **Gate:** a bare mineflayer bot joins **the actual Paper build** (not only vanilla), walks,
+  digs a block and answers `!status` from the owner; a non-whitelisted client can't join.
+  If that Paper build breaks mineflayer, fall back to the vanilla jar of the same patch.
 
 ### Phase 1 — Commands + skills (weeks 2–5)
 - [ ] 1.1 Command parser + owner authentication (both modes above)
@@ -158,29 +165,34 @@ Descope rule: if week 5 ends with failures, ship `mine`/`dig_down`/`deposit` fir
 `craft_chain`/`smelt` to a one-week buffer before Phase 2.
 
 ### Phase 2 — Scripted baseline = usable bot (weeks 6–8)
-- [ ] 2.1 Pre-generate the world with Chunky; register 200 spawn slots; save pristine snapshot
+- [ ] 2.1 Pre-generate 600 spawn slots with Chunky (256-block radius **per slot**, not one bounding
+      box); save pristine snapshot. Check free disk ≥ 2× the pre-generated world size
+      (estimate: ~5–10 GB per copy — measure after generation)
 - [ ] 2.2 Fixed-plan planner: tech tree → iron pickaxe → dig to y≈-58 → branch-mine → deposit → repeat.
       Planner parameters (branch y, spacing, return thresholds) get small random jitter per run
       so recorded data covers more states.
 - [ ] 2.3 `max` loop: return and deposit when inventory full, pickaxe low, food low, or night + surface
-- [ ] 2.4 Eval harness: restore snapshot → 100 runs on eval slots 0–99 → success rate,
-      diamonds/hour, deaths/hour, stuck rate, 95% CI
-- [ ] 2.5 **Capacity benchmark:** raise bot count until server TPS < 19 or CPU > 85%; set N to the
-      last good value; rewrite the Budget table with measured run length and N
+- [ ] 2.4 **Capacity benchmark (before any eval):** raise bot count until server TPS < 19 or
+      CPU > 85%; set N to the last good value; rewrite the Budget table with measured N,
+      run length and restore overhead
+- [ ] 2.5 Eval harness at that N: fresh spawn → runs on a slot set → success rate,
+      diamonds/hour, deaths/hour, stuck rate, 95% CI. Tune against **dev slots 100–199**;
+      run the held-out slots 0–99 once for the gate
 
 **Tests**
 - [ ] `test_planner_order` — never attempts a craft whose inputs it can't have
 - [ ] `test_restock` — pickaxe broken mid-run → crafts a new one and continues
 - [ ] `test_death_recovery` — killed → respawns, rebuilds tools, resumes objective
-- [ ] `test_snapshot_restore` — after restore, slot terrain hash equals pristine hash
+- [ ] `test_snapshot_restore` — after stop/restore/restart, a bot queries sample blocks at a slot
+      through the running server and they match the pristine snapshot
 
-**Gate:** ≥ 50% success on the 100 eval runs. This caps the ML phases — fix skills until it passes.
+**Gate:** ≥ 50% success on the 100 held-out runs (slots 0–99). This caps the ML phases — fix skills until it passes.
 **At this point the bot is usable** — Phase 5 hardening can be pulled forward if you want to use it
 on a real server before the ML work.
 
 ### Phase 3 — Your model: behavior cloning (weeks 9–11)
 - [ ] 3.1 gymnasium Env: step = run one skill; obs, action mask, reward as above
-- [ ] 3.2 Record ~1,000 runs on training slots 100–199 (≈5 nights)
+- [ ] 3.2 Record ~1,000 runs on training slots 200–599 (≈14 nights)
 - [ ] 3.3 BC trainer, train/val split by run
 
 **Tests**
@@ -190,23 +202,24 @@ on a real server before the ML work.
 - [ ] `test_overfit_one_batch` — loss → ~0 on one batch
 - [ ] `test_eval_deterministic` — same checkpoint + slots → same numbers
 
-**Gate:** paired comparison on eval slots 0–99 (same slot, same snapshot, planner vs policy):
+**Gate:** paired comparison on held-out slots 0–99 (same slot, same snapshot, planner vs policy):
 success-rate difference ≥ −5 points (paired bootstrap 95% CI). Also report per-decision-type
-accuracy (return, flee, branch choice), not only the aggregate.
+accuracy (return, flee, branch choice) and per-slot variance, not only the aggregate.
 
 ### Phase 4 — Stretch: RL fine-tune (weeks 12–15)
 - [ ] 4.1 PPO + KL penalty to the cloned policy; asynchronous collection (each bot pushes
       transitions to a shared buffer independently — no lock-step)
-- [ ] 4.2 Curriculum: ~70% of episodes start already geared (`/give` iron pickaxe, food) at mining
-      depth, ~30% full runs
-- [ ] 4.3 Report the four decision types from "Where it can beat the script"
+- [ ] 4.2 Curriculum: 50% curriculum episodes (geared via `/give` at mining depth), 50% full runs
+      on training slots
+- [ ] 4.3 Report the four decision types from "Where it can beat the script", plus mid-game
+      diamonds/hour measured from reaching mining depth (isolates curriculum gains)
 
 **Tests**
-- [ ] `test_reward` — +1 per diamond deposited, −1 per death, time penalty applied
+- [ ] `test_reward` — +1 per diamond deposited, −5 per death, time penalty applied
 - [ ] `test_milestone_one_shot` — breaking and re-crafting a table gives the bonus once per run
 - [ ] `test_kl_zero_at_init` — KL = 0 when initialised from the cloned policy
 
-**Gate:** paired comparison on eval slots 0–99 vs the cloned policy: diamonds/hour +20% **or**
+**Gate:** paired comparison of full Runs on held-out slots 0–99 vs the cloned policy: diamonds/hour +20% **or**
 success rate +10 points, paired bootstrap 95% CI excluding 0.
 **Fallback rule:** if the gate isn't met by week 15, the Phase 3 policy (or Phase 2 planner) is the
 final bot; Phase 4 results get written up as findings.
@@ -242,18 +255,22 @@ final bot; Phase 4 results get written up as findings.
 - [ ] Lava: staircase digging; check blocks below/ahead before breaking
 - [ ] Chest theft/full chest on multiplayer: `!status` reports contents; full → stop + tell owner
 - [ ] Anti-cheat may flag pathfinder movement → document per server, not fixable in general
-- [ ] Local PC limits (TPS/CPU/RAM with N bots) → capacity benchmark in 2.5 sets N
+- [ ] Local PC limits (TPS/CPU/RAM with N bots) → capacity benchmark in 2.4 sets N
+- [ ] Overfitting to fixed terrain → tune on dev slots, gate once per phase on held-out slots,
+      400 distinct training terrains
+- [ ] Paper ≠ vanilla for mineflayer → Phase 0 gate tests the actual Paper build; vanilla fallback
+- [ ] Disk: pristine + live world copies → free-space check in 2.1
 - [ ] Too little data for PPO → curriculum, masking, KL anchor, fallback rule
 - [ ] Version drift: exact pins; re-check mineflayer's tested versions before any server upgrade
 
 ## Metrics (every reported number)
-Success rate · diamonds deposited/hour · deaths/hour · stuck rate · runs on eval slots 0–99
-(count set in Phase 2.4, currently 100) · paired comparisons against the previous phase ·
+Success rate · diamonds deposited/hour · deaths/hour · stuck rate · gate runs on held-out slots
+0–99 (count set in Phase 2.5, currently 100) · paired comparisons against the previous phase ·
 95% CI (paired bootstrap) · difficulty stated.
 
 ## Deferred (add only on measured need)
 - Carpet fake players + `/tick sprint` + Lithium/FerriteCore/C2ME for faster training — only if the
-  Phase 2.5 benchmark shows the Budget table can't be met. Note: Mineflayer can't follow
+  Phase 2.4 benchmark shows the Budget table can't be met. Note: Mineflayer can't follow
   `/tick sprint`, so this means a different bot backend for training.
 - Learned low-level control (VPT-style) — research track, ≤ 20% diamond rate in literature.
 
