@@ -8,69 +8,113 @@ which skill to run next. This is the only design with a published track record o
 diamonds (GITM: 67.5% ObtainDiamond with scripted skills + planner; fully learned low-level
 agents top out around 20% — see References).
 
-**Targets**
-- ≥ 50% of runs deposit at least 1 diamond (normal difficulty, 60 game-minute cap)
-- "max" mode: diamonds deposited per hour, measured and improved by the learned model
-- Deaths/hour and stuck rate go down after RL vs the scripted baseline
+**Deliverables, in order of certainty**
+1. **Usable bot (end of Phase 2):** scripted planner + skills + chat commands. Works on its own.
+2. **Your ML model in the loop (Phase 3):** cloned policy that matches the scripted planner.
+3. **Stretch (Phase 4):** RL-improved policy. Bounded experiment with a fallback rule.
+
+---
+
+## Definitions
+| Term | Meaning |
+|---|---|
+| **Run** | One gameplay episode: bot starts at a spawn slot with empty inventory, ends on (a) ≥1 diamond deposited *and* `!get diamond 1`, (b) 60 **real-time** minutes elapsed, or (c) 3 deaths. In `max` mode only (b) or (c) end it. |
+| **Spawn slot** | One of 200 fixed coordinates in a pre-generated world, ≥1,000 blocks apart. Slots 0–99 = eval set, 100–199 = training set. |
+| **Fresh spawn** | World folder restored from a pristine snapshot before each batch of runs, so no slot is ever reused within a batch and every batch sees identical terrain. |
+| **Stuck** | 3 consecutive skill failures with no inventory change and < 5 blocks of movement. Ends the run as a failure. |
+| **Test pass** | The full `tests/` suite passing once. |
+
+All times in this plan are real wall-clock time. Runs execute **unattended** (e.g. overnight) —
+bot-hours are not your working hours.
 
 ---
 
 ## Architecture
 
 ```
-Minecraft server (Java 1.21.x)
-   ↕  (normal player connection — works on any server that allows bots)
-Mineflayer bot (Node)
+Paper server (Java, one pinned 1.21 patch)
+   ↕  normal player connections
+Mineflayer bots (Node, one process, N bots)
   ├─ command listener   (owner-only chat commands → objective)
   ├─ skills             (explore, approach, mine, dig_down, go_up, craft, smelt,
   │                      equip, eat, flee, deposit, return_home)
-  └─ obs builder        (voxels, inventory, status, objective)
-   ↕  JSON lines over TCP
+  ├─ obs builder        (visible voxels, inventory, status, objective)
+  └─ skill log          (JSONL: every skill call + result — from Phase 1 on)
+   ↕  one TCP connection per bot, JSON lines, every message carries bot_id + request id
 Python
-  ├─ policy             (obs → next skill + argument)
-  ├─ recorder           (decision logs → .npz)
-  └─ trainer            (behavior cloning → PPO)
+  ├─ policy             (obs + action mask → next skill + argument)
+  ├─ recorder           (reads the skill log → .npz)
+  └─ trainer            (behavior cloning → PPO, asynchronous transition buffer)
 ```
 
 Training, evaluation and real use are the **same code path** — no sim-to-real gap.
 
-### Commands (v1: fixed grammar, owner-only)
+### Commands (v1: fixed grammar)
 | Command | Effect |
 |---|---|
-| `!get <item> <n\|max>` | objective = collect item (v1: `diamond`; later iron, logs…) |
+| `!get <item> <n\|max>` | objective = collect item (v1: `diamond`) |
 | `!store` | storage = chest nearest to the owner; `!store x y z` for explicit coords |
-| `!status` | reply with objective, inventory counts, diamonds stored, health |
-| `!come` / `!stop` | walk to owner / abort current objective and idle |
+| `!status` | objective, inventory counts, diamonds stored, health |
+| `!come` / `!stop` | walk to owner / abort objective and idle |
 
-Commands from any player not in `OWNER_USERNAMES` are ignored.
-Free-text orders ("get as many diamonds as you can") → command mapping is Phase 6 (optional LLM).
+**Owner authentication**
+- Dev (offline-mode): server bound to `127.0.0.1` + `whitelist=on`, so nobody else can join.
+  Username matching is only safe because of this — offline UUIDs are derived from the name.
+- Real servers: `online-mode=true` only; commands accepted only from the owner's **UUID**
+  (`bot.players[name].uuid`), not the name string. The bot refuses to take commands on an
+  offline-mode server unless `ALLOW_OFFLINE_OWNER=1` is set.
 
 ### Skills (hand-coded, on `mineflayer-pathfinder` + `mineflayer-collectblock`)
 | Skill | Argument | Done when |
 |---|---|---|
-| `explore` | surface / underground | new target block visible or timeout |
-| `approach` | block type / entity | within reach |
+| `explore` | surface / branch-mine | a target block becomes **visible** or timeout |
+| `approach` | visible block / entity | within reach |
 | `mine` | block type | block broken + drop collected |
 | `dig_down` | target y | at y (staircase, never straight down) |
-| `go_up` | — | reached surface / y of storage |
+| `go_up` | — | reached surface / storage y |
 | `craft` / `smelt` | item | item in inventory, else fails with reason |
 | `equip` / `eat` | item | done |
 | `flee` | — | no hostile within 16 blocks |
 | `deposit` | storage chest | target items moved into chest |
 | `return_home` | — | within 3 blocks of storage |
 
-Every skill returns `{ok, reason, ticks}` and has a timeout.
+Skill rules:
+- Every skill returns `{ok, reason, ticks}`.
+- **External watchdog on every pathfinder/collectblock call** (`Promise.race` with a timer →
+  `bot.pathfinder.stop()`); the library can hang forever on unbreakable obstacles
+  (mineflayer-pathfinder #222), so its own timeouts are not trusted.
+- Dig timeouts scale with `bot.digTime(block)` (deepslate is much slower than stone).
+- **No x-ray:** ore is only targeted if it is exposed (air/water-adjacent) **and** within line of
+  sight. Discovery underground is by branch mining, not `findBlocks` through walls. This keeps
+  the bot fair on other people's servers and robust to anti-xray plugins that send fake ore.
 
 ### Decision model (your ML)
-- **Obs:** 9×9×9 coarse voxel summary around the bot (block-type ids, `UNKNOWN` if unseen),
-  inventory counts (~60 relevant items), health, food, y, time of day, objective,
-  last 8 skills + results.
-- **Output:** skill id + argument (from a small fixed menu per skill).
+- **Obs:** 9×9×9 voxel summary around the bot (block-type ids, `UNKNOWN` if not visible),
+  inventory counts (~60 items), health, food, y, time of day, objective, last 8 skills + results.
+- **Action:** skill id + argument from a small fixed menu, with an **action mask** (e.g. no
+  `craft` without ingredients, no `deposit` with nothing to deposit) applied in BC and PPO.
 - **Model:** MLP + GRU, < 1M params — trains on CPU.
-- **Training:** behavior cloning on the scripted planner's decisions → PPO fine-tune with a
-  KL penalty to the cloned policy.
-- **Reward:** +1 per diamond deposited, +0.1 per tech-tree milestone (first time per run),
-  −1 death, −0.01 per failed skill.
+- **Where it can beat the script** (the choices the planner hard-codes, exposed as actions):
+  1. branch-mining y-level and tunnel spacing
+  2. when to return and deposit (inventory, tool durability, health, distance from home)
+  3. flee vs. keep mining at a given health / mob distance
+  4. when to abandon a tunnel direction
+- **Reward:** +1 per diamond deposited · +0.1 per tech-tree milestone (one-shot per run) ·
+  −1 per death · −0.01 per failed skill · **−0.001 per second** (aligns with diamonds/hour).
+
+---
+
+## Budget (measured in Phase 2.5, then these numbers are replaced by real ones)
+Assumed: N = 10 bots, full run ≈ 25 min, 8 h unattended per night.
+
+| Use | Runs/night | Nights | Runs | Skill decisions |
+|---|---|---|---|---|
+| Eval (100 slots) | — | ~0.5 | 100 | — |
+| BC dataset | ~190 | 5 | ~1,000 | ~100k |
+| PPO, curriculum starts (≈10 min) | ~480 | 10 | ~4,800 | ~250k |
+
+250k decisions is small for PPO — which is why Phase 4 uses masking, curriculum starts, a small
+action menu, a KL anchor, and is a bounded experiment.
 
 ---
 
@@ -78,116 +122,149 @@ Every skill returns `{ok, reason, ticks}` and has a timeout.
 
 ### Phase 0 — Setup (week 1)
 - [ ] 0.1 Java 21, Node 22, Python 3.11, PyTorch (CPU is enough)
-- [ ] 0.2 Local server 1.21.x, `online-mode=false`, localhost only; pin Minecraft + mineflayer versions
-- [ ] 0.3 Repo layout: `bot/` (Node), `agent/` (Python), `tests/`
-- **Gate:** bot joins and answers `!status` from the owner.
+- [ ] 0.2 Paper server on one exact 1.21 patch taken from mineflayer's tested-versions list;
+      pin `mineflayer`, `mineflayer-pathfinder`, `mineflayer-collectblock`, `minecraft-data`
+      exact versions in `package.json`
+- [ ] 0.3 `server.properties`: `online-mode=false`, `server-ip=127.0.0.1`, whitelist on
+- [ ] 0.4 Repo layout: `bot/` (Node), `agent/` (Python), `tests/`
+- **Gate:** bot joins and answers `!status` from the owner; a non-whitelisted client can't join.
 
-### Phase 1 — Commands + skills (weeks 2–4)
-- [ ] 1.1 Command parser + owner check
-- [ ] 1.2 Skills listed above, each with timeout and `{ok, reason}` result
-- [ ] 1.3 Test world helpers: `/setblock`, `/give`, `/tp`, `/fill` to build fixtures
+### Phase 1 — Commands + skills (weeks 2–5)
+- [ ] 1.1 Command parser + owner authentication (both modes above)
+- [ ] 1.2 Skills, each with watchdog and `{ok, reason, ticks}`
+- [ ] 1.3 Skill log (JSONL) — same format the Phase 3 recorder reads
+- [ ] 1.4 Test harness on a **separate flat test world**:
+      - setup/teardown per test: `/kill @e[type=!player]`, `/clear`, `/fill` fixture area with air,
+        `/tp` to staging point
+      - wait by polling state (`pathfinder.isMoving()`, inventory), never fixed sleeps
 
 **Tests**
 - [ ] `test_command_parse` — valid/invalid commands, n vs max
-- [ ] `test_command_owner_only` — non-owner `!get` is ignored
-- [ ] `test_mine` — diamond ore placed 10 blocks away → mined, diamond in inventory
-- [ ] `test_dig_down` — reaches y=-58 by staircase; never digs into lava (lava fixture below)
+- [ ] `test_command_owner_only` — non-owner `!get` ignored
+- [ ] `test_offline_refuses_commands` — offline-mode + no `ALLOW_OFFLINE_OWNER` → commands ignored
+- [ ] `test_mine` — exposed diamond ore 10 blocks away → mined, diamond in inventory
+- [ ] `test_no_xray` — diamond ore fully enclosed in stone → never targeted
+- [ ] `test_dig_down` — reaches y=-58 by staircase; lava pocket fixture below → avoided
 - [ ] `test_craft_chain` — `/give` logs → planks → table → sticks → wooden pickaxe
-- [ ] `test_craft_missing` — craft without ingredients → `{ok:false, reason:"missing"}`
+- [ ] `test_craft_missing` — `{ok:false, reason:"missing"}`
 - [ ] `test_smelt` — raw iron + coal + furnace → iron ingot
-- [ ] `test_deposit` — diamonds end up in the chest, inventory keeps tools/food
-- [ ] `test_deposit_chest_full` — full chest → `{ok:false, reason:"full"}`, bot reports in chat
-- [ ] `test_flee` — zombie spawned nearby → bot ends ≥16 blocks away
-- [ ] `test_skill_timeout` — unreachable target → fails within timeout, never hangs
+- [ ] `test_deposit` — diamonds into chest, tools/food kept
+- [ ] `test_deposit_chest_full` — `{ok:false, reason:"full"}`, owner told in chat
+- [ ] `test_flee` — zombie nearby → bot ends ≥16 blocks away
+- [ ] `test_skill_timeout` — target behind bedrock → fails within timeout, never hangs
 
-**Gate:** all green on 3 consecutive runs.
+**Gate:** 3 consecutive test passes.
+Descope rule: if week 5 ends with failures, ship `mine`/`dig_down`/`deposit` first and move
+`craft_chain`/`smelt` to a one-week buffer before Phase 2.
 
-### Phase 2 — Scripted baseline (weeks 4–6)
-- [ ] 2.1 Fixed-plan planner: tech tree → iron pickaxe → dig to y≈-58 → branch-mine → deposit → repeat
-- [ ] 2.2 "max" loop: return and deposit when inventory full, pickaxe low, food low, or night + surface
-- [ ] 2.3 Eval harness: 50 runs on fresh spawns (normal difficulty, 60 game-min cap) →
-      success rate, diamonds/hour, deaths/hour, stuck rate, 95% CI
-- [ ] 2.4 20 bots in parallel, spawns ≥ 5k blocks apart
+### Phase 2 — Scripted baseline = usable bot (weeks 6–8)
+- [ ] 2.1 Pre-generate the world with Chunky; register 200 spawn slots; save pristine snapshot
+- [ ] 2.2 Fixed-plan planner: tech tree → iron pickaxe → dig to y≈-58 → branch-mine → deposit → repeat.
+      Planner parameters (branch y, spacing, return thresholds) get small random jitter per run
+      so recorded data covers more states.
+- [ ] 2.3 `max` loop: return and deposit when inventory full, pickaxe low, food low, or night + surface
+- [ ] 2.4 Eval harness: restore snapshot → 100 runs on eval slots 0–99 → success rate,
+      diamonds/hour, deaths/hour, stuck rate, 95% CI
+- [ ] 2.5 **Capacity benchmark:** raise bot count until server TPS < 19 or CPU > 85%; set N to the
+      last good value; rewrite the Budget table with measured run length and N
 
 **Tests**
 - [ ] `test_planner_order` — never attempts a craft whose inputs it can't have
-- [ ] `test_restock` — broken pickaxe mid-run → crafts a new one and continues
+- [ ] `test_restock` — pickaxe broken mid-run → crafts a new one and continues
 - [ ] `test_death_recovery` — killed → respawns, rebuilds tools, resumes objective
+- [ ] `test_snapshot_restore` — after restore, slot terrain hash equals pristine hash
 
-**Gate:** ≥ 50% of runs deposit ≥ 1 diamond. **This number caps the ML phases — fix skills
-until it passes before moving on.**
+**Gate:** ≥ 50% success on the 100 eval runs. This caps the ML phases — fix skills until it passes.
+**At this point the bot is usable** — Phase 5 hardening can be pulled forward if you want to use it
+on a real server before the ML work.
 
-### Phase 3 — Decision env + behavior cloning (weeks 6–8)
-- [ ] 3.1 gymnasium Env: step = run one skill; obs/reward as above
-- [ ] 3.2 Recorder logs the scripted planner's decisions (≥ 2,000 runs)
+### Phase 3 — Your model: behavior cloning (weeks 9–11)
+- [ ] 3.1 gymnasium Env: step = run one skill; obs, action mask, reward as above
+- [ ] 3.2 Record ~1,000 runs on training slots 100–199 (≈5 nights)
 - [ ] 3.3 BC trainer, train/val split by run
 
 **Tests**
 - [ ] `test_env_checker` — `gymnasium.utils.env_checker.check_env` passes
+- [ ] `test_action_mask` — masked actions get zero probability; mask matches skill preconditions
 - [ ] `test_recorder_roundtrip` — write → read identical
 - [ ] `test_overfit_one_batch` — loss → ~0 on one batch
-- [ ] `test_eval_deterministic` — same checkpoint + seeds → same numbers
+- [ ] `test_eval_deterministic` — same checkpoint + slots → same numbers
 
-**Gate:** cloned policy's success rate within 5 points of the scripted baseline.
+**Gate:** paired comparison on eval slots 0–99 (same slot, same snapshot, planner vs policy):
+success-rate difference ≥ −5 points (paired bootstrap 95% CI). Also report per-decision-type
+accuracy (return, flee, branch choice), not only the aggregate.
 
-### Phase 4 — RL fine-tune (weeks 8–11)
-- [ ] 4.1 PPO + KL penalty to the cloned policy, 20 parallel bots
-- [ ] 4.2 Track where it beats the script: deaths, caves, where it looks for diamonds
+### Phase 4 — Stretch: RL fine-tune (weeks 12–15)
+- [ ] 4.1 PPO + KL penalty to the cloned policy; asynchronous collection (each bot pushes
+      transitions to a shared buffer independently — no lock-step)
+- [ ] 4.2 Curriculum: ~70% of episodes start already geared (`/give` iron pickaxe, food) at mining
+      depth, ~30% full runs
+- [ ] 4.3 Report the four decision types from "Where it can beat the script"
 
 **Tests**
-- [ ] `test_reward` — deposit gives +1 per diamond; death gives −1
+- [ ] `test_reward` — +1 per diamond deposited, −1 per death, time penalty applied
+- [ ] `test_milestone_one_shot` — breaking and re-crafting a table gives the bonus once per run
 - [ ] `test_kl_zero_at_init` — KL = 0 when initialised from the cloned policy
 
-**Gate:** beats the scripted baseline by ≥ 10 points success rate **or** ≥ 20% diamonds/hour,
-non-overlapping 95% CI.
+**Gate:** paired comparison on eval slots 0–99 vs the cloned policy: diamonds/hour +20% **or**
+success rate +10 points, paired bootstrap 95% CI excluding 0.
+**Fallback rule:** if the gate isn't met by week 15, the Phase 3 policy (or Phase 2 planner) is the
+final bot; Phase 4 results get written up as findings.
 
-### Phase 5 — Real-server hardening (week 12)
-- [ ] 5.1 Auto-reconnect with backoff; resume objective after reconnect
-- [ ] 5.2 Microsoft auth for `online-mode=true` servers (dedicated alt account, never your main)
-- [ ] 5.3 Chat rate limit (≤ 1 message / 2 s) so it doesn't trip spam filters
-- [ ] 5.4 Handle protected chests (claims plugins) → report "can't open chest" in chat
+### Phase 5 — Real-server hardening (week 16, or right after Phase 2 if preferred)
+- [ ] 5.1 Auto-reconnect with backoff; resume objective
+- [ ] 5.2 Microsoft auth for `online-mode=true` (dedicated alt account, never your main);
+      verify commands are UUID-checked before joining any multi-user server
+- [ ] 5.3 Chat rate limit (≤ 1 message / 2 s)
+- [ ] 5.4 Protected chests (claim plugins) → report "can't open chest" in chat
 
 **Tests**
-- [ ] `test_reconnect` — kill server connection → bot rejoins and resumes within 60 s
-- [ ] `test_protected_chest` — open fails → objective pauses, owner is told
+- [ ] `test_reconnect` — connection killed → rejoins and resumes within 60 s
+- [ ] `test_protected_chest` — open fails → objective pauses, owner told
+- [ ] `test_uuid_auth` — player with owner's name but different UUID → ignored
 
-**Gate:** 3 h unattended "max" session on a friend's/own online-mode server with no manual fix.
+**Gate:** 3 h unattended `max` session on your own/friend's online-mode server with no manual fix.
 
 ### Phase 6 — Optional
 - [ ] Free-text orders → command via small LLM (API key in `.env`, gitignored)
 - [ ] More objectives: iron, logs, food
-- [ ] Swap single skills (e.g. `flee`, combat) for learned ones
+- [ ] Swap single skills (`flee`, combat) for learned ones
 
 ---
 
 ## Risks & edge cases
-- [ ] Only join servers where bots are allowed (your own / friends'); many public servers ban automation
+- [ ] Only join servers where bots are allowed; many public servers ban automation
 - [ ] Bot account ≠ your main account (ban risk)
-- [ ] Owner whitelist — otherwise anyone in chat can command it
+- [ ] Spoofed owner name on offline-mode servers → localhost+whitelist in dev, UUID + online-mode elsewhere
+- [ ] X-ray: ore targeting limited to exposed + visible blocks; anti-xray plugins may still hide real ore
+- [ ] Pathfinder hangs → external watchdog on every call
 - [ ] Death drops items: deposit early; `max` loop returns home before risky states
-- [ ] Lava: `dig_down` staircases and checks blocks below/ahead before breaking
-- [ ] Chest theft/full chest on multiplayer: `!status` reports chest contents; full → stop + tell owner
-- [ ] Anti-cheat may flag pathfinder movement on some servers → not fixable in general, document it
-- [ ] Version drift: pin Minecraft, mineflayer, pathfinder, minecraft-data versions
-- [ ] Night/mobs on surface: skill planner avoids surface travel at night where possible
+- [ ] Lava: staircase digging; check blocks below/ahead before breaking
+- [ ] Chest theft/full chest on multiplayer: `!status` reports contents; full → stop + tell owner
+- [ ] Anti-cheat may flag pathfinder movement → document per server, not fixable in general
+- [ ] Local PC limits (TPS/CPU/RAM with N bots) → capacity benchmark in 2.5 sets N
+- [ ] Too little data for PPO → curriculum, masking, KL anchor, fallback rule
+- [ ] Version drift: exact pins; re-check mineflayer's tested versions before any server upgrade
 
 ## Metrics (every reported number)
-Success rate (≥1 diamond deposited) · diamonds deposited/hour · deaths/hour · stuck rate ·
-50 runs on fresh spawns · 95% CI · difficulty stated · baseline = scripted planner.
+Success rate · diamonds deposited/hour · deaths/hour · stuck rate · runs on eval slots 0–99
+(count set in Phase 2.4, currently 100) · paired comparisons against the previous phase ·
+95% CI (paired bootstrap) · difficulty stated.
 
-## Deferred (add only if measured need)
-- Carpet fake players + `/tick sprint` + Lithium/FerriteCore/C2ME + Chunky for faster training —
-  only if 20 real-time bots can't produce enough runs for PPO.
+## Deferred (add only on measured need)
+- Carpet fake players + `/tick sprint` + Lithium/FerriteCore/C2ME for faster training — only if the
+  Phase 2.5 benchmark shows the Budget table can't be met. Note: Mineflayer can't follow
+  `/tick sprint`, so this means a different bot backend for training.
 - Learned low-level control (VPT-style) — research track, ≤ 20% diamond rate in literature.
 
-## Timeline (part-time, ~10 h/week)
+## Timeline (part-time, ~10 h/week; bot runs are unattended)
 | Phase | Weeks | Confidence |
 |---|---|---|
-| 0–1 Setup, commands, skills | 1–4 | 85% |
-| 2 Scripted baseline ≥ 50% diamonds | 4–6 | 70% (normal) / 85% (peaceful) |
-| 3 Cloned policy matches baseline | 6–8 | 85% |
-| 4 RL beats baseline | 8–11 | 50% |
-| 5 Works unattended on a real server | 12 | 75% |
+| 0–1 Setup, commands, skills | 1–5 | 80% |
+| 2 Usable scripted bot, ≥ 50% diamonds | 6–8 | 70% (normal) / 85% (peaceful) |
+| 3 Your cloned model matches the planner | 9–11 | 85% |
+| 4 RL beats the cloned model (stretch) | 12–15 | 40% |
+| 5 Works unattended on a real server | 16 | 75% |
 
 ## References
 - GITM (scripted skills + planner, 67.5% ObtainDiamond): https://arxiv.org/abs/2305.17144
@@ -196,3 +273,4 @@ Success rate (≥1 diamond deposited) · diamonds deposited/hour · deaths/hour 
 - DreamerV3 (from scratch, ~0.4% diamond episodes): https://www.nature.com/articles/s41586-025-08744-2
 - JARVIS-1: https://arxiv.org/html/2311.05997 · Optimus-1: https://arxiv.org/html/2408.03615v2
 - Mineflayer: https://github.com/PrismarineJS/mineflayer
+- mineflayer-pathfinder hang issue: https://github.com/PrismarineJS/mineflayer-pathfinder/issues/222
