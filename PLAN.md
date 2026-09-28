@@ -146,7 +146,7 @@ action menu, a KL anchor, and is a bounded experiment.
   **Passed** on Paper 1.21.11-132 (`cd bot && npm run gate`, server running).
 
 ### Phase 1 — Commands + skills (weeks 2–5)
-- [ ] 1.1 Command parser + owner authentication (both modes above)
+- [x] 1.1 Command parser + owner authentication (both modes above)
 - [ ] 1.2 Skills, each with watchdog and `{ok, reason, ticks}`
 - [ ] 1.3 Skill log (JSONL) — same format the Phase 3 recorder reads
 - [ ] 1.4 Test harness on a **separate flat test world**:
@@ -155,9 +155,9 @@ action menu, a KL anchor, and is a bounded experiment.
       - wait by polling state (`pathfinder.isMoving()`, inventory), never fixed sleeps
 
 **Tests**
-- [ ] `test_command_parse` — valid/invalid commands, n vs max
-- [ ] `test_command_owner_only` — non-owner `!get` ignored
-- [ ] `test_offline_refuses_commands` — offline-mode + no `ALLOW_OFFLINE_OWNER` → commands ignored
+- [x] `test_command_parse` — valid/invalid commands, n vs max
+- [x] `test_command_owner_only` — non-owner `!get` ignored
+- [x] `test_offline_refuses_commands` — offline-mode + no `ALLOW_OFFLINE_OWNER` → commands ignored
 - [ ] `test_mine` — exposed diamond ore 10 blocks away → mined, diamond in inventory
 - [ ] `test_no_xray` — diamond ore fully enclosed in stone → never targeted
 - [ ] `test_dig_down` — reaches y=-58 by staircase; lava pocket fixture below → avoided
