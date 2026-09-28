@@ -4,7 +4,8 @@
   "type": "commonjs",
   "scripts": {
     "test": "node --test ../tests/commands.test.js",
-    "gate": "node --test ../tests/phase0_gate.test.js"
+    "gate": "node --test ../tests/phase0_gate.test.js",
+    "test:live": "node --test --test-concurrency=1 ../tests/skills.test.js"
   },
   "dependencies": {
     "mineflayer": "4.39.0",
