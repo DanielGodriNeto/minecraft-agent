@@ -3,7 +3,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test": "node --test ../tests/commands.test.js",
+    "test": "node --test ../tests/commands.test.js ../tests/skill_log.test.js",
     "gate": "node --test ../tests/phase0_gate.test.js",
     "test:live": "node --test --test-concurrency=1 ../tests/skills.test.js"
   },
