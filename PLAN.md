@@ -147,9 +147,9 @@ action menu, a KL anchor, and is a bounded experiment.
 
 ### Phase 1 — Commands + skills (weeks 2–5)
 - [x] 1.1 Command parser + owner authentication (both modes above)
-- [ ] 1.2 Skills, each with watchdog and `{ok, reason, ticks}`
+- [x] 1.2 Skills, each with watchdog and `{ok, reason, ticks}`
 - [ ] 1.3 Skill log (JSONL) — same format the Phase 3 recorder reads
-- [ ] 1.4 Test harness on a **separate flat test world**:
+- [x] 1.4 Test harness on a **separate flat test world** (`tests/harness.js`; Owner is op via `server/ops.json`):
       - setup/teardown per test: `/kill @e[type=!player]`, `/clear`, `/fill` fixture area with air,
         `/tp` to staging point
       - wait by polling state (`pathfinder.isMoving()`, inventory), never fixed sleeps
@@ -158,18 +158,23 @@ action menu, a KL anchor, and is a bounded experiment.
 - [x] `test_command_parse` — valid/invalid commands, n vs max
 - [x] `test_command_owner_only` — non-owner `!get` ignored
 - [x] `test_offline_refuses_commands` — offline-mode + no `ALLOW_OFFLINE_OWNER` → commands ignored
-- [ ] `test_mine` — exposed diamond ore 10 blocks away → mined, diamond in inventory
-- [ ] `test_no_xray` — diamond ore fully enclosed in stone → never targeted
-- [ ] `test_dig_down` — reaches y=-58 by staircase; lava pocket fixture below → avoided
-- [ ] `test_craft_chain` — `/give` logs → planks → table → sticks → wooden pickaxe
-- [ ] `test_craft_missing` — `{ok:false, reason:"missing"}`
-- [ ] `test_smelt` — raw iron + coal + furnace → iron ingot
-- [ ] `test_deposit` — diamonds into chest, tools/food kept
-- [ ] `test_deposit_chest_full` — `{ok:false, reason:"full"}`, owner told in chat
-- [ ] `test_flee` — zombie nearby → bot ends ≥16 blocks away
-- [ ] `test_skill_timeout` — target behind bedrock → fails within timeout, never hangs
+- [x] `test_mine` — exposed diamond ore 10 blocks away → mined, diamond in inventory
+- [x] `test_no_xray` — diamond ore fully enclosed in stone → never targeted
+- [x] `test_dig_down` — reaches y=-58 by staircase; lava pocket fixture below → avoided
+- [x] `test_craft_chain` — `/give` logs → planks → table → sticks → wooden pickaxe
+- [x] `test_craft_missing` — `{ok:false, reason:"missing"}`
+- [x] `test_smelt` — raw iron + coal + furnace → iron ingot
+- [x] `test_deposit` — diamonds into chest, tools/food kept
+- [x] `test_deposit_chest_full` — `{ok:false, reason:"full"}`, owner told in chat
+- [x] `test_flee` — zombie nearby → bot ends ≥16 blocks away
+- [x] `test_skill_timeout` — target behind bedrock → fails within timeout, never hangs
 
-**Gate:** 3 consecutive test passes.
+**Gate:** 3 consecutive test passes. **Passed** for 1.1/1.2/1.4 (`npm test` + `npm run test:live` ×3,
+server running); 1.3 still open.
+Notes: crafting goes through the server recipe book (`craft_recipe_request`) because mineflayer's
+click-based `bot.craft()` loses clicks on 1.21.11; requests are paced for Paper's `place_recipe`
+limiter. `mineflayer-collectblock` is pinned but unused (it enables `dontCreateFlow=false` and
+auto-deposits into chests).
 Descope rule: if week 5 ends with failures, ship `mine`/`dig_down`/`deposit` first and move
 `craft_chain`/`smelt` to a one-week buffer before Phase 2.
 
