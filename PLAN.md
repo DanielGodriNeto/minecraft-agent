@@ -148,7 +148,9 @@ action menu, a KL anchor, and is a bounded experiment.
 ### Phase 1 — Commands + skills (weeks 2–5)
 - [x] 1.1 Command parser + owner authentication (both modes above)
 - [x] 1.2 Skills, each with watchdog and `{ok, reason, ticks}`
-- [ ] 1.3 Skill log (JSONL) — same format the Phase 3 recorder reads
+- [x] 1.3 Skill log (JSONL) — same format the Phase 3 recorder reads
+      (`logs/skills-<bot>.jsonl`, override with `SKILL_LOG`; one line per call: skill, args, result,
+      before/after snapshot of pos/health/food/time/inventory. Phase 3 adds obs fields.)
 - [x] 1.4 Test harness on a **separate flat test world** (`tests/harness.js`; Owner is op via `server/ops.json`):
       - setup/teardown per test: `/kill @e[type=!player]`, `/clear`, `/fill` fixture area with air,
         `/tp` to staging point
@@ -168,9 +170,9 @@ action menu, a KL anchor, and is a bounded experiment.
 - [x] `test_deposit_chest_full` — `{ok:false, reason:"full"}`, owner told in chat
 - [x] `test_flee` — zombie nearby → bot ends ≥16 blocks away
 - [x] `test_skill_timeout` — target behind bedrock → fails within timeout, never hangs
+- [x] `test_skill_log` — every skill call appends one JSON line with args, result, before/after state
 
-**Gate:** 3 consecutive test passes. **Passed** for 1.1/1.2/1.4 (`npm test` + `npm run test:live` ×3,
-server running); 1.3 still open.
+**Gate:** 3 consecutive test passes. **Passed** (`npm test` + `npm run test:live` ×3, server running).
 Notes: crafting goes through the server recipe book (`craft_recipe_request`) because mineflayer's
 click-based `bot.craft()` loses clicks on 1.21.11; requests are paced for Paper's `place_recipe`
 limiter. `mineflayer-collectblock` is pinned but unused (it enables `dontCreateFlow=false` and
