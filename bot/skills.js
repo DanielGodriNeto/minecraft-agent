@@ -1,3 +1,5 @@
+const fs = require('node:fs')
+const path = require('node:path')
 const { goals } = require('mineflayer-pathfinder')
 
 const PATH_MS = 30000
@@ -337,7 +339,29 @@ const SKILLS = {
   equip, eat, flee, deposit, return_home: returnHome,
 }
 
+// ---- skill log: one JSON line per call, read by the Phase 3 recorder ----
+
+function snapshot(bot) {
+  const p = bot.entity?.position
+  const inv = {}
+  for (const i of bot.inventory.items()) inv[i.name] = (inv[i.name] ?? 0) + i.count
+  return { pos: p ? [p.x, p.y, p.z] : null, health: bot.health, food: bot.food, time: bot.time.timeOfDay, inv }
+}
+
+const logArg = (arg) => (arg?.id !== undefined && arg.position ? { entity: arg.name, id: arg.id } : arg)
+
+function logSkill(bot, entry) {
+  if (!bot.skillLogPath) return
+  fs.mkdirSync(path.dirname(bot.skillLogPath), { recursive: true })
+  fs.appendFileSync(bot.skillLogPath, JSON.stringify(entry) + '\n')
+}
+
 // Every skill resolves to { ok, reason, ticks } and never throws.
-const runSkill = (bot, name, ...args) => run(bot, () => SKILLS[name](bot, ...args))
+async function runSkill(bot, name, ...args) {
+  const before = snapshot(bot)
+  const result = await run(bot, () => SKILLS[name](bot, ...args))
+  logSkill(bot, { t: Date.now(), bot: bot.username, skill: name, args: args.map(logArg), result, before, after: snapshot(bot) })
+  return result
+}
 
 module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook }

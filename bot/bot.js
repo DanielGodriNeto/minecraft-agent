@@ -1,3 +1,4 @@
+const path = require('node:path')
 const mineflayer = require('mineflayer')
 const { pathfinder } = require('mineflayer-pathfinder')
 const { parseCommand, isOwner } = require('./commands.js')
@@ -17,10 +18,10 @@ function status(bot) {
 }
 
 function createBot(opts = {}, auth = authFromEnv()) {
-  const bot = mineflayer.createBot({
-    host: '127.0.0.1', port: 25565, username: 'DiamondBot', version: '1.21.11', ...opts,
-  })
+  const options = { host: '127.0.0.1', port: 25565, username: 'DiamondBot', version: '1.21.11', ...opts }
+  const bot = mineflayer.createBot(options)
   trackRecipeBook(bot)
+  bot.skillLogPath = process.env.SKILL_LOG ?? path.join(__dirname, '..', 'logs', `skills-${options.username}.jsonl`)
   bot.loadPlugin(pathfinder)
   bot.on('error', console.error)
   bot.on('chat', (username, message) => {

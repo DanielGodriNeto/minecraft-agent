@@ -8,5 +8,6 @@ server/*
 !server/ops.json
 agent/.venv/
 __pycache__/
+logs/
 *.npz
 .env*
