@@ -113,9 +113,17 @@ Assumed: N = 10 bots, runs capped at 60 min (`max` mode), ~5 min stop/restore/re
 
 | Use | Nights | Runs / episodes | Skill decisions |
 |---|---|---|---|
-| Gate eval (100 held-out slots) | ~1.5 | 100 | — |
+| Phase 2 gate (planner, held-out 0–99) | ~1.5 | 100 | — |
+| Phase 3 gate (cloned policy, held-out 0–99) | ~1.5 | 100 | — |
+| Phase 4 gate (RL policy, held-out 0–99) | ~1.5 | 100 | — |
+| Dev-slot tuning passes, Phases 2–4 (~6 × 100 runs) | ~9 | ~600 | — |
 | BC dataset (400 training slots, ~2.5× each) | ~14 | ~1,000 | ~150k |
 | PPO (50% curriculum episodes ≈ 15 min, 50% full runs) | ~14 | ~2,500 | ~250k |
+| **Total** | **~41** | | |
+
+Paired gates reuse the previous phase's held-out runs (same slots, same snapshot), so each gate
+costs one new 100-run batch. Nights fit inside the phase windows: Phase 2 (21 nights) holds its
+gate + tuning; Phase 3 (21) holds BC data + gate + tuning; Phase 4 (28) holds PPO + gate + tuning.
 
 250k decisions is small for PPO — which is why Phase 4 uses masking, curriculum starts, a small
 action menu, a KL anchor, and is a bounded experiment.
