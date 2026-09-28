@@ -133,16 +133,17 @@ action menu, a KL anchor, and is a bounded experiment.
 ## Phases
 
 ### Phase 0 — Setup (week 1)
-- [ ] 0.1 Java 21, Node 22, Python 3.11, PyTorch (CPU is enough)
-- [ ] 0.2 Paper server on one exact 1.21 patch taken from mineflayer's tested-versions list;
+- [x] 0.1 Java 21, Node 24, Python 3.14, PyTorch 2.14 CPU (`agent/requirements.txt`)
+- [x] 0.2 Paper server (1.21.11 build 132) on one exact 1.21 patch taken from mineflayer's tested-versions list;
       pin `mineflayer`, `mineflayer-pathfinder`, `mineflayer-collectblock`, `minecraft-data`
       exact versions in `package.json`
-- [ ] 0.3 `server.properties`: `online-mode=false`, `server-ip=127.0.0.1`, whitelist on
-- [ ] 0.4 Repo layout: `bot/` (Node), `agent/` (Python), `tests/`
-- [ ] 0.5 `require-resource-pack=false`, no forced resource pack
+- [x] 0.3 `server.properties`: `online-mode=false`, `server-ip=127.0.0.1`, whitelist on
+- [x] 0.4 Repo layout: `bot/` (Node), `agent/` (Python), `tests/`
+- [x] 0.5 `require-resource-pack=false`, no forced resource pack
 - **Gate:** a bare mineflayer bot joins **the actual Paper build** (not only vanilla), walks,
   digs a block and answers `!status` from the owner; a non-whitelisted client can't join.
   If that Paper build breaks mineflayer, fall back to the vanilla jar of the same patch.
+  **Passed** on Paper 1.21.11-132 (`cd bot && npm run gate`, server running).
 
 ### Phase 1 — Commands + skills (weeks 2–5)
 - [ ] 1.1 Command parser + owner authentication (both modes above)
