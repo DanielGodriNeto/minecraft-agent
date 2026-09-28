@@ -5,6 +5,7 @@ server/*
 !server/server.properties
 !server/eula.txt
 !server/whitelist.json
+!server/ops.json
 agent/.venv/
 __pycache__/
 *.npz
