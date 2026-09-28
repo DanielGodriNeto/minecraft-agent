@@ -23,7 +23,7 @@ const poll = async (fn, ms = 15000) => {
 after(() => clients.forEach(c => c.end()))
 
 test('phase 0 gate', async (t) => {
-  const bot = track(createBot())
+  const bot = track(createBot({}, { ownerName: 'Owner', allowOffline: true }))
   const owner = track(mineflayer.createBot({ host: '127.0.0.1', port: 25565, username: 'Owner', version: '1.21.11' }))
   await Promise.all([waitFor(bot, 'spawn'), waitFor(owner, 'spawn')])
   await bot.waitForChunksToLoad()
