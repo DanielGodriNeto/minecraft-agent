@@ -1,0 +1,343 @@
+const { goals } = require('mineflayer-pathfinder')
+
+const PATH_MS = 30000
+const OPEN = new Set(['air', 'cave_air', 'void_air', 'water'])
+const LAVA = new Set(['lava', 'flowing_lava'])
+const FACES = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
+const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]]
+const SMELTS = { iron_ingot: 'raw_iron', gold_ingot: 'raw_gold', copper_ingot: 'raw_copper' }
+const FUELS = ['coal', 'charcoal', 'oak_planks', 'oak_log']
+const HOSTILE_RANGE = 16
+
+class Fail extends Error {
+  constructor(reason) { super(reason); this.reason = reason }
+}
+
+// ---- plumbing ----
+
+// External watchdog: never trust a library call to return on its own (mineflayer-pathfinder #222).
+function withTimeout(promise, ms, onTimeout) {
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => { onTimeout(); reject(new Fail('timeout')) }, ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
+function stopPathing(bot) {
+  bot.pathfinder.setGoal(null)
+  bot.clearControlStates()
+}
+
+async function goto(bot, goal, ms = PATH_MS) {
+  try {
+    await withTimeout(bot.pathfinder.goto(goal), ms, () => stopPathing(bot))
+  } catch (e) {
+    throw e instanceof Fail ? e : new Fail('no_path')
+  }
+}
+
+async function poll(bot, fn, ms) {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    if (fn()) return true
+    await bot.waitForTicks(2)
+  }
+  return fn()
+}
+
+async function run(bot, skill) {
+  let ticks = 0
+  const tick = () => { ticks++ }
+  bot.on('physicsTick', tick)
+  try {
+    await skill()
+    return { ok: true, reason: null, ticks }
+  } catch (e) {
+    if (e instanceof Fail) return { ok: false, reason: e.reason, ticks }
+    return { ok: false, reason: 'error', detail: e.message, ticks }
+  } finally {
+    bot.off('physicsTick', tick)
+    stopPathing(bot)
+  }
+}
+
+// ---- world queries ----
+
+const at = (bot, pos, dx = 0, dy = 0, dz = 0) => bot.blockAt(pos.offset(dx, dy, dz))
+const countItem = (bot, name) => bot.inventory.items().filter(i => i.name === name).reduce((n, i) => n + i.count, 0)
+const findItem = (bot, name) => bot.inventory.items().find(i => i.name === name)
+const isLava = (block) => block !== null && LAVA.has(block.name)
+const nearLava = (bot, pos) => isLava(bot.blockAt(pos)) || FACES.some(f => isLava(at(bot, pos, ...f)))
+const isSolid = (block) => block !== null && block.boundingBox === 'block'
+
+function blockId(bot, name) {
+  const block = bot.registry.blocksByName[name]
+  if (!block) throw new Fail('unknown_block')
+  return block.id
+}
+
+// No x-ray: a block counts only if it touches open space AND the bot has line of sight to it.
+function isVisible(bot, block) {
+  return FACES.some(f => OPEN.has(at(bot, block.position, ...f)?.name)) && bot.canSeeBlock(block)
+}
+
+function findVisible(bot, name, maxDistance = 32) {
+  const positions = bot.findBlocks({ matching: blockId(bot, name), maxDistance, count: 64 })
+  return positions.map(p => bot.blockAt(p)).find(b => b && isVisible(bot, b)) ?? null
+}
+
+function nearestHostile(bot, range = HOSTILE_RANGE) {
+  return bot.nearestEntity(e => e.type === 'hostile' && e.position.distanceTo(bot.entity.position) <= range)
+}
+
+// ---- building blocks ----
+
+async function breakBlock(bot, block) {
+  for (let tries = 0; tries < 5 && !OPEN.has(bot.blockAt(block.position)?.name); tries++) {
+    const current = bot.blockAt(block.position)
+    if (!current.diggable) throw new Fail('undiggable')
+    const tool = bot.pathfinder.bestHarvestTool(current)
+    if (tool) await bot.equip(tool, 'hand')
+    if (current.harvestTools && !current.canHarvest(bot.heldItem?.type)) throw new Fail('no_tool')
+    await withTimeout(bot.dig(current, true), bot.digTime(current) * 2 + 1000, () => bot.stopDigging())
+  }
+  if (!OPEN.has(bot.blockAt(block.position)?.name)) throw new Fail('dig_failed')
+}
+
+async function pickUpDrop(bot, pos) {
+  const dropNear = () => bot.nearestEntity(e => e.name === 'item' && e.position.distanceTo(pos.offset(0.5, 0.5, 0.5)) < 3)
+  await poll(bot, dropNear, 1000)
+  const drop = dropNear()
+  if (!drop) return
+  const p = drop.position.floored()
+  await goto(bot, new goals.GoalBlock(p.x, p.y, p.z), 10000)
+  if (!await poll(bot, () => !bot.entities[drop.id], 3000)) throw new Fail('pickup_failed')
+}
+
+async function reach(bot, block) {
+  await goto(bot, new goals.GoalLookAtBlock(block.position, bot.world, { reach: 4 }))
+}
+
+async function placeFromInventory(bot, name) {
+  const item = findItem(bot, name)
+  if (!item) throw new Fail('missing')
+  const feet = bot.entity.position.floored()
+  const spot = DIRS.map(([dx, dz]) => feet.offset(dx, 0, dz))
+    .find(p => OPEN.has(bot.blockAt(p)?.name) && OPEN.has(at(bot, p, 0, 1, 0)?.name) && isSolid(at(bot, p, 0, -1, 0)))
+  if (!spot) throw new Fail('no_space')
+  await bot.equip(item, 'hand')
+  await bot.placeBlock(at(bot, spot, 0, -1, 0), { x: 0, y: 1, z: 0 })
+  return bot.blockAt(spot)
+}
+
+async function nearbyOrPlaced(bot, blockName) {
+  const pos = bot.findBlock({ matching: blockId(bot, blockName), maxDistance: 16 })
+  const block = pos ?? await placeFromInventory(bot, blockName)
+  await reach(bot, block)
+  return block
+}
+
+// Staircase step toward dir: clear head, mid and feet blocks ahead, then drop one block.
+function stairBlocks(p, [dx, dz]) {
+  return [p.offset(dx, 1, dz), p.offset(dx, 0, dz), p.offset(dx, -1, dz)]
+}
+
+function stairSafe(bot, p, dir) {
+  const cells = stairBlocks(p, dir)
+  if (cells.some(c => nearLava(bot, c) || !(OPEN.has(bot.blockAt(c)?.name) || bot.blockAt(c)?.diggable))) return false
+  const floor = at(bot, cells[2], 0, -1, 0)
+  return isSolid(floor) && !nearLava(bot, floor.position)
+}
+
+async function tunnelStep(bot, cells, feet) {
+  for (const c of cells) await breakBlock(bot, bot.blockAt(c))
+  await goto(bot, new goals.GoalBlock(feet.x, feet.y, feet.z), 10000)
+}
+
+// ---- skills ----
+
+async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64 }) {
+  const [dx, dz] = DIRS[dir]
+  for (let moved = 0; moved < maxBlocks; moved += mode === 'surface' ? 8 : 1) {
+    if (findVisible(bot, target)) return
+    const p = bot.entity.position.floored()
+    if (mode === 'surface') {
+      await goto(bot, new goals.GoalNearXZ(p.x + dx * 8, p.z + dz * 8, 2))
+      continue
+    }
+    const ahead = p.offset(dx, 0, dz)
+    const cells = [ahead.offset(0, 1, 0), ahead]
+    if (cells.some(c => nearLava(bot, c)) || !isSolid(at(bot, ahead, 0, -1, 0))) throw new Fail('hazard')
+    await tunnelStep(bot, cells, ahead)
+  }
+  if (!findVisible(bot, target)) throw new Fail('not_found')
+}
+
+async function approach(bot, target) {
+  const pos = target.position ?? target
+  await goto(bot, new goals.GoalNear(pos.x, pos.y, pos.z, 3))
+}
+
+async function mine(bot, name) {
+  const block = findVisible(bot, name)
+  if (!block) throw new Fail('not_visible')
+  await reach(bot, block)
+  await breakBlock(bot, block)
+  await pickUpDrop(bot, block.position)
+}
+
+async function digDown(bot, targetY) {
+  let d = 0
+  while (Math.floor(bot.entity.position.y) > targetY) {
+    const p = bot.entity.position.floored()
+    const next = [0, 1, 2, 3].map(i => (d + i) % 4).find(i => stairSafe(bot, p, DIRS[i]))
+    if (next === undefined) throw new Fail('blocked')
+    d = next
+    const cells = stairBlocks(p, DIRS[d])
+    await tunnelStep(bot, cells, cells[2])
+  }
+}
+
+async function goUp(bot, targetY) {
+  await goto(bot, new goals.GoalY(targetY), 120000)
+}
+
+// Server recipe book: displayId -> result item. Sent at login and on every unlock, so this must be
+// attached before the bot connects (createBot does it).
+function trackRecipeBook(bot) {
+  bot.recipeBook = new Map()
+  bot._client.on('recipe_book_add', ({ entries, replace }) => {
+    if (replace) bot.recipeBook.clear()
+    for (const { recipe } of entries) {
+      const { type, data } = recipe.display
+      if (data?.result?.type !== 'item_stack') continue
+      const fits2x2 = type === 'crafting_shaped' ? data.width <= 2 && data.height <= 2
+        : type === 'crafting_shapeless' && data.ingredients.length <= 4
+      bot.recipeBook.set(recipe.displayId, { itemId: data.result.data.itemId, fits2x2 })
+    }
+  })
+  bot._client.on('recipe_book_remove', ({ recipeIds }) => recipeIds.forEach(id => bot.recipeBook.delete(id)))
+}
+
+// The server lays out the grid (like a vanilla client's recipe book), then the result is shift-clicked.
+// mineflayer's bot.craft() clicks ingredients in by hand and loses clicks on 1.21.
+// Paper drops place_recipe above 5/s by default, so requests are paced at 4/s and retried.
+async function craftOnce(bot, window, displayIds, itemId) {
+  for (let round = 0; round < 3; round++) {
+    for (const recipeId of displayIds) {
+      await bot.waitForTicks(5)
+      bot._client.write('craft_recipe_request', { windowId: window.id, recipeId, makeAll: false })
+      if (!await poll(bot, () => window.slots[0]?.type === itemId, 1000)) continue
+      await bot.clickWindow(0, 0, 1)
+      await bot._syncWindow(window) // ponytail: private API; the shift-click result is server-authoritative
+      return
+    }
+  }
+  throw new Fail('craft_failed')
+}
+
+async function craft(bot, name, count = 1) {
+  const item = bot.registry.itemsByName[name]
+  if (!item) throw new Fail('unknown_item')
+  const target = countItem(bot, name) + count
+  // Ingredient availability comes from recipe data; execution goes through the recipe book.
+  const recipe = bot.recipesFor(item.id, null, count, null)[0] ?? bot.recipesFor(item.id, null, count, true)[0]
+  if (!recipe) throw new Fail('missing')
+  const displayIds = [...bot.recipeBook]
+    .filter(([, r]) => r.itemId === item.id && (r.fits2x2 || recipe.requiresTable))
+    .map(([id]) => id)
+  if (!displayIds.length) throw new Fail('recipe_locked')
+  const window = recipe.requiresTable ? await bot.openBlock(await nearbyOrPlaced(bot, 'crafting_table')) : bot.inventory
+  try {
+    for (let made = 0; made < count; made += recipe.result.count) await craftOnce(bot, window, displayIds, item.id)
+  } finally {
+    if (window !== bot.inventory) bot.closeWindow(window)
+  }
+  await bot._syncWindow(bot.inventory)
+  if (countItem(bot, name) < target) throw new Fail('craft_failed')
+}
+
+async function smelt(bot, name) {
+  const input = SMELTS[name]
+  if (!input) throw new Fail('unknown_item')
+  const fuel = FUELS.find(f => findItem(bot, f))
+  if (!findItem(bot, input) || !fuel) throw new Fail('missing')
+  const target = countItem(bot, name) + 1
+  const furnace = await bot.openFurnace(await nearbyOrPlaced(bot, 'furnace'))
+  try {
+    await furnace.putFuel(findItem(bot, fuel).type, null, 1)
+    await furnace.putInput(findItem(bot, input).type, null, 1)
+    if (!await poll(bot, () => furnace.outputItem(), 15000)) throw new Fail('timeout')
+    await furnace.takeOutput()
+  } finally {
+    furnace.close()
+  }
+  if (!await poll(bot, () => countItem(bot, name) >= target, 1000)) throw new Fail('smelt_failed')
+}
+
+async function equip(bot, name, destination = 'hand') {
+  const item = findItem(bot, name)
+  if (!item) throw new Fail('missing')
+  await bot.equip(item, destination)
+}
+
+async function eat(bot) {
+  if (bot.food >= 20) throw new Fail('not_hungry')
+  const food = bot.inventory.items().find(i => bot.registry.foodsByName[i.name])
+  if (!food) throw new Fail('missing')
+  await bot.equip(food, 'hand')
+  await withTimeout(bot.consume(), 5000, () => bot.deactivateItem())
+}
+
+async function flee(bot) {
+  const mob = nearestHostile(bot)
+  if (!mob) return
+  bot.pathfinder.setGoal(new goals.GoalInvert(new goals.GoalFollow(mob, HOSTILE_RANGE + 4)), true)
+  if (!await poll(bot, () => !nearestHostile(bot), 20000)) throw new Fail('timeout')
+}
+
+async function deposit(bot, { x, y, z }, items = ['diamond']) {
+  const chestBlock = bot.blockAt(bot.entity.position.clone().set(x, y, z)) // plain {x,y,z} → Vec3
+  if (chestBlock?.name !== 'chest') throw new Fail('no_chest')
+  await reach(bot, chestBlock)
+  const chest = await bot.openContainer(chestBlock)
+  let full = false
+  try {
+    for (const name of items) {
+      const item = bot.registry.itemsByName[name]
+      const n = countItem(bot, name)
+      const fits = Math.min(n, freeSpace(chest, item))
+      if (fits > 0) await chest.deposit(item.id, null, fits)
+      full ||= fits < n
+    }
+  } finally {
+    chest.close()
+  }
+  if (full) {
+    bot.chat('Storage chest is full.')
+    throw new Fail('full')
+  }
+}
+
+// Checked up front: a transfer into a full chest desyncs mineflayer's inventory instead of failing.
+function freeSpace(window, item) {
+  return window.slots.slice(0, window.inventoryStart).reduce((free, slot) => {
+    if (!slot) return free + item.stackSize
+    return slot.type === item.id ? free + item.stackSize - slot.count : free
+  }, 0)
+}
+
+async function returnHome(bot, home) {
+  await goto(bot, new goals.GoalNear(home.x, home.y, home.z, 3), 120000)
+}
+
+const SKILLS = {
+  explore, approach, mine, dig_down: digDown, go_up: goUp, craft, smelt,
+  equip, eat, flee, deposit, return_home: returnHome,
+}
+
+// Every skill resolves to { ok, reason, ticks } and never throws.
+const runSkill = (bot, name, ...args) => run(bot, () => SKILLS[name](bot, ...args))
+
+module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook }
