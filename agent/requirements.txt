@@ -1,0 +1,4 @@
+# torch: pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+torch==2.14.0+cpu
+gymnasium==1.3.0
+numpy==2.5.3
