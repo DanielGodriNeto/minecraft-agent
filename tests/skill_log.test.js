@@ -58,6 +58,6 @@ test('skill log: damage taken during the skill is logged beside the result, not 
   const result = await pending
   const [line] = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
   assert.strictEqual(result.damage, undefined)
-  assert.deepStrictEqual(line.damage, [{ hp: 10, cause: 'unknown' }])
+  assert.deepStrictEqual(line.damage.map(d => [d.hp, d.cause]), [[10, 'unknown']])
   assert.strictEqual(line.result.damage, undefined)
 })

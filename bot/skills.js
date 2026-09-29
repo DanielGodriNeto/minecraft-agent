@@ -40,7 +40,8 @@ const PICKUP_REACH_UP = 1.5
 const CANOPY = /_(leaves|log|wood)$/
 const DAMAGE_LOG_MAX = 10
 const OXYGEN_ABORT = 10
-const ABORTS = new Set(['attacked', 'drowning'])
+const SUFFOCATION_ABORT = 3
+const ABORTS = new Set(['attacked', 'drowning', 'suffocating'])
 const HAZARD_CAUSE = { lava: 'lava', flowing_lava: 'lava', fire: 'fire', soul_fire: 'fire', magma_block: 'magma', cactus: 'cactus', sweet_berry_bush: 'berry_bush' }
 const NON_INTERRUPTIBLE = new Set(['flee', 'eat', 'shelter'])
 const PLACEABLE = ['cobblestone', 'cobbled_deepslate', 'dirt', 'stone', 'deepslate', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
@@ -133,18 +134,55 @@ async function settle(pending, ms) {
   clearTimeout(timer)
 }
 
-// Best guess at what just hurt the bot: a hostile in range, a hazard block at feet/head/below, drowning, else unknown.
-function damageCause(bot) {
+const MELEE_RANGE = 6
+const EYE_HEIGHT = 1.62
+const RANGED = new Set(['skeleton', 'stray', 'bogged', 'pillager', 'blaze', 'ghast', 'witch', 'breeze'])
+
+function clearShot(bot, mob) {
+  const eye = bot.entity.position.offset(0, EYE_HEIGHT, 0)
+  const toward = mob.position.offset(0, (mob.height ?? 1) * 0.9, 0).minus(eye)
+  return !bot.world.raycast(eye, toward.normalize(), toward.norm())
+}
+
+// A hostile is only blamed when it is close, or a ranged one that can see the bot.
+function attacker(bot) {
   const p = bot.entity.position
-  const mob = nearestHostile(bot)
-  if (mob) return `${mob.name}@${mob.position.distanceTo(p).toFixed(1)}`
-  const feet = p.floored()
+  return bot.nearestEntity(e => {
+    if (e.type !== 'hostile') return false
+    const d = e.position.distanceTo(p)
+    return d <= MELEE_RANGE || (RANGED.has(e.name) && d <= HOSTILE_RANGE && clearShot(bot, e))
+  })
+}
+
+function surroundings(bot) {
+  const feet = bot.entity.position.floored()
+  const head = bot.blockAt(feet.offset(0, 1, 0))
+  return {
+    feet: bot.blockAt(feet)?.name, head: head?.name, headSolid: isSolid(head),
+    oxygen: bot.oxygenLevel, onFire: ((bot.entity.metadata?.[0] ?? 0) & 1) === 1,
+  }
+}
+
+// Best guess at what just hurt the bot: an attacker, a hazard block at feet/head/below, a solid head block, water, fire, else unknown.
+function damageCause(bot) {
+  const mob = attacker(bot)
+  if (mob) return `${mob.name}@${mob.position.distanceTo(bot.entity.position).toFixed(1)}`
+  const feet = bot.entity.position.floored()
   const head = feet.offset(0, 1, 0)
   for (const cell of [feet, head, feet.offset(0, -1, 0)]) {
     const cause = HAZARD_CAUSE[bot.blockAt(cell)?.name]
     if (cause) return cause
   }
-  return bot.blockAt(head)?.name === 'water' && (bot.oxygenLevel ?? 20) < 20 ? 'drowning' : 'unknown'
+  const { headSolid, oxygen, onFire } = surroundings(bot)
+  if (headSolid) return 'suffocation'
+  if (isWet(bot.blockAt(head)) && (oxygen ?? 20) < 20) return 'drowning'
+  return onFire ? 'burning' : 'unknown'
+}
+
+// Unexplained damage keeps what the bot was standing in, so the log shows what to fix.
+function damageEntry(bot) {
+  const cause = damageCause(bot)
+  return { hp: bot.health, cause, ...(cause === 'unknown' && surroundings(bot)) }
 }
 
 // A skill is aborted when a hostile hurts the bot, so the planner can react (flee) instead of
@@ -152,6 +190,7 @@ function damageCause(bot) {
 async function run(bot, skill, interruptible) {
   let ticks = 0
   let lastHealth = bot.health
+  let suffocated = 0
   const damage = []
   const cancel = bot.skillCancel = { cancelled: false, reason: null }
   const abort = (reason) => {
@@ -163,13 +202,14 @@ async function run(bot, skill, interruptible) {
   const tick = () => { ticks++ }
   const onBreath = () => { if ((bot.oxygenLevel ?? 20) < OXYGEN_ABORT) abort('drowning') }
   const onHealth = () => {
-    const hurt = bot.health < lastHealth
+    const lost = lastHealth - bot.health
     lastHealth = bot.health
-    if (!hurt) return
-    const cause = damageCause(bot)
-    damage.push({ hp: bot.health, cause })
+    if (lost <= 0) return
+    const entry = damageEntry(bot)
+    damage.push(entry)
     if (damage.length > DAMAGE_LOG_MAX) damage.shift()
-    if (cause === 'drowning') return abort('drowning')
+    if (entry.cause === 'drowning') return abort('drowning')
+    if (entry.cause === 'suffocation' && (suffocated += lost) >= SUFFOCATION_ABORT) return abort('suffocating')
     if (!interruptible || cancel.cancelled || !nearestHostile(bot)) return
     abort('attacked')
   }
@@ -966,6 +1006,15 @@ async function toss(bot, names, keep = 16) {
   }
 }
 
+// Buried in a block (falling gravel, a collapsed tunnel): dig the head cell open. Best effort.
+async function freeHead(bot) {
+  const head = bot.blockAt(bot.entity.position.floored().offset(0, 1, 0))
+  if (!isSolid(head) || !head.diggable) return
+  try {
+    await breakBlock(bot, head)
+  } catch {}
+}
+
 async function returnHome(bot, home) {
   const nearHome = (p) => Math.hypot(p.x - home.x, p.z - home.z) <= HOME_RANGE && p.y >= home.y - HOME_SLACK
   await followTrail(bot, nearHome)
@@ -999,6 +1048,7 @@ function logSkill(bot, entry) {
 async function runSkill(bot, name, ...args) {
   const before = snapshot(bot)
   const { damage, ...result } = await run(bot, () => SKILLS[name](bot, ...args), !NON_INTERRUPTIBLE.has(name))
+  if (result.reason === 'suffocating') await freeHead(bot)
   logSkill(bot, { t: Date.now(), bot: bot.username, run: bot.runTag ?? null, skill: name, args: args.map(logArg), result, ...(damage && { damage }), before, after: snapshot(bot) })
   return result
 }

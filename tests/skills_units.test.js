@@ -192,7 +192,7 @@ test('run: every health drop is recorded with its cause, capped at the last ten'
     for (let hp = 19; hp >= 5; hp--) { bot.health = hp; bot.emit('health') }
   }, false)
   assert.strictEqual(result.damage.length, 10)
-  assert.deepStrictEqual(result.damage.at(-1), { hp: 5, cause: 'undefined@10.0' })
+  assert.deepStrictEqual(result.damage.at(-1), { hp: 5, cause: 'unknown', feet: undefined, head: undefined, headSolid: false, oxygen: undefined, onFire: false })
   assert.strictEqual((await run(fakeBot(), async () => {}, false)).damage, undefined)
 })
 
@@ -211,6 +211,37 @@ test('damageCause: hostile in range first, then hazard blocks, drowning, unknown
   assert.strictEqual(damageCause(at({ '0,11,0': 'water' }, { oxygenLevel: 12 })), 'drowning')
   assert.strictEqual(damageCause(at({ '0,11,0': 'water' }, { oxygenLevel: 20 })), 'unknown')
   assert.strictEqual(damageCause(at({})), 'unknown')
+})
+
+test('damageCause: a far hostile is not blamed, a ranged one only with line of sight', () => {
+  const bot = (mob, blocked = false, names = {}) => ({
+    entity: { position: new Vec3(0.5, 10, 0.5) },
+    world: { raycast: () => (blocked ? { name: 'stone' } : null) },
+    nearestEntity: (match) => [mob].filter(Boolean).find(match) ?? null,
+    blockAt: (p) => ({ name: names[`${p.x},${p.y},${p.z}`] ?? 'air', boundingBox: names[`${p.x},${p.y},${p.z}`] ? 'block' : 'empty' }),
+  })
+  const at = (name, x) => ({ name, type: 'hostile', height: 1.9, position: new Vec3(x, 10, 0.5) })
+  assert.strictEqual(damageCause(bot(at('zombie', 5.5))), 'zombie@5.0')
+  assert.strictEqual(damageCause(bot(at('zombie', 9.5))), 'unknown')
+  assert.strictEqual(damageCause(bot(at('skeleton', 12.5))), 'skeleton@12.0')
+  assert.strictEqual(damageCause(bot(at('skeleton', 12.5), true)), 'unknown')
+  assert.strictEqual(damageCause(bot(at('skeleton', 20.5))), 'unknown')
+  assert.strictEqual(damageCause(bot(null, false, { '0,11,0': 'gravel' })), 'suffocation')
+})
+
+test('run: solid-head damage adds up to a suffocating abort; unexplained damage logs its surroundings', async () => {
+  const bot = fakeBot(50)
+  bot.blockAt = (p) => (p.y === 11 ? { name: 'gravel', boundingBox: 'block' } : null)
+  const result = await run(bot, async () => {
+    setTimeout(() => { for (const hp of [18, 16, 14]) { bot.health = hp; bot.emit('health') } }, 5)
+    await spin(bot)
+  }, false)
+  assert.strictEqual(result.reason, 'suffocating')
+  assert.strictEqual(result.damage.length, 3)
+  const spared = fakeBot(50)
+  spared.blockAt = bot.blockAt
+  const one = await run(spared, async () => { spared.health = 18; spared.emit('health') }, false)
+  assert.strictEqual(one.ok, true)
 })
 
 test('patchFaces: solid neighbours of the hole, never the top face, minus faces that already failed', () => {
