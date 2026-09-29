@@ -16,6 +16,7 @@ function jitterParams(rand = Math.random) {
     tunnelLength: int(24, 40),
     returnAt: int(3, 8),
     woodStock: int(5, 7),
+    fleeHealth: int(10, 16),
   }
 }
 

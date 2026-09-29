@@ -25,7 +25,7 @@ const SOURCES = {
 }
 const DIRS = 4
 
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 6 }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 6, fleeHealth: 14 }
 
 const count = (s, item) => (GROUPS[item] ?? [item]).reduce((n, name) => n + (s.inv[name] ?? 0), 0)
 const has = (s, item) => count(s, item) > 0
@@ -100,7 +100,7 @@ function shouldReturn(s) {
 
 function nextAction(s) {
   if (objectiveDone(s)) return null
-  if (s.hostileNear && s.health < 10) return act('flee')
+  if (s.hostileNear && s.health < s.params.fleeHealth) return act('flee')
   if (s.food <= 14 && s.hasFood) return act('eat')
   if (shouldReturn(s)) {
     if (s.distHome <= 4) return act('deposit', s.home)

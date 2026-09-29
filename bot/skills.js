@@ -11,6 +11,7 @@ const SMELTS = { iron_ingot: 'raw_iron', gold_ingot: 'raw_gold', copper_ingot: '
 const WOODS = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak', 'mangrove', 'cherry', 'pale_oak']
 const FUELS = ['coal', 'charcoal', ...WOODS.map(w => `${w}_planks`), ...WOODS.map(w => `${w}_log`)]
 const HOSTILE_RANGE = 16
+const ATTACK_RANGE = 6
 
 class Fail extends Error {
   constructor(reason) { super(reason); this.reason = reason }
@@ -49,18 +50,33 @@ async function poll(bot, fn, ms) {
   return fn()
 }
 
-async function run(bot, skill) {
+// A skill is aborted when a hostile hurts the bot, so the planner can react (flee) instead of
+// finishing a 30 s walk while being hit. flee/eat are not interruptible.
+async function run(bot, skill, interruptible) {
   let ticks = 0
+  let attacked = false
+  let lastHealth = bot.health
   const tick = () => { ticks++ }
+  const onHealth = () => {
+    const hurt = bot.health < lastHealth
+    lastHealth = bot.health
+    if (!interruptible || attacked || !hurt || !nearestHostile(bot, ATTACK_RANGE)) return
+    attacked = true
+    stopPathing(bot)
+    bot.stopDigging()
+  }
   bot.on('physicsTick', tick)
+  bot.on('health', onHealth)
   try {
     await skill()
     return { ok: true, reason: null, ticks }
   } catch (e) {
+    if (attacked) return { ok: false, reason: 'attacked', ticks }
     if (e instanceof Fail) return { ok: false, reason: e.reason, ticks }
     return { ok: false, reason: 'error', detail: e.message, ticks }
   } finally {
     bot.off('physicsTick', tick)
+    bot.off('health', onHealth)
     stopPathing(bot)
   }
 }
@@ -369,7 +385,7 @@ function logSkill(bot, entry) {
 // Every skill resolves to { ok, reason, ticks } and never throws.
 async function runSkill(bot, name, ...args) {
   const before = snapshot(bot)
-  const result = await run(bot, () => SKILLS[name](bot, ...args))
+  const result = await run(bot, () => SKILLS[name](bot, ...args), !['flee', 'eat'].includes(name))
   logSkill(bot, { t: Date.now(), bot: bot.username, run: bot.runTag ?? null, skill: name, args: args.map(logArg), result, before, after: snapshot(bot) })
   return result
 }
