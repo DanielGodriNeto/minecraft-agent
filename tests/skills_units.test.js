@@ -44,6 +44,35 @@ test('stairRefusal: reports why a step is refused', () => {
   assert.strictEqual(stairRefusal(world({ '1,8,0': 'lava' }), p, east), 'lava')
 })
 
+test('stairRefusal: gravel, sand and stalactites over the dug column are refused', () => {
+  const p = new Vec3(0, 10, 0)
+  const east = [1, 0]
+  for (const name of ['gravel', 'sand', 'red_sand', 'suspicious_gravel', 'suspicious_sand']) {
+    assert.strictEqual(stairRefusal(world({ '1,12,0': name }), p, east), 'gravel', name)
+    assert.strictEqual(stairRefusal(world({ '1,11,0': name }), p, east), 'gravel', name)
+  }
+  assert.strictEqual(stairRefusal(world({ '1,13,0': 'gravel' }), p, east), null)
+  assert.strictEqual(stairRefusal(world({ '1,10,0': 'gravel' }), p, east), null)
+  assert.strictEqual(stairRefusal(world({ '1,14,0': 'pointed_dripstone' }), p, east), 'dripstone')
+  assert.strictEqual(stairRefusal(world({ '1,12,0': 'pointed_dripstone' }), p, east), 'dripstone')
+  assert.strictEqual(stairRefusal(world({ '1,15,0': 'pointed_dripstone' }), p, east), null)
+  assert.strictEqual(stairRefusal(world({ '2,12,0': 'gravel' }), p, east), null)
+})
+
+test('stairRefusal: a cell that needs a pickaxe tier the bot lacks is no_tool, dirt is dug by hand', () => {
+  const p = new Vec3(0, 10, 0)
+  const east = [1, 0]
+  const hard = (name) => ({ ...block(name, new Vec3(0, 0, 0)), harvestTools: { 1: true }, material: 'mineable/pickaxe', canHarvest: (type) => type === 1 })
+  const bot = (tool, overrides = {}) => ({
+    blockAt: (q) => (overrides[`${q.x},${q.y},${q.z}`] ? hard(overrides[`${q.x},${q.y},${q.z}`]) : block('dirt', q)),
+    inventory: { items: () => (tool ? [{ name: tool, type: 1 }] : []) },
+  })
+  const stone = { '1,10,0': 'stone' }
+  assert.strictEqual(stairRefusal(bot(null, stone), p, east), 'no_tool')
+  assert.strictEqual(stairRefusal(bot('wooden_pickaxe', stone), p, east), null)
+  assert.strictEqual(stairRefusal(bot(null), p, east), null)
+})
+
 test('arrived: needs ground, the right level and to be near the cell centre', () => {
   const bot = (x, y, z, onGround = true) => ({ entity: { position: { x, y, z }, onGround } })
   const cell = new Vec3(5, 10, 5)
@@ -528,6 +557,10 @@ test('tunnelSafe: refuses only cells in or next to water or lava, a missing floo
   assert.strictEqual(tunnelSafe(world({ '1,9,0': 'water' }), cells), false)
   assert.strictEqual(tunnelSafe(world({ '1,10,1': 'lava' }), cells), false)
   assert.strictEqual(tunnelSafe(world({ '1,9,0': 'air' }), cells), true)
+  assert.strictEqual(tunnelSafe(world({ '1,12,0': 'gravel' }), cells), false)
+  assert.strictEqual(tunnelSafe(world({ '1,11,0': 'sand' }), cells), false)
+  assert.strictEqual(tunnelSafe(world({ '1,13,0': 'pointed_dripstone' }), cells), false)
+  assert.strictEqual(tunnelSafe(world({ '1,13,0': 'gravel' }), cells), true)
 })
 
 test('run: low oxygen with the head in water aborts any skill with drowning, and so does a drowning hit', async () => {

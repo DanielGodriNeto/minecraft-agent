@@ -461,17 +461,36 @@ function stairBlocks(p, [dx, dz]) {
   return [p.offset(dx, 1, dz), p.offset(dx, 0, dz), p.offset(dx, -1, dz)]
 }
 
-// Why a staircase step toward dir cannot be taken: 'lava', 'water', 'undiggable', 'no_floor', or null when it can.
+const FALLING = new Set(['gravel', 'sand', 'red_sand', 'suspicious_gravel', 'suspicious_sand'])
+const DRIPSTONE = 'pointed_dripstone'
+const DRIPSTONE_REACH = 3
+
+// What can drop into a dug column from above: gravel or sand in its top cell or right over it (they bury or suffocate
+// whoever stands below), or a stalactite within three blocks over it.
+function fallHazard(bot, cells) {
+  const top = cells.reduce((a, c) => (c.y > a.y ? c : a))
+  const name = (dy) => bot.blockAt(top.offset(0, dy, 0))?.name
+  if (FALLING.has(name(0)) || FALLING.has(name(1))) return 'gravel'
+  return [0, 1, 2, 3].some(dy => name(dy) === DRIPSTONE) ? 'dripstone' : null
+}
+
+const lacksTool = (bot, block) => needsPickaxe(block) && !cheapestPickaxe(bot.inventory.items(), block)
+
+// Why a staircase step toward dir cannot be taken: 'lava', 'water', 'gravel', 'dripstone', 'undiggable', 'no_tool', 'no_floor',
+// or null when it can.
 function stairRefusal(bot, p, dir) {
   const cells = stairBlocks(p, dir)
   if (cells.some(c => nearLava(bot, c))) return 'lava'
   if (cells.some(c => nearWater(bot, c))) return 'water'
+  const hazard = fallHazard(bot, cells)
+  if (hazard) return hazard
   if (cells.some(c => !(OPEN.has(bot.blockAt(c)?.name) || bot.blockAt(c)?.diggable))) return 'undiggable'
+  if (cells.some(c => lacksTool(bot, bot.blockAt(c)))) return 'no_tool'
   return isSolid(at(bot, cells[2], 0, -1, 0)) ? null : 'no_floor'
 }
 
 const tunnelCells = (p, [dx, dz]) => [p.offset(dx, 1, dz), p.offset(dx, 0, dz)]
-const tunnelSafe = (bot, cells) => !cells.some(c => nearLava(bot, c) || nearWater(bot, c))
+const tunnelSafe = (bot, cells) => !cells.some(c => nearLava(bot, c) || nearWater(bot, c)) && !fallHazard(bot, cells)
 
 // A missing floor under the landing cell is bridged with a carried block; false when that is not possible.
 async function floored(bot, landing) {
