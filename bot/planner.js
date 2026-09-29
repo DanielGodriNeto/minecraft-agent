@@ -24,6 +24,9 @@ const SOURCES = {
   diamond: { blocks: ['diamond_ore', 'deepslate_diamond_ore'], find: 'branch' },
 }
 const DIRS = 4
+const SURFACE_BLOCKS = 64
+const SURFACE_GROWTH = 32
+const SURFACE_CAP = 192
 
 const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 6, fleeHealth: 14 }
 
@@ -78,13 +81,16 @@ function gather(s, item) {
   if (s.visible[item]) return mineAct(item)
   if (source.find === 'surface') {
     if (s.y < s.surfaceY - 8) return act('go_up', s.surfaceY)
-    return act('explore', { target: source.blocks, mode: 'surface', dir: s.memory.surfaceDir, maxBlocks: 64, maxAbove: source.maxAbove })
+    return act('explore', { target: source.blocks, mode: 'surface', dir: s.memory.surfaceDir, maxBlocks: surfaceReach(s.memory), maxAbove: source.maxAbove })
   }
   if (source.find === 'dig') return act('dig_down', s.y - 3)
   const y = source.y ?? s.params.branchY
   if (s.y > y + 2) return act('dig_down', y)
   return act('explore', { target: source.blocks, mode: 'branch', ...branchLeg(s) })
 }
+
+// Each failed surface search lengthens the next one so the bot spirals outward instead of pacing the same ground.
+const surfaceReach = ({ surfaceLeg }) => Math.min(SURFACE_BLOCKS + SURFACE_GROWTH * surfaceLeg, SURFACE_CAP)
 
 // Serpentine branch mine: long leg, short step sideways, long leg back, ...
 function branchLeg(s) {

@@ -62,7 +62,10 @@ function remember(run, action, result) {
   if (result.ok || action.skill !== 'explore') return
   const { mode } = action.args[0]
   if (mode === 'branch') run.memory.leg++
-  else run.memory.surfaceDir = (run.memory.surfaceDir + 1) % 4
+  else {
+    run.memory.surfaceDir = (run.memory.surfaceDir + 1) % 4
+    run.memory.surfaceLeg++
+  }
 }
 
 // Stuck = STUCK_FAILURES failed skills in a row with no inventory change and < STUCK_MOVE blocks moved.
@@ -84,7 +87,7 @@ function stuckTracker(bot) {
 async function runObjective(bot, { objective, home, params = jitterParams(), deadline = Infinity, maxDeaths = 3, rand = Math.random }) {
   const run = {
     objective, home, params, deadline, deposited: 0, recentlyAttacked: false, deaths: 0, decisions: 0, stopped: false,
-    memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4) },
+    memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), surfaceLeg: 0 },
   }
   bot.objectiveRun = run
   const onDeath = () => {

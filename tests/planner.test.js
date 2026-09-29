@@ -12,7 +12,7 @@ function state(over = {}) {
     inv: {}, health: 20, food: 20, hasFood: false, y: 70, surfaceY: 70, isNight: false, hostileNear: false,
     visible: {}, tableNear: false, furnaceNear: false, freeSlots: 30, pickLeft: 0,
     home: { x: 0, y: 70, z: 0 }, distHome: 0, objective: { item: 'diamond', count: 'max' }, deposited: 0,
-    params: DEFAULT_PARAMS, memory: { leg: 0, baseDir: 0, surfaceDir: 0 },
+    params: DEFAULT_PARAMS, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0 },
     ...over,
   }
 }
@@ -129,4 +129,9 @@ test('planner: plank recipes use one plank type', () => {
   const mixed = { oak_planks: 2, birch_planks: 2 }
   assert.deepStrictEqual(nextAction(state({ inv: { ...mixed, oak_log: 1 }, visible: { log: false } })), { skill: 'craft', args: ['oak_planks', 4] })
   assert.deepStrictEqual(nextAction(state({ inv: { oak_planks: 1, birch_planks: 2, birch_log: 1, oak_log: 3 } })).args, ['birch_planks', 4])
+})
+
+test('planner: surface search grows with each failed leg and is capped', () => {
+  const reach = (surfaceLeg) => nextAction(state({ memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg } })).args[0].maxBlocks
+  assert.deepStrictEqual([0, 1, 2, 4, 9].map(reach), [64, 96, 128, 192, 192])
 })
