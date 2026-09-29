@@ -244,13 +244,13 @@ async function nearbyOrPlaced(bot, blockName) {
   return { block, placed: true }
 }
 
-// Carry a station we placed ourselves underground. The craft/smelt already succeeded, so failing here is harmless.
+// Carry a station we placed ourselves underground. Best effort, whether or not the craft/smelt worked.
 async function recoverStation(bot, station) {
   if (!station.placed) return
-  const block = bot.blockAt(station.block.position)
-  const tool = bot.pathfinder.bestHarvestTool(block) ?? bot.heldItem
-  if (block.harvestTools && !block.canHarvest(tool?.type)) return
   try {
+    const block = bot.blockAt(station.block.position)
+    const tool = bot.pathfinder.bestHarvestTool(block) ?? bot.heldItem
+    if (block.harvestTools && !block.canHarvest(tool?.type)) return
     await breakBlock(bot, block)
     await pickUpDrop(bot, block.position)
   } catch {}
@@ -496,15 +496,22 @@ async function craft(bot, name, count = 1) {
     .map(([id]) => id)
   if (!displayIds.length) throw new Fail('recipe_locked')
   const station = recipe.requiresTable ? await nearbyOrPlaced(bot, 'crafting_table') : null
+  try {
+    await craftAt(bot, station, item, recipe, displayIds, count)
+    await bot._syncWindow(bot.inventory)
+    if (countItem(bot, name) < target) throw new Fail('craft_failed')
+  } finally {
+    if (station) await recoverStation(bot, station)
+  }
+}
+
+async function craftAt(bot, station, item, recipe, displayIds, count) {
   const window = station ? await opened(bot.openBlock(station.block)) : bot.inventory
   try {
     for (let made = 0; made < count; made += recipe.result.count) await craftOnce(bot, window, displayIds, item.id)
   } finally {
     if (window !== bot.inventory) bot.closeWindow(window)
   }
-  await bot._syncWindow(bot.inventory)
-  if (countItem(bot, name) < target) throw new Fail('craft_failed')
-  if (station) await recoverStation(bot, station)
 }
 
 async function smelt(bot, name) {
@@ -514,6 +521,15 @@ async function smelt(bot, name) {
   if (!findItem(bot, input) || !fuel) throw new Fail('missing')
   const target = countItem(bot, name) + 1
   const station = await nearbyOrPlaced(bot, 'furnace')
+  try {
+    await smeltAt(bot, station, input, fuel)
+    if (!await poll(bot, () => countItem(bot, name) >= target, 1000)) throw new Fail('smelt_failed')
+  } finally {
+    await recoverStation(bot, station)
+  }
+}
+
+async function smeltAt(bot, station, input, fuel) {
   const furnace = await opened(bot.openFurnace(station.block))
   try {
     await furnace.putFuel(findItem(bot, fuel).type, null, 1)
@@ -523,8 +539,6 @@ async function smelt(bot, name) {
   } finally {
     furnace.close()
   }
-  if (!await poll(bot, () => countItem(bot, name) >= target, 1000)) throw new Fail('smelt_failed')
-  await recoverStation(bot, station)
 }
 
 async function equip(bot, name, destination = 'hand') {
