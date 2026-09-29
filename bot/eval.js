@@ -82,7 +82,7 @@ function partial(bot, reason, detail) {
   return { reason, detail, deposited: run?.deposited ?? 0, deaths: run?.deaths ?? 0, decisions: run?.decisions ?? 0 }
 }
 
-async function runOne(bot, slot, home, start, minutes, difficulty) {
+async function runOne(bot, slot, home, start, minutes, difficulty, log) {
   const rand = mulberry32(slot.id)
   bot.runTag = `slot${slot.id}-${start}`
   const disconnected = new Promise(resolve => {
@@ -109,18 +109,23 @@ async function runOne(bot, slot, home, start, minutes, difficulty) {
   return run
 }
 
-async function runBatch(slots, minutes, difficulty) {
+// opts.log: file receiving one line per run (null = none); opts.onStart(server): called once the runs begin,
+// returns a stop function that is called when they end.
+async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart } = {}) {
   restore()
   const server = await startServer()
   const bots = slots.map((_, i) => createBot({ username: `Bot${i}` }))
+  let stopWatching
   try {
     await Promise.all(bots.map(b => withDeadline(once(b, 'spawn'), SPAWN_MS, `${b.username} spawn`)))
     await server.command('time set 0')
     const homes = []
     for (const [i, slot] of slots.entries()) homes.push(await placeAtSlot(server, bots[i], slot).catch(e => e))
     const start = Date.now()
-    return await Promise.all(slots.map((slot, i) => runOne(bots[i], slot, homes[i], start, minutes, difficulty)))
+    stopWatching = onStart?.(server)
+    return await Promise.all(slots.map((slot, i) => runOne(bots[i], slot, homes[i], start, minutes, difficulty, log)))
   } finally {
+    stopWatching?.()
     bots.forEach(b => b.end())
     await server.stop()
   }
@@ -139,5 +144,5 @@ async function main([first, last, bots = '10', minutes = '60']) {
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { placeAtSlot, groundY, readDifficulty, assertSpawnSet }
+module.exports = { placeAtSlot, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })
