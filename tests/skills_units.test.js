@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -144,4 +144,10 @@ test('onCanopy: leaves and logs under the bot may be dug through unless lava is 
   assert.strictEqual(onCanopy(world(), p), false)
   assert.strictEqual(onCanopy(world({ '0,9,0': 'oak_leaves', '0,8,0': 'lava' }), p), false)
   assert.strictEqual(onCanopy(world({ '0,9,0': 'oak_leaves', '0,7,0': 'lava' }), p), false)
+})
+
+test('mostCommon: the most frequent value, first seen wins a tie', () => {
+  assert.strictEqual(mostCommon(['lava', 'no_floor', 'no_floor', 'undiggable']), 'no_floor')
+  assert.strictEqual(mostCommon(['lava', 'undiggable']), 'lava')
+  assert.strictEqual(mostCommon([]), undefined)
 })

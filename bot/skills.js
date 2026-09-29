@@ -513,6 +513,12 @@ async function patched(bot, landing) {
   }
 }
 
+const mostCommon = (values) => {
+  const tally = new Map()
+  for (const v of values) tally.set(v, (tally.get(v) ?? 0) + 1)
+  return [...tally].sort((a, b) => b[1] - a[1])[0]?.[0]
+}
+
 async function digDown(bot, targetY) {
   let d = 0
   let tunnels = 0
@@ -527,7 +533,8 @@ async function digDown(bot, targetY) {
       continue
     }
     const out = options.find(o => tunnelSafe(bot, tunnelCells(p, DIRS[o.dir])))
-    if (!out || tunnels++ >= MAX_TUNNEL_OUTS) throw new Fail('blocked', options.at(-1).reason)
+    if (!out) throw new Fail('blocked', mostCommon(options.map(o => o.reason)))
+    if (tunnels++ >= MAX_TUNNEL_OUTS) throw new Fail('blocked', 'tunnel_limit')
     await tunnelOut(bot, out.dir)
   }
 }
@@ -731,4 +738,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon }
