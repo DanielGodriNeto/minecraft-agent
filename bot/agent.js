@@ -65,6 +65,7 @@ function observe(bot, run) {
     deposited: run.deposited,
     msLeft: run.deadline - Date.now(),
     recentlyAttacked: run.recentlyAttacked,
+    drowning: run.drowning,
     params: run.params,
     memory: run.memory,
   }
@@ -128,7 +129,7 @@ function stuckTracker(bot) {
 // home: storage chest position. Resolves with why the run ended.
 async function runObjective(bot, { objective, home, params = jitterParams(), deadline = Infinity, maxDeaths = 3, rand = Math.random }) {
   const run = {
-    objective, home, params, deadline, deposited: 0, recentlyAttacked: false, deaths: 0, decisions: 0, stopped: false,
+    objective, home, params, deadline, deposited: 0, recentlyAttacked: false, drowning: false, deaths: 0, decisions: 0, stopped: false,
     memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), surfaceLeg: 0, optionalFails: {} },
   }
   bot.objectiveRun = run
@@ -159,7 +160,8 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       remember(run, action, result)
       resetTrail(bot, home)
       run.recentlyAttacked = result.reason === 'attacked'
-      if (result.reason !== 'attacked' && isStuck(result)) return finish(run, 'stuck')
+      run.drowning = result.reason === 'drowning'
+      if (!run.recentlyAttacked && !run.drowning && isStuck(result)) return finish(run, 'stuck')
     }
   } finally {
     bot.off('death', onDeath)

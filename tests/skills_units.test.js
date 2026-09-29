@@ -430,3 +430,24 @@ test('tunnelSafe: refuses cells in or next to water or lava, and cells without a
   assert.strictEqual(tunnelSafe(world({ '1,10,1': 'lava' }), cells), false)
   assert.strictEqual(tunnelSafe(world({ '1,9,0': 'air' }), cells), false)
 })
+
+test('run: low oxygen aborts any skill with drowning, and so does a drowning hit', async () => {
+  for (const interruptible of [true, false]) {
+    const bot = fakeBot()
+    const result = await run(bot, async () => {
+      setTimeout(() => { bot.oxygenLevel = 9; bot.emit('breath') }, 5)
+      await spin(bot)
+    }, interruptible)
+    assert.strictEqual(result.reason, 'drowning')
+  }
+  const bot = fakeBot(50)
+  const hit = await run(bot, async () => {
+    bot.oxygenLevel = 12
+    bot.blockAt = () => ({ name: 'water' })
+    setTimeout(() => { bot.health = 18; bot.emit('health') }, 5)
+    await spin(bot)
+  }, false)
+  assert.strictEqual(hit.reason, 'drowning')
+  const fine = fakeBot()
+  assert.strictEqual((await run(fine, async () => { fine.oxygenLevel = 10; fine.emit('breath') }, true)).ok, true)
+})

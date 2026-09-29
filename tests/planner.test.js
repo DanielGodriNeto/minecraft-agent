@@ -231,3 +231,8 @@ test('planner: weak on the surface it tops up food before a descent, but only wh
   assert.strictEqual(nextAction(state({ inv: geared, health: 10, food: 19 })).skill, 'dig_down')
   assert.strictEqual(nextAction(state({ inv: geared, health: 16, food: 19, hasFood: true })).skill, 'dig_down')
 })
+
+test('planner: after a drowning abort it climbs a few blocks toward the surface of the water', () => {
+  assert.deepStrictEqual(nextAction(state({ drowning: true, y: 30 })), { skill: 'go_up', args: [34] })
+  assert.notStrictEqual(nextAction(state({ y: 70 })).skill, 'go_up')
+})

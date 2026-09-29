@@ -39,6 +39,8 @@ const TRAIL_STALE = 8
 const PICKUP_REACH_UP = 1.5
 const CANOPY = /_(leaves|log|wood)$/
 const DAMAGE_LOG_MAX = 10
+const OXYGEN_ABORT = 10
+const ABORTS = new Set(['attacked', 'drowning'])
 const HAZARD_CAUSE = { lava: 'lava', flowing_lava: 'lava', fire: 'fire', soul_fire: 'fire', magma_block: 'magma', cactus: 'cactus', sweet_berry_bush: 'berry_bush' }
 const NON_INTERRUPTIBLE = new Set(['flee', 'eat', 'shelter'])
 const PLACEABLE = ['cobblestone', 'cobbled_deepslate', 'dirt', 'stone', 'deepslate', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
@@ -159,24 +161,28 @@ async function run(bot, skill, interruptible) {
     bot.stopDigging()
   }
   const tick = () => { ticks++ }
+  const onBreath = () => { if ((bot.oxygenLevel ?? 20) < OXYGEN_ABORT) abort('drowning') }
   const onHealth = () => {
     const hurt = bot.health < lastHealth
     lastHealth = bot.health
     if (!hurt) return
-    damage.push({ hp: bot.health, cause: damageCause(bot) })
+    const cause = damageCause(bot)
+    damage.push({ hp: bot.health, cause })
     if (damage.length > DAMAGE_LOG_MAX) damage.shift()
+    if (cause === 'drowning') return abort('drowning')
     if (!interruptible || cancel.cancelled || !nearestHostile(bot)) return
     abort('attacked')
   }
   bot.on('physicsTick', tick)
   bot.on('health', onHealth)
+  bot.on('breath', onBreath)
   const pending = Promise.resolve().then(skill)
   try {
     await withTimeout(pending, SKILL_CAP_MS, () => abort('timeout'))
     return { ok: true, reason: null, ticks, ...(damage.length && { damage }) }
   } catch (e) {
     const failed = { ok: false, ticks, ...(damage.length && { damage }) }
-    if (cancel.reason === 'attacked') return { ...failed, reason: 'attacked' }
+    if (ABORTS.has(cancel.reason)) return { ...failed, reason: cancel.reason }
     if (e instanceof Fail) return { ...failed, reason: e.reason, ...(e.detail && { detail: e.detail }) }
     return { ...failed, reason: 'error', detail: e.message }
   } finally {
@@ -184,6 +190,7 @@ async function run(bot, skill, interruptible) {
     if (cancel.reason) await settle(pending, CANCEL_GRACE_MS)
     bot.off('physicsTick', tick)
     bot.off('health', onHealth)
+    bot.off('breath', onBreath)
     bot.skillCancel = null
     stopPathing(bot)
   }

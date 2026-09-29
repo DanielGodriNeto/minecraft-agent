@@ -43,6 +43,7 @@ const MAX_HUNT_FAILS = 4
 const EAT_AT = 17 // natural regeneration needs food >= 18
 const WEAK_HEALTH = 12
 const FULL_FOOD = 20
+const DROWN_RISE = 4
 
 // Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
 const BIGGEST_STACK = new Set(['planks', 'stone'])
@@ -167,6 +168,7 @@ function takeCover(s) {
 const surfaceWork = (s) => !has(s, 'iron_pickaxe') || shouldReturn(s)
 
 function dangerStep(s) {
+  if (s.drowning) return act('go_up', s.y + DROWN_RISE)
   if (!s.hostileNear) return null
   if (s.recentlyAttacked || s.health < s.params.fleeHealth) return takeCover(s)
   if (s.isNight && s.y >= s.surfaceY - 2 && !surfaceWork(s)) return takeCover(s)
