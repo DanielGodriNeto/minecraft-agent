@@ -209,11 +209,16 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
     bot.trail = [] // respawn is at home
     stopPathing(bot) // a dead bot must not keep chasing its old goal
   }
+  const onSpawn = () => {
+    if (run.deaths > 0 && isLost(bot.entity.position, home)) run.lost = true
+  }
   bot.on('death', onDeath)
+  bot.on('spawn', onSpawn)
   const isStuck = stuckTracker(bot)
   try {
     for (;;) {
       if (run.stopped) return finish(run, 'stopped')
+      if (run.lost) return finish(run, 'lost')
       if (run.deaths >= maxDeaths) return finish(run, 'deaths')
       if (Date.now() >= deadline) return finish(run, 'timeout')
       if (!bot.entity || bot.health <= 0) {
@@ -237,6 +242,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
     }
   } finally {
     bot.off('death', onDeath)
+    bot.off('spawn', onSpawn)
     bot.runDeadline = null
     if (bot.objectiveRun === run) bot.objectiveRun = null
   }

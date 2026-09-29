@@ -24,6 +24,9 @@ function assertSpawnSet(reply) {
   if (!/Set spawn point/.test(reply)) throw new Error(`spawnpoint failed: ${reply}`)
 }
 
+// Leaves, vines or litter in the stand cell or the two above it invalidate the spawn point, and the run respawns far away.
+const clearStandCommand = ({ x, y, z }) => `fill ${x} ${y} ${z} ${x} ${y + 2} ${z} air`
+
 const once = (emitter, ev) => new Promise(resolve => emitter.once(ev, resolve))
 
 function withDeadline(promise, ms, what) {
@@ -70,6 +73,7 @@ async function placeAtSlot(server, bot, slot) {
   // Healing goes last: a fall from the canopy would otherwise undo it.
   for (const cmd of [`gamemode survival ${name}`, `clear ${name}`, `effect clear ${name}`,
     `effect give ${name} instant_health 1 10 true`, `effect give ${name} saturation 1 10 true`]) await server.command(cmd)
+  await server.command(clearStandCommand(stand))
   assertSpawnSet(await server.command(`spawnpoint ${name} ${stand.x} ${stand.y} ${stand.z}`, SPAWN_REPLY))
   await server.command(`setblock ${chest.x} ${chest.y} ${chest.z} chest`, /Changed the block/)
   await poll(() => bot.health === 20 && bot.food === 20, 10000)
@@ -144,5 +148,5 @@ async function main([first, last, bots = '10', minutes = '60']) {
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { placeAtSlot, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })

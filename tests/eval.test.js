@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const path = require('node:path')
 const req = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))
-const { groundY, readDifficulty, assertSpawnSet } = req('./eval.js')
+const { groundY, readDifficulty, assertSpawnSet, clearStandCommand } = req('./eval.js')
 
 const solid = (name) => ({ name, boundingBox: 'block' })
 const empty = (name) => ({ name, boundingBox: 'empty' })
@@ -34,4 +34,8 @@ test('readDifficulty: reads the properties file', () => {
 test('assertSpawnSet: only the success reply passes', () => {
   assert.doesNotThrow(() => assertSpawnSet('[12:00:00 INFO]: Set spawn point to 1, 64, 2 [0.0] in minecraft:overworld for Bot0'))
   assert.throws(() => assertSpawnSet('[12:00:00 INFO]: No player was found'), /spawnpoint failed/)
+})
+
+test('clearStandCommand: clears the stand cell and the two above it', () => {
+  assert.strictEqual(clearStandCommand({ x: 10, y: 64, z: -3 }), 'fill 10 64 -3 10 66 -3 air')
 })
