@@ -34,13 +34,20 @@ const PURE_JUNK = ['dirt', 'gravel', 'andesite', 'diorite', 'granite', 'tuff', '
 const STONE_JUNK = ['cobblestone', 'cobbled_deepslate']
 const KEEP_STONE = 16
 const RETURN_BEFORE_MS = 8 * 60000
-const SPARE_STICKS = 4
+const PICKAXES = ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe']
+const LOW_PICK = 20
+const SURFACE_STICKS = 8 // enough for the spare and iron pickaxes so nothing needs a trip back up
+const SURFACE_SLACK = 8
+const MAX_SPARE_FAILS = 2
 
-// Recipes take one plank type (recipe data is per type), so "planks" means the biggest single stack.
+// Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
+const BIGGEST_STACK = new Set(['planks', 'stone'])
 const count = (s, item) => {
   const counts = (GROUPS[item] ?? [item]).map(name => s.inv[name] ?? 0)
-  return item === 'planks' ? Math.max(...counts) : counts.reduce((n, c) => n + c, 0)
+  return BIGGEST_STACK.has(item) ? Math.max(...counts) : counts.reduce((n, c) => n + c, 0)
 }
+const pickaxeCount = (s) => PICKAXES.reduce((n, name) => n + (s.inv[name] ?? 0), 0)
+const atSurface = (s) => s.y >= s.surfaceY - SURFACE_SLACK
 const has = (s, item) => count(s, item) > 0
 const act = (skill, ...args) => ({ skill, args })
 const mineAct = (key) => act('mine', SOURCES[key].blocks, SOURCES[key].maxAbove ?? null)
@@ -113,7 +120,7 @@ function shouldReturn(s) {
   return carried >= Math.min(target, s.params.returnAt)
     || s.freeSlots <= 1
     || (s.food <= 6 && !s.hasFood)
-    || (has(s, 'iron_pickaxe') && s.pickLeft < 20)
+    || (pickaxeCount(s) < 2 && s.pickLeft < LOW_PICK)
     || (s.isNight && s.y >= s.surfaceY - 2)
 }
 
@@ -125,16 +132,25 @@ function junkAction(s) {
 }
 
 // Spare stone pickaxe and sticks for the long descent. Underground there is no wood to fetch, so this
-// only crafts from what is carried and is skipped when the materials are missing.
+// only crafts from what is carried and is skipped when the materials are missing. Steps are marked optional
+// so the agent can count their failures, and a spare that keeps failing is dropped instead of ending the run.
 function spareStep(s) {
-  if (!has(s, 'iron_pickaxe')) return null
-  const needPick = !has(s, 'stone_pickaxe')
-  const sticksWanted = SPARE_STICKS + (needPick ? 2 : 0)
+  const picks = pickaxeCount(s)
+  const wantsSpare = picks < 2 || (s.pickLeft < LOW_PICK && picks < 3)
+  const sticksWanted = atSurface(s) ? SURFACE_STICKS : wantsSpare ? 2 : 0
   const sticks = s.inv.stick ?? 0
-  if (sticks < sticksWanted && (count(s, 'planks') >= 2 || has(s, 'log'))) return obtain(s, 'stick', sticksWanted)
+  const woodOnHand = count(s, 'planks') >= 2 || has(s, 'log')
   const tableOk = s.tableNear || has(s, 'crafting_table') || count(s, 'planks') >= 4 || has(s, 'log')
-  if (needPick && sticks >= 2 && count(s, 'stone') >= 3 && tableOk) return obtain(s, 'stone_pickaxe', 1)
-  return null
+  let step = null
+  if (sticks < sticksWanted && woodOnHand) step = obtain(s, 'stick', sticksWanted)
+  else if (wantsSpare && sticks >= 2 && count(s, 'stone') >= 3 && tableOk) step = obtain(s, 'stone_pickaxe', count(s, 'stone_pickaxe') + 1)
+  if (!step || (s.memory.optionalFails?.[step.args[0]] ?? 0) >= MAX_SPARE_FAILS) return null
+  return { ...step, optional: true }
+}
+
+// Before the first descent: wood for sticks is fetched here, not underground.
+function stickStock(s) {
+  return atSurface(s) && (s.inv.stick ?? 0) < SURFACE_STICKS ? obtain(s, 'stick', SURFACE_STICKS) : null
 }
 
 function nextAction(s) {
@@ -157,7 +173,7 @@ function nextAction(s) {
       return obtain(s, count(s, 'stone') >= 3 ? 'stone_pickaxe' : 'wooden_pickaxe', 1)
     }
     if (!has(s, 'stone_pickaxe')) return obtain(s, 'stone_pickaxe', 1)
-    return obtain(s, 'iron_pickaxe', 1)
+    return spareStep(s) ?? stickStock(s) ?? obtain(s, 'iron_pickaxe', 1)
   }
   return spareStep(s) ?? gather(s, 'diamond')
 }

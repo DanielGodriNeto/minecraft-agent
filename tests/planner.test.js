@@ -138,9 +138,9 @@ test('planner: surface search grows with each failed leg and is capped', () => {
 
 test('planner: iron-geared bot crafts spare sticks and a stone pickaxe before descending', () => {
   const geared = { iron_pickaxe: 1, oak_planks: 8, cobblestone: 5, crafting_table: 1 }
-  assert.deepStrictEqual(nextAction(state({ inv: geared, y: 16 })), { skill: 'craft', args: ['stick', 4] })
-  assert.deepStrictEqual(nextAction(state({ inv: { ...geared, stick: 6 }, y: 16 })), { skill: 'craft', args: ['stone_pickaxe', 1] })
-  assert.deepStrictEqual(nextAction(state({ inv: { ...geared, oak_planks: 0, oak_log: 1 }, y: 16 })), { skill: 'craft', args: ['oak_planks', 4] })
+  assert.deepStrictEqual(nextAction(state({ inv: geared, y: 16 })), { skill: 'craft', args: ['stick', 4], optional: true })
+  assert.deepStrictEqual(nextAction(state({ inv: { ...geared, stick: 6 }, y: 16 })), { skill: 'craft', args: ['stone_pickaxe', 1], optional: true })
+  assert.deepStrictEqual(nextAction(state({ inv: { ...geared, oak_planks: 0, oak_log: 1 }, y: 16 })), { skill: 'craft', args: ['oak_planks', 4], optional: true })
 })
 
 test('planner: spares are skipped when the materials are not carried', () => {
@@ -148,5 +148,42 @@ test('planner: spares are skipped when the materials are not carried', () => {
   assert.deepStrictEqual(nextAction(state({ inv: { iron_pickaxe: 1 }, y: 16 })), dig)
   assert.deepStrictEqual(nextAction(state({ inv: { iron_pickaxe: 1, cobblestone: 5, oak_planks: 1 }, y: 16 })), dig)
   const done = { iron_pickaxe: 1, stone_pickaxe: 1, stick: 4, oak_planks: 8, cobblestone: 5 }
-  assert.deepStrictEqual(nextAction(state({ inv: done, y: 16 })), dig)
+  assert.deepStrictEqual(nextAction(state({ inv: done, y: 16, pickLeft: 100 })), dig)
+})
+
+const stoneStage = { stone_pickaxe: 1, oak_planks: 8, cobblestone: 5, crafting_table: 1, stick: 8 }
+
+test('planner: a lone stone pickaxe gets a spare before the iron stage, once sticks are stocked', () => {
+  assert.deepStrictEqual(nextAction(state({ inv: stoneStage, pickLeft: 100 })), { skill: 'craft', args: ['stone_pickaxe', 1], optional: true })
+  const withSpare = nextAction(state({ inv: { ...stoneStage, stone_pickaxe: 2 }, pickLeft: 100 }))
+  assert.notStrictEqual(withSpare.optional, true)
+})
+
+test('planner: stone is counted as the biggest single stone type', () => {
+  const split = { ...stoneStage, cobblestone: 2, cobbled_deepslate: 2 }
+  assert.notDeepStrictEqual(nextAction(state({ inv: split, pickLeft: 100 })), { skill: 'craft', args: ['stone_pickaxe', 1], optional: true })
+})
+
+test('planner: a worn in-use pickaxe asks for one more spare, but only up to three pickaxes', () => {
+  const two = { iron_pickaxe: 1, stone_pickaxe: 1, oak_planks: 8, cobblestone: 5, crafting_table: 1, stick: 2 }
+  assert.deepStrictEqual(nextAction(state({ inv: two, y: 16, pickLeft: 10 })), { skill: 'craft', args: ['stone_pickaxe', 1], optional: true })
+  assert.strictEqual(nextAction(state({ inv: two, y: 16, pickLeft: 100 })).skill, 'dig_down')
+  assert.strictEqual(nextAction(state({ inv: { ...two, wooden_pickaxe: 1 }, y: 16, pickLeft: 10 })).skill, 'dig_down')
+})
+
+test('planner: at the surface it stocks eight sticks before the first descent', () => {
+  const inv = { stone_pickaxe: 1, wooden_pickaxe: 1, oak_planks: 4, stick: 4 }
+  assert.deepStrictEqual(nextAction(state({ inv, pickLeft: 100 })), { skill: 'craft', args: ['stick', 4], optional: true })
+  const noWood = nextAction(state({ inv: { stone_pickaxe: 1, wooden_pickaxe: 1, stick: 4 }, pickLeft: 100 }))
+  assert.strictEqual(noWood.skill, 'explore')
+  assert.strictEqual(noWood.args[0].mode, 'surface')
+  const stocked = nextAction(state({ inv: { stone_pickaxe: 1, wooden_pickaxe: 1, stick: 8 }, pickLeft: 100 }))
+  assert.strictEqual(stocked.skill, 'dig_down')
+})
+
+test('planner: a spare craft that failed twice is not tried again', () => {
+  const memory = (n) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: { stone_pickaxe: n } })
+  const args = { inv: stoneStage, pickLeft: 100 }
+  assert.strictEqual(nextAction(state({ ...args, memory: memory(1) })).optional, true)
+  assert.notStrictEqual(nextAction(state({ ...args, memory: memory(2) })).optional, true)
 })

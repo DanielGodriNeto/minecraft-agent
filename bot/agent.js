@@ -1,5 +1,5 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
-const { runSkill, findVisible, stopPathing, resetTrail } = require('./skills.js')
+const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe } = require('./skills.js')
 const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 
 const STUCK_FAILURES = 3
@@ -28,10 +28,16 @@ function inventoryCounts(bot) {
   return inv
 }
 
+// Uses left on the pickaxe that will actually dig stone (the cheapest capable one), 0 without any.
+function pickLeft(bot) {
+  const stone = bot.registry.blocksByName.stone
+  const pick = cheapestPickaxe(bot.inventory.items(), { canHarvest: (type) => !stone.harvestTools || stone.harvestTools[type] })
+  return pick ? pick.maxDurability - pick.durabilityUsed : 0
+}
+
 function observe(bot, run) {
   const pos = bot.entity.position
   const near = (name, maxDistance = NEAR) => bot.findBlock({ matching: bot.registry.blocksByName[name].id, maxDistance }) !== null
-  const pick = bot.inventory.items().find(i => i.name === 'iron_pickaxe')
   const visible = {}
   for (const [key, source] of Object.entries(SOURCES)) visible[key] = findVisible(bot, source.blocks, source.maxAbove ?? null) !== null
   return {
@@ -47,7 +53,7 @@ function observe(bot, run) {
     tableNear: near('crafting_table', STATION_NEAR),
     furnaceNear: near('furnace', STATION_NEAR),
     freeSlots: bot.inventory.emptySlotCount(),
-    pickLeft: pick ? pick.maxDurability - pick.durabilityUsed : 0,
+    pickLeft: pickLeft(bot),
     home: run.home,
     distHome: pos.distanceTo(pos.clone().set(run.home.x, run.home.y, run.home.z)),
     objective: run.objective,
@@ -148,4 +154,4 @@ function stopObjective(bot) {
   return true
 }
 
-module.exports = { runObjective, stopObjective, jitterParams, observe, createStuckTracker }
+module.exports = { runObjective, stopObjective, jitterParams, observe, createStuckTracker, pickLeft }
