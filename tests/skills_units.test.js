@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -714,4 +714,38 @@ test('fight: cancellation stops the loop', async () => {
   const { bot } = fightBot({ hits: 999 })
   bot.attack = () => { bot.skillCancel.cancelled = true; bot.skillCancel.reason = 'timeout' }
   assert.strictEqual((await run(bot, () => SKILLS.fight(bot), false)).reason, 'timeout')
+})
+
+function stationBot({ at = new Vec3(0.5, 10, 0.5), tool = null } = {}) {
+  const held = []
+  const table = { name: 'crafting_table', position: new Vec3(2, 10, 0), diggable: true, boundingBox: 'block' }
+  let dug = false
+  const bot = Object.assign(new EventEmitter(), {
+    entity: { position: at },
+    blockAt: () => (dug ? { ...table, name: 'air', boundingBox: 'empty' } : table),
+    inventory: { items: () => held },
+    equip: async () => {},
+    dig: async () => { dug = true; held.push({ name: 'crafting_table', count: 1, type: 1 }) },
+    digTime: () => 0,
+    stopDigging() {},
+    pathfinder: { bestHarvestTool: () => tool },
+    nearestEntity: () => null,
+    waitForTicks: async () => {},
+  })
+  return { bot, table, wasDug: () => dug }
+}
+
+test('retrieveStation: an unreachable table within reach is picked up, one out of reach is not touched', async () => {
+  const near = stationBot()
+  await retrieveStation(near.bot, near.table, 'crafting_table')
+  assert.strictEqual(near.wasDug(), true)
+  const far = stationBot({ at: new Vec3(20.5, 10, 0.5) })
+  await assert.rejects(retrieveStation(far.bot, far.table, 'crafting_table'), (e) => e.reason === 'station_unreachable')
+  assert.strictEqual(far.wasDug(), false)
+})
+
+test('retrieveStation: a break that fails leaves station_unreachable', async () => {
+  const stuck = stationBot()
+  stuck.bot.dig = async () => { throw new Error('nope') }
+  await assert.rejects(retrieveStation(stuck.bot, stuck.table, 'crafting_table'), (e) => e.reason === 'station_unreachable')
 })

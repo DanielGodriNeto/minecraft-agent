@@ -428,7 +428,27 @@ async function placeFromInventory(bot, name) {
   return bot.blockAt(dug)
 }
 
-// Resolves { block, placed }. An existing station that cannot be reached is replaced from inventory.
+const STATION_BREAK_REACH = 4.5
+const PLANK_NAMES = WOODS.map(w => `${w}_planks`)
+
+// Own station that cannot be walked to: pick it up if it is within arm's reach, else make a new table from planks.
+// Ends holding the item, or throws station_unreachable.
+async function retrieveStation(bot, block, blockName) {
+  const eye = bot.entity.position.offset(0, EYE_HEIGHT, 0)
+  if (eye.distanceTo(block.position.offset(0.5, 0.5, 0.5)) <= STATION_BREAK_REACH) {
+    try {
+      await breakBlock(bot, block)
+      await pickUpDrop(bot, block.position)
+    } catch {
+      checkCancelled(bot)
+    }
+  }
+  const planks = PLANK_NAMES.reduce((n, name) => n + countItem(bot, name), 0)
+  if (!findItem(bot, blockName) && blockName === 'crafting_table' && planks >= 4) await craft(bot, 'crafting_table')
+  if (!findItem(bot, blockName)) throw new Fail('station_unreachable')
+}
+
+// Resolves { block, placed }. An existing station that cannot be reached is replaced by one from the inventory.
 async function nearbyOrPlaced(bot, blockName) {
   const existing = bot.findBlock({ matching: blockId(bot, blockName), maxDistance: 16 })
   if (existing) {
@@ -436,7 +456,8 @@ async function nearbyOrPlaced(bot, blockName) {
       await reach(bot, existing, STATION_REACH_MS, true)
       return { block: existing, placed: false }
     } catch (e) {
-      if (!(e instanceof Fail) || !findItem(bot, blockName)) throw new Fail('station_unreachable')
+      if (!(e instanceof Fail)) throw new Fail('station_unreachable')
+      if (!findItem(bot, blockName)) await retrieveStation(bot, existing, blockName)
     }
   }
   const block = await placeFromInventory(bot, blockName)
@@ -1203,4 +1224,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal }
