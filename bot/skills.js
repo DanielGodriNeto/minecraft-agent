@@ -89,7 +89,8 @@ function isVisible(bot, block) {
 function findVisible(bot, names, maxDistance = 32) {
   const matching = [names].flat().map(n => blockId(bot, n))
   const positions = bot.findBlocks({ matching, maxDistance, count: 64 })
-  return positions.map(p => bot.blockAt(p)).find(b => b && isVisible(bot, b)) ?? null
+  const unreachable = bot.unreachable ?? new Set()
+  return positions.map(p => bot.blockAt(p)).find(b => b && !unreachable.has(b.position.toString()) && isVisible(bot, b)) ?? null
 }
 
 function nearestHostile(bot, range = HOSTILE_RANGE) {
@@ -187,7 +188,13 @@ async function approach(bot, target) {
 async function mine(bot, name) {
   const block = findVisible(bot, name)
   if (!block) throw new Fail('not_visible')
-  await reach(bot, block)
+  try {
+    await reach(bot, block)
+  } catch (e) {
+    // Remember it, or the planner keeps choosing the same unreachable block (e.g. a high log).
+    bot.unreachable = (bot.unreachable ?? new Set()).add(block.position.toString())
+    throw e
+  }
   await breakBlock(bot, block)
   await pickUpDrop(bot, block.position)
 }
