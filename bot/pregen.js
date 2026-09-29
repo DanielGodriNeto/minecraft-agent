@@ -69,7 +69,7 @@ async function waitIdle(owner) {
   for (;;) {
     const reply = await cmd(owner, '/chunky progress')
     if (!/Task running/i.test(reply)) return
-    await sleep(2000)
+    await sleep(500)
   }
 }
 
