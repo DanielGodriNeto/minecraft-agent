@@ -241,7 +241,10 @@ function takeCover(s) {
   return act('shelter', atSurface(s) ? s.memory.surfaceDir : s.memory.baseDir)
 }
 
+// Failures across all items are capped too, so a run of different failed restocks cannot look like a stuck bot.
 const restockOpen = (s, item) => {
+  const totalFails = Object.values(s.memory.restock ?? {}).reduce((sum, c) => sum + (c.fails ?? 0), 0)
+  if (totalFails >= MAX_RESTOCK_FAILS) return false
   const { steps = 0, fails = 0 } = s.memory.restock?.[item] ?? {}
   return steps < MAX_RESTOCK_STEPS && fails < MAX_RESTOCK_FAILS
 }

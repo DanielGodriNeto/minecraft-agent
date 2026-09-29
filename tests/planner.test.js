@@ -397,6 +397,12 @@ test('reserve: an item that failed twice, or used its step budget, is skipped an
   assert.strictEqual(nextAction(s({ stone: { steps: 2, fails: 2 }, food: { steps: 12, fails: 0 } })).skill, 'dig_down')
 })
 
+test('reserve: failures across different items cap the whole visit so the stuck tracker never trips', () => {
+  const s = (restock) => reserved({ ...nearby, foodCount: 0, inv: { ...kit, cobblestone: 0 }, memory: memoryWith(restock) })
+  assert.strictEqual(nextAction(s({ stone: { steps: 1, fails: 1 } })).restock, 'stone')
+  assert.strictEqual(nextAction(s({ stone: { steps: 1, fails: 1 }, food: { steps: 1, fails: 1 } })).skill, 'dig_down')
+})
+
 test('reserve: nothing obtainable nearby still descends', () => {
   const s = state({ inv: { iron_pickaxe: 1, stone_sword: 1 }, foodCount: 0 })
   assert.strictEqual(nextAction(s).skill, 'dig_down')
