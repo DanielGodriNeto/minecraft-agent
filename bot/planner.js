@@ -37,6 +37,7 @@ const KEEP_STONE = 16
 const RETURN_BEFORE_MS = 8 * 60000
 const PICKAXES = ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe']
 const SWORDS = ['stone_sword', 'iron_sword', 'diamond_sword', 'netherite_sword']
+const IRON_TIER = 2 // index in PICKAXES
 const LOW_PICK = 20
 const SURFACE_STICKS = 8 // enough for the spare and iron pickaxes so nothing needs a trip back up
 const SURFACE_SLACK = 8
@@ -112,6 +113,19 @@ function gather(s, item) {
   const y = source.y ?? s.params.branchY
   if (s.y > y + 2) return descend(s, y, source.blocks)
   return act('explore', { target: source.blocks, mode: 'branch', ...branchLeg(s) })
+}
+
+const inputsOnHand = (s, item) => Object.entries(RECIPES[item].in).every(([input, n]) => count(s, input) >= n)
+
+// The dig failed for lack of a pickaxe tier: craft the best pickaxe above the one carried that needs nothing gathered.
+function pickaxeUpgrade(s) {
+  const tier = Math.max(...PICKAXES.map((name, i) => (has(s, name) ? i : -1)))
+  for (const name of PICKAXES.slice(tier + 1, IRON_TIER + 1).reverse()) {
+    if (!inputsOnHand(s, name)) continue
+    const step = obtain(s, name, 1)
+    if (step?.skill === 'craft') return { ...step, key: 'upgrade' }
+  }
+  return null
 }
 
 // Digging down keeps failing here: move to a fresh spot (a surface hop, or a short branch leg underground) before retrying.
@@ -254,6 +268,8 @@ function nextAction(s) {
   if (danger) return danger
   const food = foodStep(s)
   if (food) return food
+  const upgrade = s.memory.digFails > 0 && s.memory.lastDigReason === 'no_tool' ? pickaxeUpgrade(s) : null
+  if (upgrade) return upgrade
   const waiting = restStep(s) ?? nightStep(s)
   if (waiting) return waiting
   const junk = junkAction(s)

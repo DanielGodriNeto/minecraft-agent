@@ -89,10 +89,14 @@ function trackShelter(memory, action) {
   memory.shelters = 0
 }
 
-const DIG_STUCK = new Set(['blocked', 'timeout'])
+const DIG_STUCK = new Set(['blocked', 'timeout', 'no_tool'])
 
 // Consecutive dig_down failures without any descent; a relocation hop (or a success) starts the count over.
 function trackDigging(memory, action, result) {
+  if (action.key === 'upgrade' && result.ok) {
+    memory.digFails = 0
+    return
+  }
   if (action.relocate) {
     memory.digFails = 0
     memory.relocations = (memory.relocations ?? 0) + 1
@@ -101,6 +105,7 @@ function trackDigging(memory, action, result) {
   if (action.skill !== 'dig_down') return
   const stuck = !result.ok && !result.descended && DIG_STUCK.has(result.reason)
   memory.digFails = stuck ? (memory.digFails ?? 0) + 1 : 0
+  memory.lastDigReason = result.reason
 }
 
 function remember(run, action, result) {

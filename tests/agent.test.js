@@ -127,3 +127,11 @@ test('remember: keyed optional waits count under their key and do not trip the s
   remember(run, { skill: 'dig_down', args: [66], key: 'night_dig' }, { ok: true })
   assert.strictEqual(run.memory.nightDigs, 1)
 })
+
+test('remember: no_tool counts as a stuck dig, and a finished upgrade craft clears the count', () => {
+  const run = { memory: { leg: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: {} } }
+  remember(run, { skill: 'dig_down', args: [-58] }, { ok: false, reason: 'no_tool' })
+  assert.deepStrictEqual([run.memory.digFails, run.memory.lastDigReason], [1, 'no_tool'])
+  remember(run, { skill: 'craft', args: ['stone_pickaxe', 1], key: 'upgrade' }, { ok: true })
+  assert.strictEqual(run.memory.digFails, 0)
+})

@@ -327,3 +327,15 @@ test('planner: hurt and alone underground it rests sealed in, once fed', () => {
   assert.strictEqual(nextAction(state({ ...hurt, food: 16, hasFood: true })).skill, 'eat')
   assert.notStrictEqual(nextAction(state({ ...hurt, hostileNear: true })).args?.[1], 'rest')
 })
+
+test('planner: a dig_down that failed for lack of a tool crafts the best pickaxe it can before retrying', () => {
+  const memory = (extra) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, digFails: 1, lastDigReason: 'no_tool', ...extra })
+  const table = { crafting_table: 1, stick: 2 }
+  const upgraded = (inv, extra) => nextAction(state({ inv: { iron_pickaxe: 0, ...inv }, y: 16, memory: memory(extra) }))
+  assert.deepStrictEqual(upgraded({ ...table, cobblestone: 3 }), { skill: 'craft', args: ['stone_pickaxe', 1], key: 'upgrade' })
+  assert.deepStrictEqual(upgraded({ ...table, oak_planks: 3 }), { skill: 'craft', args: ['wooden_pickaxe', 1], key: 'upgrade' })
+  assert.deepStrictEqual(upgraded({ ...table, cobblestone: 3, iron_ingot: 3 }).args, ['iron_pickaxe', 1])
+  assert.notStrictEqual(upgraded({ ...table, stone_pickaxe: 1, cobblestone: 3 }).key, 'upgrade')
+  assert.notStrictEqual(upgraded({ ...table, cobblestone: 3 }, { lastDigReason: 'blocked' }).key, 'upgrade')
+  assert.notStrictEqual(upgraded({ ...table, cobblestone: 3 }, { digFails: 0 }).key, 'upgrade')
+})
