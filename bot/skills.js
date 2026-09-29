@@ -370,7 +370,7 @@ function logSkill(bot, entry) {
 async function runSkill(bot, name, ...args) {
   const before = snapshot(bot)
   const result = await run(bot, () => SKILLS[name](bot, ...args))
-  logSkill(bot, { t: Date.now(), bot: bot.username, skill: name, args: args.map(logArg), result, before, after: snapshot(bot) })
+  logSkill(bot, { t: Date.now(), bot: bot.username, run: bot.runTag ?? null, skill: name, args: args.map(logArg), result, before, after: snapshot(bot) })
   return result
 }
 

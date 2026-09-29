@@ -33,4 +33,4 @@ function summarize(runs) {
   }
 }
 
-module.exports = { summarize, bootstrapCI }
+module.exports = { summarize, bootstrapCI, mulberry32 }
