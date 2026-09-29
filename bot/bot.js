@@ -4,6 +4,7 @@ const { pathfinder } = require('mineflayer-pathfinder')
 const { parseCommand, isOwner } = require('./commands.js')
 const { trackRecipeBook, runSkill } = require('./skills.js')
 const { runObjective, stopObjective } = require('./agent.js')
+const { keepHitboxOutOfBlocks } = require('./physicsfix.js')
 
 const authFromEnv = () => ({
   ownerName: process.env.OWNER || 'Owner',
@@ -57,6 +58,7 @@ function createBot(opts = {}, auth = authFromEnv()) {
   const options = { host: '127.0.0.1', port: 25565, username: 'DiamondBot', version: '1.21.11', ...opts }
   const bot = mineflayer.createBot(options)
   trackRecipeBook(bot)
+  keepHitboxOutOfBlocks(bot)
   bot.skillLogPath = process.env.SKILL_LOG ?? path.join(__dirname, '..', 'logs', `skills-${options.username}.jsonl`)
   bot.loadPlugin(pathfinder)
   bot.on('error', console.error)
