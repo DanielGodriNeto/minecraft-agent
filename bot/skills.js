@@ -19,7 +19,7 @@ const HOSTILE_RANGE = 16
 const ATTACK_RANGE = 6
 
 class Fail extends Error {
-  constructor(reason) { super(reason); this.reason = reason }
+  constructor(reason, detail) { super(reason); this.reason = reason; this.detail = detail }
 }
 
 // ---- plumbing ----
@@ -45,7 +45,7 @@ async function goto(bot, goal, ms = PATH_MS) {
   try {
     await withTimeout(bot.pathfinder.goto(goal), ms, () => stopPathing(bot))
   } catch (e) {
-    throw e instanceof Fail ? e : new Fail('no_path')
+    throw e instanceof Fail ? e : new Fail('no_path', e.message)
   }
 }
 
@@ -80,7 +80,7 @@ async function run(bot, skill, interruptible) {
     return { ok: true, reason: null, ticks }
   } catch (e) {
     if (attacked) return { ok: false, reason: 'attacked', ticks }
-    if (e instanceof Fail) return { ok: false, reason: e.reason, ticks }
+    if (e instanceof Fail) return { ok: false, reason: e.reason, ...(e.detail && { detail: e.detail }), ticks }
     return { ok: false, reason: 'error', detail: e.message, ticks }
   } finally {
     bot.off('physicsTick', tick)
