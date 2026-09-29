@@ -22,3 +22,7 @@ test('test_metrics_ci_narrows_with_more_runs', () => {
   assert.ok(many.successCI[1] - many.successCI[0] < few.successCI[1] - few.successCI[0])
   assert.deepStrictEqual(summarize(Array.from({ length: 10 }, (_, i) => run(i % 2))).successCI, few.successCI) // seeded
 })
+
+test('test_metrics_empty', () => {
+  assert.deepStrictEqual(summarize([]), { runs: 0, successRate: null, successCI: null, diamondsPerHour: null, deathsPerHour: null, stuckRate: null })
+})

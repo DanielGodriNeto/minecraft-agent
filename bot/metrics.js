@@ -21,6 +21,7 @@ function bootstrapCI(values, rand = mulberry32(1)) {
 
 // runs: [{ deposited, deaths, reason, minutes }]
 function summarize(runs) {
+  if (runs.length === 0) return { runs: 0, successRate: null, successCI: null, diamondsPerHour: null, deathsPerHour: null, stuckRate: null }
   const hours = runs.reduce((h, r) => h + r.minutes / 60, 0)
   const success = runs.map(r => (r.deposited >= 1 ? 1 : 0))
   return {
