@@ -128,13 +128,26 @@ function nearestHostile(bot, range = HOSTILE_RANGE) {
 // ---- building blocks ----
 
 // Only pickaxe blocks are worth refusing to dig bare-handed; snow, dirt, leaves... are dug regardless of drops.
-const needsPickaxe = (block) => block.harvestTools && /mineable\/pickaxe|^incorrect_for_/.test(block.material)
+const PICKAXE_MATERIAL = /mineable\/pickaxe|^incorrect_for_/
+const needsPickaxe = (block) => block.harvestTools && PICKAXE_MATERIAL.test(block.material)
+const PICKAXE_TIERS = ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe']
+
+// Lowest-tier pickaxe that can harvest the block, so the iron pickaxe is not worn out on plain stone.
+function cheapestPickaxe(items, block) {
+  const tier = (item) => PICKAXE_TIERS.indexOf(item.name)
+  return items.filter(i => tier(i) >= 0 && block.canHarvest(i.type)).sort((a, b) => tier(a) - tier(b))[0] ?? null
+}
+
+function toolFor(bot, block) {
+  const cheapest = PICKAXE_MATERIAL.test(block.material) ? cheapestPickaxe(bot.inventory.items(), block) : null
+  return cheapest ?? bot.pathfinder.bestHarvestTool(block)
+}
 
 async function breakBlock(bot, block) {
   for (let tries = 0; tries < 5 && !OPEN.has(bot.blockAt(block.position)?.name); tries++) {
     const current = bot.blockAt(block.position)
     if (!current.diggable) throw new Fail('undiggable')
-    const tool = bot.pathfinder.bestHarvestTool(current)
+    const tool = toolFor(bot, current)
     if (tool) await bot.equip(tool, 'hand')
     if (needsPickaxe(current) && !current.canHarvest(bot.heldItem?.type)) throw new Fail('no_tool')
     await withTimeout(bot.dig(current, true), bot.digTime(current) * 2 + 1000, () => bot.stopDigging())
@@ -478,4 +491,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing }
+module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe }
