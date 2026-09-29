@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -466,9 +466,10 @@ test('tunnelSafe: refuses only cells in or next to water or lava, a missing floo
   assert.strictEqual(tunnelSafe(world({ '1,9,0': 'air' }), cells), true)
 })
 
-test('run: low oxygen aborts any skill with drowning, and so does a drowning hit', async () => {
+test('run: low oxygen with the head in water aborts any skill with drowning, and so does a drowning hit', async () => {
   for (const interruptible of [true, false]) {
     const bot = fakeBot()
+    bot.blockAt = () => ({ name: 'water' })
     const result = await run(bot, async () => {
       setTimeout(() => { bot.oxygenLevel = 9; bot.emit('breath') }, 5)
       await spin(bot)
@@ -484,7 +485,54 @@ test('run: low oxygen aborts any skill with drowning, and so does a drowning hit
   }, false)
   assert.strictEqual(hit.reason, 'drowning')
   const fine = fakeBot()
+  fine.blockAt = () => ({ name: 'water' })
   assert.strictEqual((await run(fine, async () => { fine.oxygenLevel = 10; fine.emit('breath') }, true)).ok, true)
+})
+
+test('run: squid air supply on dry land never aborts', async () => {
+  const bot = fakeBot()
+  bot.blockAt = () => ({ name: 'air' })
+  assert.strictEqual((await run(bot, async () => { bot.oxygenLevel = 0; bot.emit('breath') }, true)).ok, true)
+})
+
+test('isDrowning: own air supply metadata beats bot.oxygenLevel, and the head must be in water', () => {
+  const bot = (block, air, oxygenLevel) => ({
+    entity: { position: new Vec3(0.5, 10, 0.5), metadata: air === undefined ? {} : { 1: air } },
+    blockAt: () => block, oxygenLevel,
+  })
+  const water = { name: 'water' }
+  assert.strictEqual(ownOxygen(bot(water, 90, 20)), 6)
+  assert.strictEqual(ownOxygen(bot(water, undefined, 7)), 7)
+  assert.strictEqual(isDrowning(bot(water, 90, 20)), true)
+  assert.strictEqual(isDrowning(bot(water, 300, 0)), false)
+  assert.strictEqual(isDrowning(bot({ name: 'air' }, 30, 0)), false)
+  assert.strictEqual(isDrowning(bot({ name: 'kelp', getProperties: () => ({ waterlogged: true }) }, 30)), true)
+})
+
+test('skillCapMs: a skill may overrun the run deadline by 30 s at most', () => {
+  assert.strictEqual(skillCapMs({}, 0), 180000)
+  assert.strictEqual(skillCapMs({ runDeadline: Infinity }, 0), 180000)
+  assert.strictEqual(skillCapMs({ runDeadline: 50000 }, 20000), 60000)
+  assert.strictEqual(skillCapMs({ runDeadline: 1000 }, 20000), 30000)
+})
+
+test('pickupStalled: a failed pickup only counts when the bot did not move and no drop remains', () => {
+  const bot = (pos, drops) => ({
+    entity: { position: pos }, skippedDrops: new Set([1]),
+    nearestEntity: (match) => drops.find(match) ?? null,
+  })
+  const start = new Vec3(0, 10, 0)
+  const failed = new Fail('pickup_failed')
+  assert.strictEqual(pickupStalled(bot(start, []), start, failed), true)
+  assert.strictEqual(pickupStalled(bot(new Vec3(3, 10, 0), []), start, failed), false)
+  assert.strictEqual(pickupStalled(bot(start, [{ name: 'item', id: 2 }]), start, failed), false)
+  assert.strictEqual(pickupStalled(bot(start, [{ name: 'item', id: 1 }]), start, failed), true)
+  assert.strictEqual(pickupStalled(bot(start, []), start, new Fail('no_path')), true)
+})
+
+test('run: a server refusal to place surfaces as no_floor, not error', async () => {
+  const result = await run(fakeBot(), async () => { throw new Error('Server refused to place cobblestone at (1, 2, 3)') }, false)
+  assert.strictEqual(result.reason, 'no_floor')
 })
 
 test('floored: bridges a hole under the landing cell with a carried block, false without one', async () => {

@@ -37,9 +37,14 @@ const HOSTILE_RANGE = 16
 const CANCEL_GRACE_MS = 2000
 const TRAIL_STALE = 8
 const PICKUP_REACH_UP = 1.5
+const PICKUP_MOVED = 1.5
 const CANOPY = /_(leaves|log|wood)$/
 const DAMAGE_LOG_MAX = 10
 const OXYGEN_ABORT = 10
+const AIR_SUPPLY_INDEX = 1 // player entity metadata key index of air_supply (ticks, 300 max), 1.21.11
+const AIR_PER_LEVEL = 15
+const EYE_HEIGHT = 1.62
+const DEADLINE_SLACK_MS = 30000
 const SUFFOCATION_ABORT = 3
 const ABORTS = new Set(['attacked', 'drowning', 'suffocating'])
 const HAZARD_CAUSE = { lava: 'lava', flowing_lava: 'lava', fire: 'fire', soul_fire: 'fire', magma_block: 'magma', cactus: 'cactus', sweet_berry_bush: 'berry_bush' }
@@ -136,7 +141,6 @@ async function settle(pending, ms) {
 }
 
 const MELEE_RANGE = 6
-const EYE_HEIGHT = 1.62
 const RANGED = new Set(['skeleton', 'stray', 'bogged', 'pillager', 'blaze', 'ghast', 'witch', 'breeze'])
 
 function clearShot(bot, mob) {
@@ -155,12 +159,25 @@ function attacker(bot) {
   })
 }
 
+// mineflayer sets bot.oxygenLevel from any entity's air_supply (squid, fish, drowned), so the bot's own metadata wins.
+function ownOxygen(bot) {
+  const air = bot.entity.metadata?.[AIR_SUPPLY_INDEX]
+  return typeof air === 'number' ? Math.round(air / AIR_PER_LEVEL) : bot.oxygenLevel
+}
+
+function headWet(bot) {
+  const block = bot.blockAt(bot.entity.position.floored().offset(0, 1, 0))
+  return isWet(block) || block?.getProperties?.().waterlogged === true
+}
+
+const isDrowning = (bot) => headWet(bot) && (ownOxygen(bot) ?? 20) < OXYGEN_ABORT
+
 function surroundings(bot) {
   const feet = bot.entity.position.floored()
   const head = bot.blockAt(feet.offset(0, 1, 0))
   return {
     feet: bot.blockAt(feet)?.name, head: head?.name, headSolid: isSolid(head),
-    oxygen: bot.oxygenLevel, onFire: ((bot.entity.metadata?.[0] ?? 0) & 1) === 1,
+    oxygen: ownOxygen(bot), onFire: ((bot.entity.metadata?.[0] ?? 0) & 1) === 1,
   }
 }
 
@@ -176,7 +193,7 @@ function damageCause(bot) {
   }
   const { headSolid, oxygen, onFire } = surroundings(bot)
   if (headSolid) return 'suffocation'
-  if (isWet(bot.blockAt(head)) && (oxygen ?? 20) < 20) return 'drowning'
+  if (headWet(bot) && (oxygen ?? 20) < 20) return 'drowning'
   return onFire ? 'burning' : 'unknown'
 }
 
@@ -186,9 +203,16 @@ function damageEntry(bot) {
   return { hp: bot.health, cause, ...(cause === 'unknown' && surroundings(bot)) }
 }
 
+// A skill may overrun the run deadline by DEADLINE_SLACK_MS at most.
+function skillCapMs(bot, now = Date.now()) {
+  const deadline = bot.runDeadline ?? Infinity
+  return Math.min(SKILL_CAP_MS, Math.max(deadline - now, 0) + DEADLINE_SLACK_MS)
+}
+
 // A skill is aborted when a hostile hurts the bot, so the planner can react (flee) instead of
 // finishing a 30 s walk while being hit. flee/eat/shelter are not interruptible.
 async function run(bot, skill, interruptible) {
+  const capMs = skillCapMs(bot)
   let ticks = 0
   let lastHealth = bot.health
   let suffocated = 0
@@ -201,7 +225,7 @@ async function run(bot, skill, interruptible) {
     bot.stopDigging()
   }
   const tick = () => { ticks++ }
-  const onBreath = () => { if ((bot.oxygenLevel ?? 20) < OXYGEN_ABORT) abort('drowning') }
+  const onBreath = () => { if (isDrowning(bot)) abort('drowning') }
   const onHealth = () => {
     const lost = lastHealth - bot.health
     lastHealth = bot.health
@@ -219,12 +243,13 @@ async function run(bot, skill, interruptible) {
   bot.on('breath', onBreath)
   const pending = Promise.resolve().then(skill)
   try {
-    await withTimeout(pending, SKILL_CAP_MS, () => abort('timeout'))
+    await withTimeout(pending, capMs, () => abort('timeout'))
     return { ok: true, reason: null, ticks, ...(damage.length && { damage }) }
   } catch (e) {
     const failed = { ok: false, ticks, ...(damage.length && { damage }) }
     if (ABORTS.has(cancel.reason)) return { ...failed, reason: cancel.reason }
     if (e instanceof Fail) return { ...failed, reason: e.reason, ...(e.detail && { detail: e.detail }) }
+    if (REFUSED.test(e.message)) return { ...failed, reason: 'no_floor', detail: e.message }
     return { ...failed, reason: 'error', detail: e.message }
   } finally {
     cancel.cancelled = true
@@ -322,13 +347,22 @@ async function pickUpDrop(bot, pos) {
   const goalY = () => pickupGoalY(bot.entity.position.y, drop.position.y)
   await poll(bot, () => !bot.entities[drop.id] || goalY() !== null, 1000)
   if (!bot.entities[drop.id] || goalY() === null) return
+  const start = bot.entity.position.clone()
   try {
     await goto(bot, new goals.GoalNear(drop.position.x, goalY(), drop.position.z, 1), 10000)
     if (!await poll(bot, () => !bot.entities[drop.id], 3000)) throw new Fail('pickup_failed')
   } catch (e) {
     skipped.add(drop.id)
+    if (!pickupStalled(bot, start, e)) return
     throw e
   }
+}
+
+// A failed pickup only counts when the bot went nowhere and no other drop is left to fetch; otherwise the planner moves on.
+function pickupStalled(bot, start, e) {
+  if (!(e instanceof Fail && e.reason === 'pickup_failed')) return true
+  if (bot.entity.position.distanceTo(start) >= PICKUP_MOVED) return false
+  return !bot.nearestEntity(x => x.name === 'item' && !bot.skippedDrops.has(x.id))
 }
 
 async function reach(bot, block, ms = PATH_MS, scaffold = false) {
@@ -685,6 +719,7 @@ async function patched(bot, landing) {
     return true
   } catch (e) {
     if (e instanceof Fail && e.reason === 'no_floor') return false
+    if (REFUSED.test(e.message)) return false
     throw e
   }
 }
@@ -1088,4 +1123,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal }
