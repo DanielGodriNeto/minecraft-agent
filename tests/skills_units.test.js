@@ -475,6 +475,16 @@ test('run: escape skills are not aborted by low oxygen or drowning damage', asyn
   assert.strictEqual(result.ok, true)
 })
 
+test('dig_down: a tunnel-out that cannot move reports the real refusal, not tunnel_limit', async () => {
+  const bot = fakeBot()
+  bot.blockAt = (p) => block(p.y <= 9 ? 'air' : 'stone', p)
+  bot.inventory = { items: () => [] }
+  bot.trail = []
+  const result = await run(bot, () => SKILLS.dig_down(bot, 0), false)
+  assert.strictEqual(result.reason, 'blocked', result.detail)
+  assert.strictEqual(result.detail, 'no_floor')
+})
+
 test('tunnelSafe: refuses only cells in or next to water or lava, a missing floor is bridged instead', () => {
   const cells = [new Vec3(1, 11, 0), new Vec3(1, 10, 0)]
   assert.strictEqual(tunnelSafe(world(), cells), true)

@@ -656,13 +656,26 @@ async function mine(bot, name, maxAbove = null) {
 }
 
 // All four staircase directions refused: dig a short level tunnel to somewhere the staircase may work.
+// Returns whether it moved at all.
 async function tunnelOut(bot, dir) {
+  let moved = false
   for (let i = 0; i < TUNNEL_OUT; i++) {
     checkCancelled(bot)
     const cells = tunnelCells(bot.entity.position.floored(), DIRS[dir])
-    if (!tunnelSafe(bot, cells) || !await floored(bot, cells[1])) return
+    if (!tunnelSafe(bot, cells) || !await floored(bot, cells[1])) return moved
     await tunnelStep(bot, cells, cells[1])
+    moved = true
   }
+  return moved
+}
+
+// The first safe direction that lets the bot tunnel out; false when every one refuses.
+async function tunnelAny(bot, p, options) {
+  for (const o of options) {
+    if (!tunnelSafe(bot, tunnelCells(p, DIRS[o.dir]))) continue
+    if (await tunnelOut(bot, o.dir)) return true
+  }
+  return false
 }
 
 // Standing on leaves or a trunk: one block straight down gets off the canopy, unless lava is below.
@@ -746,10 +759,10 @@ async function digDown(bot, targetY) {
       continue
     }
     if (options.every(o => o.reason === 'no_floor') && await dropFromLedge(bot, p)) continue
-    const out = options.find(o => tunnelSafe(bot, tunnelCells(p, DIRS[o.dir])))
-    if (!out) throw new Fail('blocked', mostCommon(options.map(o => o.reason)))
-    if (tunnels++ >= MAX_TUNNEL_OUTS) throw new Fail('blocked', 'tunnel_limit')
-    await tunnelOut(bot, out.dir)
+    const refusal = mostCommon(options.map(o => o.reason))
+    if (tunnels >= MAX_TUNNEL_OUTS) throw new Fail('blocked', 'tunnel_limit')
+    if (!await tunnelAny(bot, p, options)) throw new Fail('blocked', refusal)
+    tunnels++
   }
 }
 
