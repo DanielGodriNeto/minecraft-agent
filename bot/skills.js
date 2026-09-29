@@ -17,6 +17,9 @@ const WOODS = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak', 'mangro
 const FUELS = ['coal', 'charcoal', ...WOODS.map(w => `${w}_planks`), ...WOODS.map(w => `${w}_log`)]
 const PATCH_BLOCKS = ['cobblestone', 'cobbled_deepslate', 'dirt']
 const GUARD_MS = 5000
+const GO_UP_PATH_MS = 60000
+const PILLAR_LIFT = 1
+const PILLAR_FAILS = 3
 const TUNNEL_OUT = 3
 const STEP_TICKS = 40
 const STEP_RANGE = 2.5
@@ -85,11 +88,21 @@ function skillMovements(bot) {
   return movements
 }
 
-async function goto(bot, goal, ms = PATH_MS) {
+// Same, but the pathfinder may pillar and bridge with the placeable blocks the bot carries.
+function scaffoldMovements(bot) {
+  const movements = skillMovements(bot)
+  movements.scafoldingBlocks = PLACEABLE.map(name => bot.registry.itemsByName[name]?.id).filter(id => id !== undefined)
+  return movements
+}
+
+async function goto(bot, goal, ms = PATH_MS, scaffold = false) {
+  if (scaffold) bot.pathfinder.setMovements(scaffoldMovements(bot))
   try {
     await withTimeout(bot.pathfinder.goto(goal), ms, () => stopPathing(bot))
   } catch (e) {
     throw e instanceof Fail ? e : new Fail('no_path', e.message)
+  } finally {
+    if (scaffold) bot.pathfinder.setMovements(skillMovements(bot))
   }
 }
 
@@ -260,8 +273,8 @@ async function pickUpDrop(bot, pos) {
   if (!await poll(bot, () => !bot.entities[drop.id], 3000)) throw new Fail('pickup_failed')
 }
 
-async function reach(bot, block, ms = PATH_MS) {
-  await goto(bot, new goals.GoalLookAtBlock(block.position, bot.world, { reach: 4 }), ms)
+async function reach(bot, block, ms = PATH_MS, scaffold = false) {
+  await goto(bot, new goals.GoalLookAtBlock(block.position, bot.world, { reach: 4 }), ms, scaffold)
 }
 
 // Plants and snow layers are replaced by the server, so any non-lava block without a hitbox is a free spot.
@@ -322,14 +335,14 @@ async function nearbyOrPlaced(bot, blockName) {
   const existing = bot.findBlock({ matching: blockId(bot, blockName), maxDistance: 16 })
   if (existing) {
     try {
-      await reach(bot, existing, STATION_REACH_MS)
+      await reach(bot, existing, STATION_REACH_MS, true)
       return { block: existing, placed: false }
     } catch (e) {
       if (!(e instanceof Fail) || !findItem(bot, blockName)) throw new Fail('station_unreachable')
     }
   }
   const block = await placeFromInventory(bot, blockName)
-  await reach(bot, block)
+  await reach(bot, block, PATH_MS, true)
   return { block, placed: true }
 }
 
@@ -639,10 +652,52 @@ async function digDown(bot, targetY) {
   }
 }
 
+// Jumps and places a carried block under the feet cell at the top of the jump. True once standing one level higher.
+async function pillarStep(bot, feet, name) {
+  bot.setControlState('jump', true)
+  try {
+    if (!await poll(bot, () => bot.entity.position.y >= feet.y + PILLAR_LIFT, 1000)) return false
+    if (!await tryPlace(bot, feet, name)) return false
+  } catch (e) {
+    checkCancelled(bot) // a lost placement is just a failed step; a cancelled skill must stop
+    return false
+  } finally {
+    bot.setControlState('jump', false)
+  }
+  return poll(bot, () => bot.entity.onGround && Math.floor(bot.entity.position.y) > feet.y, 1500)
+}
+
+// Clears the cells the head passes through during a jump; false when that is not possible (lava, bedrock).
+async function clearAbove(bot, feet) {
+  for (const dy of [2, 3]) {
+    const cell = feet.offset(0, dy, 0)
+    if (nearLava(bot, cell)) return false
+    if (!isSolid(bot.blockAt(cell))) continue
+    if (!bot.blockAt(cell).diggable) return false
+    await breakBlock(bot, bot.blockAt(cell))
+  }
+  return true
+}
+
+// Straight up on carried blocks; gives up after PILLAR_FAILS steps in a row without progress.
+async function pillarUp(bot, targetY) {
+  let fails = 0
+  while (Math.floor(bot.entity.position.y) < targetY && fails < PILLAR_FAILS) {
+    checkCancelled(bot)
+    const name = PLACEABLE.find(n => findItem(bot, n))
+    if (!name) return
+    const feet = bot.entity.position.floored()
+    if (!await clearAbove(bot, feet)) return
+    await guard(bot.look(bot.entity.yaw, -Math.PI / 2, true))
+    fails = await pillarStep(bot, feet, name) ? 0 : fails + 1
+  }
+}
+
 async function goUp(bot, targetY) {
   const high = (p) => Math.floor(p.y) >= targetY
   await followTrail(bot, high)
-  if (!high(bot.entity.position)) await goto(bot, new goals.GoalY(targetY), 120000)
+  if (!high(bot.entity.position)) await goto(bot, new goals.GoalY(targetY), GO_UP_PATH_MS, true).catch(() => {})
+  if (!high(bot.entity.position)) await pillarUp(bot, targetY)
   if (!high(bot.entity.position)) throw new Fail('not_reached')
   bot.trail = []
 }
@@ -937,4 +992,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, placeableCount, safeToLeave, SHELTER_MIN, nearestHostile, bestWeapon, nearestAnimal }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, placeableCount, safeToLeave, SHELTER_MIN, nearestHostile, bestWeapon, nearestAnimal }

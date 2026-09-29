@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -357,4 +357,61 @@ test('hunt: no_animal when none is in range, and nearestAnimal ignores hostiles 
   const { bot } = huntBot({ animalAt: 30 })
   assert.strictEqual(nearestAnimal(bot), null)
   assert.strictEqual((await run(bot, () => SKILLS.hunt(bot), true)).reason, 'no_animal')
+})
+
+test('scaffoldMovements: carried stone-type blocks may be placed by the pathfinder, parkour stays off', () => {
+  const registry = require('../bot/node_modules/minecraft-data')('1.21.11')
+  const movements = scaffoldMovements({ registry })
+  const ids = ['dirt', 'cobblestone', 'cobbled_deepslate', 'stone'].map(n => registry.itemsByName[n].id)
+  ids.forEach(id => assert.ok(movements.scafoldingBlocks.includes(id)))
+  assert.strictEqual(movements.allowParkour, false)
+})
+
+// Stone floor below y=10; jumping lifts the bot one block per tick, a placed block lets it land one level higher.
+function pillarBot({ blocks = 20, place = true } = {}) {
+  const placed = new Set()
+  const state = { y: 10, onGround: true, jump: false, lifted: false }
+  const solid = (p) => p.y < 10 || placed.has(`${p.x},${p.y},${p.z}`)
+  let left = blocks
+  const bot = Object.assign(new EventEmitter(), {
+    trail: [], health: 20, entity: { position: { x: 0.5, y: 10, z: 0.5, floored() { return new Vec3(0, Math.floor(this.y), 0) } }, yaw: 0, onGround: true },
+    registry: require('../bot/node_modules/minecraft-data')('1.21.11'),
+    blockAt: (p) => ({ name: solid(p) ? 'stone' : 'air', position: p, diggable: true, boundingBox: solid(p) ? 'block' : 'empty' }),
+    inventory: { items: () => (left > 0 ? [{ name: 'cobblestone', count: left, type: 1 }] : []) },
+    equip: async () => {},
+    look: async () => {},
+    setControlState: (name, on) => { if (name === 'jump') state.jump = on },
+    clearControlStates() {},
+    stopDigging() {},
+    pathfinder: { goto: async () => { throw new Error('no path') }, setGoal() {}, setMovements() {} },
+    placeBlock: async (ref, face) => {
+      if (!place) return
+      left--
+      placed.add(`${ref.position.x + face.x},${ref.position.y + face.y},${ref.position.z + face.z}`)
+    },
+    waitForTicks: async () => {
+      const e = bot.entity
+      if (state.jump && e.onGround) { e.position.y += 1.1; e.onGround = false; state.lifted = true } else if (!e.onGround && state.lifted) {
+        e.position.y = Math.max(10, ...[...placed].map(k => Number(k.split(',')[1]) + 1))
+        e.onGround = true
+        state.lifted = false
+      }
+    },
+  })
+  return { bot, placed }
+}
+
+test('go_up: when the pathfinder cannot get there, it pillars up on carried blocks', async () => {
+  const { bot, placed } = pillarBot()
+  const result = await run(bot, () => SKILLS.go_up(bot, 13), false)
+  assert.strictEqual(result.ok, true)
+  assert.deepStrictEqual([...placed].sort(), ['0,10,0', '0,11,0', '0,12,0'])
+  assert.strictEqual(Math.floor(bot.entity.position.y), 13)
+})
+
+test('go_up: fails not_reached when no block can be placed', async () => {
+  for (const options of [{ blocks: 0 }, { place: false }]) {
+    const { bot } = pillarBot(options)
+    assert.strictEqual((await run(bot, () => SKILLS.go_up(bot, 13), false)).reason, 'not_reached')
+  }
 })
