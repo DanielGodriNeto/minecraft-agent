@@ -15,6 +15,10 @@ const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]]
 const SMELTS = { iron_ingot: 'raw_iron', gold_ingot: 'raw_gold', copper_ingot: 'raw_copper' }
 const WOODS = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak', 'mangrove', 'cherry', 'pale_oak']
 const FUELS = ['coal', 'charcoal', ...WOODS.map(w => `${w}_planks`), ...WOODS.map(w => `${w}_log`)]
+const PATCH_BLOCKS = ['cobblestone', 'cobbled_deepslate', 'dirt']
+const PLACE_MS = 5000
+const TUNNEL_OUT = 3
+const MAX_TUNNEL_OUTS = 2
 const HOSTILE_RANGE = 16
 const ATTACK_RANGE = 6
 
@@ -230,11 +234,26 @@ function stairBlocks(p, [dx, dz]) {
   return [p.offset(dx, 1, dz), p.offset(dx, 0, dz), p.offset(dx, -1, dz)]
 }
 
-function stairSafe(bot, p, dir) {
+// Why a staircase step toward dir cannot be taken: 'lava', 'undiggable', 'no_floor', or null when it can.
+function stairRefusal(bot, p, dir) {
   const cells = stairBlocks(p, dir)
-  if (cells.some(c => nearLava(bot, c) || !(OPEN.has(bot.blockAt(c)?.name) || bot.blockAt(c)?.diggable))) return false
-  const floor = at(bot, cells[2], 0, -1, 0)
-  return isSolid(floor) && !nearLava(bot, floor.position)
+  if (cells.some(c => nearLava(bot, c))) return 'lava'
+  if (cells.some(c => !(OPEN.has(bot.blockAt(c)?.name) || bot.blockAt(c)?.diggable))) return 'undiggable'
+  return isSolid(at(bot, cells[2], 0, -1, 0)) ? null : 'no_floor'
+}
+
+const tunnelCells = (p, [dx, dz]) => [p.offset(dx, 1, dz), p.offset(dx, 0, dz)]
+const tunnelSafe = (bot, cells) => !cells.some(c => nearLava(bot, c)) && isSolid(at(bot, cells[1], 0, -1, 0))
+
+// Fills the hole under a landing cell from a solid neighbour of it.
+async function patchFloor(bot, landing) {
+  const spot = landing.offset(0, -1, 0)
+  const item = PATCH_BLOCKS.map(n => findItem(bot, n)).find(Boolean)
+  const face = FACES.find(f => f[1] !== 1 && isSolid(at(bot, spot, ...f)))
+  if (!item || !face) throw new Fail('no_floor')
+  await bot.equip(item, 'hand')
+  await withTimeout(bot.placeBlock(at(bot, spot, ...face), { x: -face[0], y: -face[1], z: -face[2] }), PLACE_MS, () => {})
+  if (!isSolid(bot.blockAt(spot))) throw new Fail('no_floor')
 }
 
 async function tunnelStep(bot, cells, feet) {
@@ -259,7 +278,6 @@ async function surfaceHop(bot, p, dir) {
 }
 
 async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64, maxAbove = null }) {
-  const [dx, dz] = DIRS[dir]
   for (let moved = 0; moved < maxBlocks; moved += mode === 'surface' ? 8 : 1) {
     if (findVisible(bot, target, maxAbove)) return
     const p = bot.entity.position.floored()
@@ -267,10 +285,9 @@ async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64, 
       await surfaceHop(bot, p, dir)
       continue
     }
-    const ahead = p.offset(dx, 0, dz)
-    const cells = [ahead.offset(0, 1, 0), ahead]
-    if (cells.some(c => nearLava(bot, c)) || !isSolid(at(bot, ahead, 0, -1, 0))) throw new Fail('hazard')
-    await tunnelStep(bot, cells, ahead)
+    const cells = tunnelCells(p, DIRS[dir])
+    if (!tunnelSafe(bot, cells)) throw new Fail('hazard')
+    await tunnelStep(bot, cells, cells[1])
   }
   if (!findVisible(bot, target, maxAbove)) throw new Fail('not_found')
 }
@@ -299,15 +316,33 @@ async function mine(bot, name, maxAbove = null) {
   await attempt('pickup_failed', () => pickUpDrop(bot, block.position))
 }
 
+// All four staircase directions refused: dig a short level tunnel to somewhere the staircase may work.
+async function tunnelOut(bot, dir) {
+  for (let i = 0; i < TUNNEL_OUT; i++) {
+    const cells = tunnelCells(bot.entity.position.floored(), DIRS[dir])
+    if (!tunnelSafe(bot, cells)) return
+    await tunnelStep(bot, cells, cells[1])
+  }
+}
+
 async function digDown(bot, targetY) {
   let d = 0
+  let tunnels = 0
   while (Math.floor(bot.entity.position.y) > targetY) {
     const p = bot.entity.position.floored()
-    const next = [0, 1, 2, 3].map(i => (d + i) % 4).find(i => stairSafe(bot, p, DIRS[i]))
-    if (next === undefined) throw new Fail('blocked')
-    d = next
-    const cells = stairBlocks(p, DIRS[d])
-    await tunnelStep(bot, cells, cells[2])
+    const options = [0, 1, 2, 3].map(i => (d + i) % 4).map(dir => ({ dir, reason: stairRefusal(bot, p, DIRS[dir]) }))
+    const patchable = PATCH_BLOCKS.some(n => findItem(bot, n))
+    const choice = options.find(o => !o.reason) ?? options.find(o => o.reason === 'no_floor' && patchable)
+    if (choice) {
+      d = choice.dir
+      const cells = stairBlocks(p, DIRS[d])
+      if (choice.reason) await patchFloor(bot, cells[2])
+      await tunnelStep(bot, cells, cells[2])
+      continue
+    }
+    const out = options.find(o => tunnelSafe(bot, tunnelCells(p, DIRS[o.dir])))
+    if (!out || tunnels++ >= MAX_TUNNEL_OUTS) throw new Fail('blocked', options.at(-1).reason)
+    await tunnelOut(bot, out.dir)
   }
 }
 
@@ -491,4 +526,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe }
+module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal }
