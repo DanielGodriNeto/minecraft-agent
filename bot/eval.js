@@ -60,9 +60,13 @@ async function placeAtSlot(server, bot, slot) {
   const stand = { x: slot.x, y: groundY(blockAt, slot.x, slot.z, slot.y + 2) + 1, z: slot.z }
   const chest = { x: slot.x + 2, y: groundY(blockAt, slot.x + 2, slot.z, stand.y + 2) + 1, z: slot.z }
   await teleport(server, bot, stand.x + 0.5, stand.y, stand.z + 0.5)
-  for (const cmd of [`gamemode survival ${name}`, `clear ${name}`, `effect clear ${name}`, `effect give ${name} instant_health 1 10 true`,
+  await poll(() => bot.entity.onGround, 10000)
+  // Healing goes last: a fall from the canopy would otherwise undo it.
+  for (const cmd of [`gamemode survival ${name}`, `clear ${name}`, `effect clear ${name}`,
+    `effect give ${name} instant_health 1 10 true`, `effect give ${name} saturation 1 10 true`,
     `spawnpoint ${name} ${stand.x} ${stand.y} ${stand.z}`]) await server.command(cmd)
   await server.command(`setblock ${chest.x} ${chest.y} ${chest.z} chest`, /Changed the block/)
+  await poll(() => bot.health === 20 && bot.food === 20, 10000)
   return chest
 }
 
