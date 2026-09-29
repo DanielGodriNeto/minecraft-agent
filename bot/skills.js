@@ -3,6 +3,9 @@ const path = require('node:path')
 const { goals } = require('mineflayer-pathfinder')
 
 const PATH_MS = 30000
+const OPEN_MS = 10000
+const TOSS_MS = 5000
+const SKILL_CAP_MS = 180000
 const OPEN = new Set(['air', 'cave_air', 'void_air', 'water'])
 const LAVA = new Set(['lava', 'flowing_lava'])
 const FACES = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
@@ -32,6 +35,9 @@ function stopPathing(bot) {
   bot.pathfinder.setGoal(null)
   bot.clearControlStates()
 }
+
+// Window opens can hang forever on a lost packet.
+const opened = (promise) => withTimeout(promise, OPEN_MS, () => {})
 
 async function goto(bot, goal, ms = PATH_MS) {
   try {
@@ -68,7 +74,7 @@ async function run(bot, skill, interruptible) {
   bot.on('physicsTick', tick)
   bot.on('health', onHealth)
   try {
-    await skill()
+    await withTimeout(skill(), SKILL_CAP_MS, () => { stopPathing(bot); bot.stopDigging() })
     return { ok: true, reason: null, ticks }
   } catch (e) {
     if (attacked) return { ok: false, reason: 'attacked', ticks }
@@ -280,7 +286,7 @@ async function craft(bot, name, count = 1) {
     .filter(([, r]) => r.itemId === item.id && (r.fits2x2 || recipe.requiresTable))
     .map(([id]) => id)
   if (!displayIds.length) throw new Fail('recipe_locked')
-  const window = recipe.requiresTable ? await bot.openBlock(await nearbyOrPlaced(bot, 'crafting_table')) : bot.inventory
+  const window = recipe.requiresTable ? await opened(bot.openBlock(await nearbyOrPlaced(bot, 'crafting_table'))) : bot.inventory
   try {
     for (let made = 0; made < count; made += recipe.result.count) await craftOnce(bot, window, displayIds, item.id)
   } finally {
@@ -296,7 +302,7 @@ async function smelt(bot, name) {
   const fuel = FUELS.find(f => findItem(bot, f))
   if (!findItem(bot, input) || !fuel) throw new Fail('missing')
   const target = countItem(bot, name) + 1
-  const furnace = await bot.openFurnace(await nearbyOrPlaced(bot, 'furnace'))
+  const furnace = await opened(bot.openFurnace(await nearbyOrPlaced(bot, 'furnace')))
   try {
     await furnace.putFuel(findItem(bot, fuel).type, null, 1)
     await furnace.putInput(findItem(bot, input).type, null, 1)
@@ -333,7 +339,7 @@ async function deposit(bot, { x, y, z }, items = ['diamond']) {
   const chestBlock = bot.blockAt(bot.entity.position.clone().set(x, y, z)) // plain {x,y,z} → Vec3
   if (chestBlock?.name !== 'chest') throw new Fail('no_chest')
   await reach(bot, chestBlock)
-  const chest = await bot.openContainer(chestBlock)
+  const chest = await opened(bot.openContainer(chestBlock))
   let full = false
   try {
     for (const name of items) {
@@ -360,13 +366,26 @@ function freeSpace(window, item) {
   }, 0)
 }
 
+// Drops stacks until each named item is down to `keep` in total.
+async function toss(bot, names, keep = 16) {
+  for (const name of names) {
+    let excess = countItem(bot, name) - keep
+    for (const item of bot.inventory.items().filter(i => i.name === name)) {
+      if (excess <= 0) break
+      const n = Math.min(item.count, excess)
+      await withTimeout(bot.toss(item.type, null, n), TOSS_MS, () => {})
+      excess -= n
+    }
+  }
+}
+
 async function returnHome(bot, home) {
   await goto(bot, new goals.GoalNear(home.x, home.y, home.z, 3), 120000)
 }
 
 const SKILLS = {
   explore, approach, mine, dig_down: digDown, go_up: goUp, craft, smelt,
-  equip, eat, flee, deposit, return_home: returnHome,
+  equip, eat, flee, deposit, toss, return_home: returnHome,
 }
 
 // ---- skill log: one JSON line per call, read by the Phase 3 recorder ----
@@ -394,4 +413,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook }
+module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing }
