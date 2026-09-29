@@ -21,6 +21,12 @@ const TUNNEL_OUT = 3
 const STEP_TICKS = 40
 const STEP_RANGE = 2.5
 const ARRIVE_DIST = 0.3
+const TRAIL_MAX = 5000
+const HOME_RESET = 4
+const HOME_RANGE = 16
+const HOME_SLACK = 3
+const HOME_MS = 30000
+const FAR_HOME_MS = 120000
 const MAX_TUNNEL_OUTS = 2
 const HOSTILE_RANGE = 16
 const ATTACK_RANGE = 6
@@ -284,9 +290,55 @@ async function moveTo(bot, feet) {
   await goto(bot, new goals.GoalBlock(feet.x, feet.y, feet.z), 10000)
 }
 
+// Breadcrumbs: floored cells the bot dug through, so it can walk back out of a mine that pathfinding cannot solve.
+function noteTrail(bot) {
+  const trail = bot.trail ??= []
+  const here = bot.entity.position.floored()
+  if (trail.at(-1)?.equals(here)) return
+  trail.push(here)
+  if (trail.length > TRAIL_MAX) trail.shift()
+}
+
+// Trail is only meaningful relative to home: it restarts whenever the bot is back there.
+function resetTrail(bot, home) {
+  const p = bot.entity?.position
+  if (p && Math.hypot(p.x - home.x, p.y - home.y, p.z - home.z) < HOME_RESET) bot.trail = []
+}
+
+// A repeated cell means the bot went in a circle: cut everything between the two visits.
+function dropLoops(trail) {
+  const kept = []
+  for (const p of trail) {
+    const seen = kept.findIndex(q => q.equals(p))
+    if (seen >= 0) kept.length = seen + 1
+    else kept.push(p)
+  }
+  return kept
+}
+
 async function tunnelStep(bot, cells, feet) {
+  noteTrail(bot)
   for (const c of cells) await breakBlock(bot, bot.blockAt(c))
   await moveTo(bot, feet)
+  noteTrail(bot)
+}
+
+// Cleared again on the way back because gravel or water may have filled the old tunnel.
+async function retrace(bot, crumb) {
+  const feet = bot.entity.position.floored()
+  const cells = [crumb, crumb.offset(0, 1, 0)]
+  if (crumb.y > feet.y) cells.push(feet.offset(0, 1, 0), feet.offset(0, 2, 0))
+  for (const c of cells) await breakBlock(bot, bot.blockAt(c))
+  await moveTo(bot, crumb)
+}
+
+// Walks the trail backwards until done(position); consumed crumbs are removed.
+async function followTrail(bot, done) {
+  const trail = bot.trail = dropLoops(bot.trail ?? [])
+  while (trail.length && !done(bot.entity.position)) {
+    await retrace(bot, trail.at(-1))
+    trail.pop()
+  }
 }
 
 // ---- skills ----
@@ -375,7 +427,9 @@ async function digDown(bot, targetY) {
 }
 
 async function goUp(bot, targetY) {
-  await goto(bot, new goals.GoalY(targetY), 120000)
+  const high = (p) => Math.floor(p.y) >= targetY
+  await followTrail(bot, high)
+  if (!high(bot.entity.position)) await goto(bot, new goals.GoalY(targetY), 120000)
 }
 
 // Server recipe book: displayId -> result item. Sent at login and on every unlock, so this must be
@@ -521,7 +575,10 @@ async function toss(bot, names, keep = 16) {
 }
 
 async function returnHome(bot, home) {
-  await goto(bot, new goals.GoalNear(home.x, home.y, home.z, 3), 120000)
+  const nearHome = (p) => Math.hypot(p.x - home.x, p.z - home.z) <= HOME_RANGE && p.y >= home.y - HOME_SLACK
+  await followTrail(bot, nearHome)
+  const ms = nearHome(bot.entity.position) ? HOME_MS : FAR_HOME_MS
+  await goto(bot, new goals.GoalNear(home.x, home.y, home.z, 3), ms)
 }
 
 const SKILLS = {
@@ -554,4 +611,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived }
+module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail }

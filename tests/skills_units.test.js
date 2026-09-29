@@ -1,7 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
-const { cheapestPickaxe, stairRefusal, arrived } = require('../bot/skills.js')
+const { cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -46,4 +46,24 @@ test('arrived: needs ground, the right level and to be near the cell centre', ()
   assert.strictEqual(arrived(bot(5.5, 10, 5.6, false), cell), false)
   assert.strictEqual(arrived(bot(5.5, 11, 5.5), cell), false)
   assert.strictEqual(arrived(bot(5.0, 10, 5.5), cell), false)
+})
+
+test('dropLoops: cuts the segment between two visits of the same cell', () => {
+  const cells = (...xs) => xs.map(x => new Vec3(x, 0, 0))
+  assert.deepStrictEqual(dropLoops(cells(0, 1, 2, 3, 1, 4)), cells(0, 1, 4))
+  assert.deepStrictEqual(dropLoops(cells(0, 1, 2, 1, 2, 3)), cells(0, 1, 2, 3))
+  assert.deepStrictEqual(dropLoops(cells(0, 1, 2)), cells(0, 1, 2))
+  assert.deepStrictEqual(dropLoops([]), [])
+})
+
+test('resetTrail: clears the trail only within 4 blocks of home', () => {
+  const home = { x: 10, y: 64, z: 10 }
+  const bot = (x, y, z) => ({ entity: { position: { x, y, z } }, trail: [1, 2] })
+  const near = bot(12, 64, 11)
+  resetTrail(near, home)
+  assert.deepStrictEqual(near.trail, [])
+  const far = bot(30, 64, 10)
+  resetTrail(far, home)
+  assert.deepStrictEqual(far.trail, [1, 2])
+  assert.doesNotThrow(() => resetTrail({ entity: null, trail: [] }, home))
 })

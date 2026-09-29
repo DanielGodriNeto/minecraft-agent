@@ -1,5 +1,5 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
-const { runSkill, findVisible, stopPathing } = require('./skills.js')
+const { runSkill, findVisible, stopPathing, resetTrail } = require('./skills.js')
 const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 
 const STUCK_FAILURES = 3
@@ -107,6 +107,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
   bot.objectiveRun = run
   const onDeath = () => {
     run.deaths++
+    bot.trail = [] // respawn is at home
     stopPathing(bot) // a dead bot must not keep chasing its old goal
   }
   bot.on('death', onDeath)
@@ -125,6 +126,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
       remember(run, action, result)
+      resetTrail(bot, home)
       run.recentlyAttacked = result.reason === 'attacked'
       if (result.reason !== 'attacked' && isStuck(result)) return finish(run, 'stuck')
     }
