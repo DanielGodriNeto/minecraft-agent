@@ -18,7 +18,7 @@ const RECIPES = {
 }
 // Where raw materials come from: blocks to mine, and how to find them when none is visible.
 const SOURCES = {
-  log: { blocks: GROUPS.log, find: 'surface' },
+  log: { blocks: GROUPS.log, find: 'surface', maxAbove: 3 }, // only logs reachable from the ground
   stone: { blocks: ['stone', 'deepslate'], find: 'dig' },
   raw_iron: { blocks: ['iron_ore', 'deepslate_iron_ore'], find: 'branch', y: 16 },
   diamond: { blocks: ['diamond_ore', 'deepslate_diamond_ore'], find: 'branch' },
@@ -30,6 +30,7 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 const count = (s, item) => (GROUPS[item] ?? [item]).reduce((n, name) => n + (s.inv[name] ?? 0), 0)
 const has = (s, item) => count(s, item) > 0
 const act = (skill, ...args) => ({ skill, args })
+const mineAct = (key) => act('mine', SOURCES[key].blocks, SOURCES[key].maxAbove ?? null)
 
 // Planks come from whichever log type is in the inventory.
 function concrete(s, item) {
@@ -64,10 +65,10 @@ function smeltStep(s) {
 
 function gather(s, item) {
   const source = SOURCES[item]
-  if (s.visible[item]) return act('mine', source.blocks)
+  if (s.visible[item]) return mineAct(item)
   if (source.find === 'surface') {
     if (s.y < s.surfaceY - 8) return act('go_up', s.surfaceY)
-    return act('explore', { target: source.blocks, mode: 'surface', dir: s.memory.surfaceDir, maxBlocks: 64 })
+    return act('explore', { target: source.blocks, mode: 'surface', dir: s.memory.surfaceDir, maxBlocks: 64, maxAbove: source.maxAbove })
   }
   if (source.find === 'dig') return act('dig_down', s.y - 3)
   const y = source.y ?? s.params.branchY
@@ -107,10 +108,10 @@ function nextAction(s) {
     if (s.y < s.surfaceY - 8) return act('go_up', s.surfaceY)
     return act('return_home', s.home)
   }
-  if (s.visible.diamond && has(s, 'iron_pickaxe')) return act('mine', SOURCES.diamond.blocks)
+  if (s.visible.diamond && has(s, 'iron_pickaxe')) return mineAct('diamond')
   if (!has(s, 'iron_pickaxe')) {
     // Stock wood while trees are in view: tables and sticks are needed again underground.
-    if (s.visible.log && count(s, 'log') + count(s, 'planks') / 4 < s.params.woodStock) return act('mine', SOURCES.log.blocks)
+    if (s.visible.log && count(s, 'log') + count(s, 'planks') / 4 < s.params.woodStock) return mineAct('log')
     if (!has(s, 'wooden_pickaxe') && !has(s, 'stone_pickaxe')) return obtain(s, 'wooden_pickaxe', 1)
     if (!has(s, 'stone_pickaxe')) return obtain(s, 'stone_pickaxe', 1)
     return obtain(s, 'iron_pickaxe', 1)

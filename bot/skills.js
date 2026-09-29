@@ -102,11 +102,15 @@ function isVisible(bot, block) {
 }
 
 // names: one block name or a list (e.g. every log type).
-function findVisible(bot, names, maxDistance = 32) {
+// maxAbove: ignore blocks more than this many blocks above the bot's feet (null = no limit).
+function findVisible(bot, names, maxAbove = null, maxDistance = 32) {
   const matching = [names].flat().map(n => blockId(bot, n))
   const positions = bot.findBlocks({ matching, maxDistance, count: 64 })
   const unreachable = bot.unreachable ?? new Set()
-  return positions.map(p => bot.blockAt(p)).find(b => b && !unreachable.has(b.position.toString()) && isVisible(bot, b)) ?? null
+  const feetY = Math.floor(bot.entity.position.y)
+  return positions.map(p => bot.blockAt(p))
+    .find(b => b && (maxAbove === null || b.position.y - feetY <= maxAbove) &&
+      !unreachable.has(b.position.toString()) && isVisible(bot, b)) ?? null
 }
 
 function nearestHostile(bot, range = HOSTILE_RANGE) {
@@ -179,10 +183,10 @@ async function tunnelStep(bot, cells, feet) {
 
 // ---- skills ----
 
-async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64 }) {
+async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64, maxAbove = null }) {
   const [dx, dz] = DIRS[dir]
   for (let moved = 0; moved < maxBlocks; moved += mode === 'surface' ? 8 : 1) {
-    if (findVisible(bot, target)) return
+    if (findVisible(bot, target, maxAbove)) return
     const p = bot.entity.position.floored()
     if (mode === 'surface') {
       await goto(bot, new goals.GoalNearXZ(p.x + dx * 8, p.z + dz * 8, 2))
@@ -193,7 +197,7 @@ async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64 }
     if (cells.some(c => nearLava(bot, c)) || !isSolid(at(bot, ahead, 0, -1, 0))) throw new Fail('hazard')
     await tunnelStep(bot, cells, ahead)
   }
-  if (!findVisible(bot, target)) throw new Fail('not_found')
+  if (!findVisible(bot, target, maxAbove)) throw new Fail('not_found')
 }
 
 async function approach(bot, target) {
@@ -201,8 +205,8 @@ async function approach(bot, target) {
   await goto(bot, new goals.GoalNear(pos.x, pos.y, pos.z, 3))
 }
 
-async function mine(bot, name) {
-  const block = findVisible(bot, name)
+async function mine(bot, name, maxAbove = null) {
+  const block = findVisible(bot, name, maxAbove)
   if (!block) throw new Fail('not_visible')
   try {
     await reach(bot, block)

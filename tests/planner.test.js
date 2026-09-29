@@ -69,7 +69,7 @@ test('test_planner_order', () => {
 
 test('planner: tech tree from nothing', () => {
   assert.deepStrictEqual(nextAction(state({ visible: { log: true } })).skill, 'mine')
-  assert.deepStrictEqual(nextAction(state()), { skill: 'explore', args: [{ target: nextAction(state()).args[0].target, mode: 'surface', dir: 0, maxBlocks: 64 }] })
+  assert.deepStrictEqual(nextAction(state()), { skill: 'explore', args: [{ target: nextAction(state()).args[0].target, mode: 'surface', dir: 0, maxBlocks: 64, maxAbove: 3 }] })
   assert.deepStrictEqual(nextAction(state({ inv: { oak_log: 3 } })), { skill: 'craft', args: ['oak_planks', 4] })
   assert.strictEqual(nextAction(state({ inv: { wooden_pickaxe: 1 }, visible: { stone: true } })).skill, 'mine')
 })

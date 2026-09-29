@@ -31,7 +31,7 @@ function observe(bot, run) {
   const near = (name) => bot.findBlock({ matching: bot.registry.blocksByName[name].id, maxDistance: NEAR }) !== null
   const pick = bot.inventory.items().find(i => i.name === 'iron_pickaxe')
   const visible = {}
-  for (const [key, source] of Object.entries(SOURCES)) visible[key] = findVisible(bot, source.blocks) !== null
+  for (const [key, source] of Object.entries(SOURCES)) visible[key] = findVisible(bot, source.blocks, source.maxAbove ?? null) !== null
   return {
     inv: inventoryCounts(bot),
     health: bot.health,
