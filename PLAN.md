@@ -38,7 +38,7 @@ Paper server (Java, one pinned 1.21 patch)
 Mineflayer bots (Node, one process, N bots)
   ├─ command listener   (owner-only chat commands → objective)
   ├─ skills             (explore, approach, mine, dig_down, go_up, craft, smelt,
-  │                      equip, eat, flee, deposit, return_home)
+  │                      equip, eat, hunt, flee, shelter, deposit, return_home)
   ├─ obs builder        (visible voxels, inventory, status, objective)
   └─ skill log          (JSONL: every skill call + result — from Phase 1 on)
    ↕  one TCP connection per bot, JSON lines, every message carries bot_id + request id
@@ -76,6 +76,8 @@ Training, evaluation and real use are the **same code path** — no sim-to-real 
 | `craft` / `smelt` | item | item in inventory, else fails with reason |
 | `equip` / `eat` | item | done |
 | `flee` | — | no hostile within 16 blocks |
+| `shelter` | last direction | walled into a 1x1x2 cell (≥ 6 placeable blocks, else `flee`), waited out the danger, dug out |
+| `hunt` | — | nearest food animal within 24 blocks killed and its drops picked up |
 | `deposit` | storage chest | target items moved into chest |
 | `return_home` | — | within 3 blocks of storage |
 
