@@ -109,9 +109,11 @@ function trackDigging(memory, action, result) {
   memory.lastDigReason = result.reason
 }
 
-// A branch tunnel that met water or lava is abandoned: head another way from scratch, and after two in a row climb first.
+// A branch tunnel that met water, lava or rock it cannot dig (bedrock) is abandoned: head another way from scratch, and after two in a row climb first.
+const LEG_BLOCKED = new Set(['hazard', 'undiggable', 'no_tool'])
+
 function failBranchLeg(memory, result) {
-  if (result.reason !== 'hazard') {
+  if (!LEG_BLOCKED.has(result.reason)) {
     memory.leg++
     return
   }
@@ -127,7 +129,7 @@ function remember(run, action, result) {
   trackShelter(run.memory, action)
   trackDigging(run.memory, action, result)
   if (action.key === 'night_dig') run.memory.nightDigs = (run.memory.nightDigs ?? 0) + 1
-  if (action.skill === 'explore' && result.reason !== 'hazard') run.memory.hazards = 0
+  if (action.skill === 'explore' && !LEG_BLOCKED.has(result.reason)) run.memory.hazards = 0
   if (action.key === 'hazard_up') run.memory.hazardUp = false
   run.memory.drownings = result.reason === 'drowning' ? (run.memory.drownings ?? 0) + 1 : 0
   if (result.ok) return

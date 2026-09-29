@@ -247,13 +247,13 @@ test('planner: after repeated shelters it fights a close hostile, flees when wea
   assert.strictEqual(nextAction(state({ ...hurt, memory: { ...memory, noShelter: 0 }, hostileClose: true, health: 7 })).skill, 'shelter')
 })
 
-test('planner: after two failed dig_downs the bot relocates before digging again, on the surface and underground', () => {
+test('planner: after a failed dig_down the bot relocates before digging again, on the surface and underground', () => {
   const geared = { iron_pickaxe: 1, stone_pickaxe: 1, stick: 8 }
   const memory = (digFails, relocations = 0) => ({ leg: 0, baseDir: 1, surfaceDir: 2, surfaceLeg: 0, digFails, relocations })
-  assert.strictEqual(nextAction(state({ inv: geared, memory: memory(1) })).skill, 'dig_down')
-  const hop = nextAction(state({ inv: geared, memory: memory(2, 1) }))
+  assert.strictEqual(nextAction(state({ inv: geared, memory: memory(0) })).skill, 'dig_down')
+  const hop = nextAction(state({ inv: geared, memory: memory(1, 1) }))
   assert.deepStrictEqual([hop.skill, hop.relocate, hop.args[0].mode, hop.args[0].dir, hop.args[0].maxBlocks], ['explore', true, 'surface', 3, 8])
-  const branch = nextAction(state({ inv: geared, y: 0, memory: memory(2) }))
+  const branch = nextAction(state({ inv: geared, y: 0, memory: memory(1) }))
   assert.deepStrictEqual([branch.skill, branch.relocate, branch.args[0].mode, branch.args[0].dir, branch.args[0].maxBlocks], ['explore', true, 'branch', 2, 8])
 })
 
@@ -345,4 +345,9 @@ test('planner: after repeated branch hazards it climbs a few blocks before minin
   const memory = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, hazardUp: true }
   assert.deepStrictEqual(nextAction(state({ ...deep, memory })), { skill: 'go_up', args: [DEFAULT_PARAMS.branchY + 4], key: 'hazard_up' })
   assert.strictEqual(nextAction(state({ ...deep, memory: { ...memory, hazardUp: false } })).skill, 'explore')
+})
+
+test('planner: without a pickaxe or wood the bot looks for logs instead of digging down', () => {
+  const action = nextAction(state({ inv: { dirt: 20 }, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, digFails: 1, lastDigReason: 'no_tool' } }))
+  assert.deepStrictEqual([action.skill, action.args[0].mode], ['explore', 'surface'])
 })

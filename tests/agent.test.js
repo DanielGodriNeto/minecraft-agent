@@ -157,6 +157,15 @@ test('remember: a hazard streak is broken by any other explore result; other fai
   assert.notStrictEqual(run.memory.hazardUp, true)
 })
 
+test('remember: an undiggable branch leg (bedrock) is handled like a hazard: turn, restart, then climb', () => {
+  const run = { memory: { leg: 5, baseDir: 3, surfaceDir: 0, surfaceLeg: 0, optionalFails: {} } }
+  const explore = { skill: 'explore', args: [{ mode: 'branch' }] }
+  remember(run, explore, { ok: false, reason: 'undiggable' })
+  assert.deepStrictEqual([run.memory.baseDir, run.memory.leg], [0, 0])
+  remember(run, explore, { ok: false, reason: 'undiggable' })
+  assert.strictEqual(run.memory.hazardUp, true)
+})
+
 test('stuck: a successful toss neither resets the failure count nor looks like progress', () => {
   let items = [{ name: 'dirt', count: 10 }]
   const bot = { entity: { position: { clone: () => ({ x: 0, y: 70, z: 0 }) } }, inventory: { items: () => items } }
