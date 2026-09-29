@@ -134,6 +134,7 @@ function pickaxeUpgrade(s) {
 function descend(s, y, target) {
   const { digFails = 0, relocations = 0 } = s.memory
   if (digFails < MAX_DIG_FAILS) return act('dig_down', y)
+  if (s.memory.relocFailed && !atSurface(s)) return { ...act('go_up', s.surfaceY), key: 'reloc_up' } // the hop found no way out: hop again from the surface
   if (atSurface(s)) return { ...act('explore', { target, mode: 'surface', dir: (s.memory.surfaceDir + relocations) % DIRS, maxBlocks: RELOCATE_BLOCKS }), relocate: true }
   return { ...act('explore', { target, mode: 'branch', dir: (s.memory.baseDir + 1 + relocations) % DIRS, maxBlocks: RELOCATE_BLOCKS }), relocate: true }
 }
@@ -297,4 +298,4 @@ function nextAction(s) {
   return swordStep(s) ?? spareStep(s) ?? gather(s, 'diamond')
 }
 
-module.exports = { nextAction, DEFAULT_PARAMS, SOURCES, GROUPS }
+module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS }

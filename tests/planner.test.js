@@ -257,6 +257,15 @@ test('planner: after a failed dig_down the bot relocates before digging again, o
   assert.deepStrictEqual([branch.skill, branch.relocate, branch.args[0].mode, branch.args[0].dir, branch.args[0].maxBlocks], ['explore', true, 'branch', 2, 8])
 })
 
+test('planner: after a failed relocation hop underground the bot climbs to the surface, then hops from there', () => {
+  const geared = { iron_pickaxe: 1, stone_pickaxe: 1, stick: 8 }
+  const memory = { leg: 0, baseDir: 1, surfaceDir: 2, surfaceLeg: 0, digFails: 1, relocations: 1, relocFailed: true }
+  assert.deepStrictEqual(nextAction(state({ inv: geared, y: 0, memory })), { skill: 'go_up', args: [70], key: 'reloc_up' })
+  const hop = nextAction(state({ inv: geared, y: 0, memory: { ...memory, relocFailed: false } }))
+  assert.deepStrictEqual([hop.skill, hop.relocate], ['explore', true])
+  assert.strictEqual(nextAction(state({ inv: geared, memory })).relocate, true)
+})
+
 test('planner: a hostile within fighting range is fought before sheltering or fleeing', () => {
   const close = { hostileNear: true, hostileClose: true, canShelter: true }
   assert.strictEqual(nextAction(state(close)).skill, 'fight')

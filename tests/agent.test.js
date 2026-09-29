@@ -115,8 +115,22 @@ test('remember: two dig_down failures without descent arm a relocation, which re
   remember(run, dig, { ok: false, reason: 'timeout' })
   remember(run, dig, { ok: false, reason: 'blocked' })
   assert.strictEqual(run.memory.digFails, 2)
-  remember(run, { skill: 'explore', args: [{ mode: 'branch' }], relocate: true }, { ok: false, reason: 'not_found' })
+  remember(run, { skill: 'explore', args: [{ mode: 'branch' }], relocate: true }, { ok: true })
   assert.deepStrictEqual([run.memory.digFails, run.memory.relocations, run.memory.leg], [0, 1, 0])
+})
+
+test('remember: a failed relocation hop keeps digFails, still turns the direction and arms a climb that a reloc_up clears', () => {
+  const run = { memory: { leg: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: {}, digFails: 1 } }
+  remember(run, { skill: 'explore', args: [{ mode: 'branch' }], relocate: true }, { ok: false, reason: 'hazard' })
+  assert.deepStrictEqual([run.memory.digFails, run.memory.relocations, run.memory.relocFailed], [1, 1, true])
+  remember(run, { skill: 'go_up', args: [70], key: 'reloc_up' }, { ok: true })
+  assert.strictEqual(run.memory.relocFailed, false)
+})
+
+test('remember: finishing a hazard climb forces a relocation hop before the next dig_down', () => {
+  const run = { memory: { optionalFails: {}, hazardUp: true } }
+  remember(run, { skill: 'go_up', args: [-54], key: 'hazard_up' }, { ok: true })
+  assert.strictEqual(run.memory.digFails, 1)
 })
 
 test('remember: keyed optional waits count under their key and do not trip the shelter pause; night digs are counted', () => {

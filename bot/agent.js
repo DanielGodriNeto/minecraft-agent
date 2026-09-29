@@ -1,6 +1,6 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
 const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
-const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
+const { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
@@ -92,15 +92,21 @@ function trackShelter(memory, action) {
 
 const DIG_STUCK = new Set(['blocked', 'timeout', 'no_tool'])
 
-// Consecutive dig_down failures without any descent; a relocation hop (or a success) starts the count over.
+// Consecutive dig_down failures without any descent; a successful relocation hop (or a dig success) starts the count over.
+// A failed hop still turns the direction and makes the planner climb before hopping again.
 function trackDigging(memory, action, result) {
   if (action.key === 'upgrade' && result.ok) {
     memory.digFails = 0
     return
   }
+  if (action.key === 'reloc_up') {
+    memory.relocFailed = false
+    return
+  }
   if (action.relocate) {
-    memory.digFails = 0
     memory.relocations = (memory.relocations ?? 0) + 1
+    memory.relocFailed = !result.ok
+    if (result.ok) memory.digFails = 0
     return
   }
   if (action.skill !== 'dig_down') return
@@ -130,7 +136,10 @@ function remember(run, action, result) {
   trackDigging(run.memory, action, result)
   if (action.key === 'night_dig') run.memory.nightDigs = (run.memory.nightDigs ?? 0) + 1
   if (action.skill === 'explore' && !LEG_BLOCKED.has(result.reason)) run.memory.hazards = 0
-  if (action.key === 'hazard_up') run.memory.hazardUp = false
+  if (action.key === 'hazard_up') {
+    run.memory.hazardUp = false
+    run.memory.digFails = MAX_DIG_FAILS // the next descent starts with a hop, not in the pocket that just flooded
+  }
   run.memory.drownings = result.reason === 'drowning' ? (run.memory.drownings ?? 0) + 1 : 0
   if (result.ok) return
   if (action.optional) {
