@@ -32,8 +32,11 @@ function setStorage(bot, pos, owner) {
 async function startObjective(bot, { item, count }) {
   if (!bot.storage) return bot.chat('Set storage first with !store.')
   stopObjective(bot)
+  await bot.objectivePromise // the old run must have unwound before a new one starts
   bot.chat(`Getting ${count} ${item}.`)
-  const result = await runObjective(bot, { objective: { item, count }, home: bot.storage })
+  const running = runObjective(bot, { objective: { item, count }, home: bot.storage })
+  bot.objectivePromise = running.catch(() => {})
+  const result = await running
   bot.chat(`Objective ended (${result.reason}): deposited ${result.deposited} ${item}.`)
 }
 
