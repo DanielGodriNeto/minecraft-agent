@@ -14,9 +14,15 @@ const RESULTS = path.join(__dirname, '..', 'logs', 'eval.jsonl')
 const PROPS = path.join(__dirname, '..', 'server', 'diamonds.properties')
 const MAX_BOTS = 16 // Bot0..Bot15 are the whitelisted names
 const SPAWN_MS = 60000
+const SPAWN_REPLY = /Set spawn point|Unknown or incomplete|Incorrect argument|No player was found|No entity was found/
 const NOT_GROUND = /^(air|cave_air|void_air|snow|vine|.*_leaves|.*_log)$/
 
 const readDifficulty = (props = fs.readFileSync(PROPS, 'utf8')) => /^difficulty=(\w+)/m.exec(props)?.[1]
+
+// The console answers a spawnpoint command with one line; anything but success means the bot would respawn elsewhere.
+function assertSpawnSet(reply) {
+  if (!/Set spawn point/.test(reply)) throw new Error(`spawnpoint failed: ${reply}`)
+}
 
 const once = (emitter, ev) => new Promise(resolve => emitter.once(ev, resolve))
 
@@ -63,8 +69,8 @@ async function placeAtSlot(server, bot, slot) {
   await poll(() => bot.entity.onGround, 10000)
   // Healing goes last: a fall from the canopy would otherwise undo it.
   for (const cmd of [`gamemode survival ${name}`, `clear ${name}`, `effect clear ${name}`,
-    `effect give ${name} instant_health 1 10 true`, `effect give ${name} saturation 1 10 true`,
-    `spawnpoint ${name} ${stand.x} ${stand.y} ${stand.z}`]) await server.command(cmd)
+    `effect give ${name} instant_health 1 10 true`, `effect give ${name} saturation 1 10 true`]) await server.command(cmd)
+  assertSpawnSet(await server.command(`spawnpoint ${name} ${stand.x} ${stand.y} ${stand.z}`, SPAWN_REPLY))
   await server.command(`setblock ${chest.x} ${chest.y} ${chest.z} chest`, /Changed the block/)
   await poll(() => bot.health === 20 && bot.food === 20, 10000)
   return chest
@@ -133,5 +139,5 @@ async function main([first, last, bots = '10', minutes = '60']) {
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { placeAtSlot, groundY, readDifficulty }
+module.exports = { placeAtSlot, groundY, readDifficulty, assertSpawnSet }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })
