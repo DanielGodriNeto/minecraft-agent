@@ -8,6 +8,7 @@ const STUCK_WINDOW = 12
 const STUCK_IDLE = 5
 const IDLE_MOVE = 1
 const NEAR = 16
+const LOST_BLOCKS = 256
 const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock is not usable
 
 // Small per-run jitter so recorded runs cover more states (plan 2.2).
@@ -84,6 +85,9 @@ function remember(run, action, result) {
 
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
 
+// A respawn this far from home means the spawn point was not set: wandering back would burn the run.
+const isLost = (pos, home) => distance(pos, home) > LOST_BLOCKS
+
 // Stuck = STUCK_FAILURES failed skills in a row with no inventory change and < STUCK_MOVE blocks moved,
 // or a full window of decisions with no success, or one that went nowhere and gained nothing (oscillation),
 // or STUCK_IDLE decisions in a row that moved < IDLE_MOVE blocks and changed nothing, successful or not.
@@ -137,7 +141,11 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       if (run.stopped) return finish(run, 'stopped')
       if (run.deaths >= maxDeaths) return finish(run, 'deaths')
       if (Date.now() >= deadline) return finish(run, 'timeout')
-      if (!bot.entity || bot.health <= 0) { await new Promise(r => bot.once('spawn', r)); continue }
+      if (!bot.entity || bot.health <= 0) {
+        await new Promise(r => bot.once('spawn', r))
+        if (isLost(bot.entity.position, home)) return finish(run, 'lost')
+        continue
+      }
       const action = nextAction(observe(bot, run))
       if (!action) return finish(run, 'done')
       const diamondsBefore = inventoryCounts(bot).diamond ?? 0
@@ -168,4 +176,4 @@ function stopObjective(bot) {
   return true
 }
 
-module.exports = { runObjective, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember }
+module.exports = { runObjective, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, isLost }

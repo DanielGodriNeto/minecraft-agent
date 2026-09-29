@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
-const { createStuckTracker, pickLeft, remember } = require('../bot/agent.js')
+const { createStuckTracker, pickLeft, remember, isLost } = require('../bot/agent.js')
 
 const ok = { ok: true }
 const fail = { ok: false, reason: 'timeout' }
@@ -67,4 +67,10 @@ test('stuck: an idle streak is broken by moving a block or by an inventory chang
   const track = createStuckTracker()
   const steps = [snap(0), snap(0), snap(0), snap(0), snap(2), snap(2), snap(2), snap(2), snap(2, '{"a":1}'), snap(2, '{"a":1}')]
   assert.ok(steps.map(s => track(ok, s)).every(r => !r))
+})
+
+test('isLost: a respawn more than 256 blocks from home', () => {
+  const home = { x: 0, y: 70, z: 0 }
+  assert.strictEqual(isLost({ x: 100, y: 70, z: 100 }, home), false)
+  assert.strictEqual(isLost({ x: 250, y: 70, z: 100 }, home), true)
 })
