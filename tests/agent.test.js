@@ -105,3 +105,16 @@ test('remember: consecutive drowning results are counted, any other result reset
   remember(run, action, { ok: true })
   assert.strictEqual(run.memory.drownings, 0)
 })
+
+test('remember: two dig_down failures without descent arm a relocation, which resets the count and turns the direction', () => {
+  const run = { memory: { leg: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: {} } }
+  const dig = { skill: 'dig_down', args: [-58] }
+  remember(run, dig, { ok: false, reason: 'blocked' })
+  remember(run, dig, { ok: false, reason: 'timeout', descended: true })
+  assert.strictEqual(run.memory.digFails, 0)
+  remember(run, dig, { ok: false, reason: 'timeout' })
+  remember(run, dig, { ok: false, reason: 'blocked' })
+  assert.strictEqual(run.memory.digFails, 2)
+  remember(run, { skill: 'explore', args: [{ mode: 'branch' }], relocate: true }, { ok: false, reason: 'not_found' })
+  assert.deepStrictEqual([run.memory.digFails, run.memory.relocations, run.memory.leg], [0, 1, 0])
+})

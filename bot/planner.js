@@ -45,6 +45,8 @@ const WEAK_HEALTH = 12
 const FULL_FOOD = 20
 const DROWN_RISE = 4
 const FIGHT_HEALTH = 8
+const MAX_DIG_FAILS = 2
+const RELOCATE_BLOCKS = 8
 
 // Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
 const BIGGEST_STACK = new Set(['planks', 'stone'])
@@ -97,10 +99,18 @@ function gather(s, item) {
     if (s.y < s.surfaceY - 8) return act('go_up', s.surfaceY)
     return act('explore', { target: source.blocks, mode: 'surface', dir: s.memory.surfaceDir, maxBlocks: surfaceReach(s.memory), maxAbove: source.maxAbove })
   }
-  if (source.find === 'dig') return act('dig_down', s.y - 3)
+  if (source.find === 'dig') return descend(s, s.y - 3, source.blocks)
   const y = source.y ?? s.params.branchY
-  if (s.y > y + 2) return act('dig_down', y)
+  if (s.y > y + 2) return descend(s, y, source.blocks)
   return act('explore', { target: source.blocks, mode: 'branch', ...branchLeg(s) })
+}
+
+// Digging down keeps failing here: move to a fresh spot (a surface hop, or a short branch leg underground) before retrying.
+function descend(s, y, target) {
+  const { digFails = 0, relocations = 0 } = s.memory
+  if (digFails < MAX_DIG_FAILS) return act('dig_down', y)
+  if (atSurface(s)) return { ...act('explore', { target, mode: 'surface', dir: (s.memory.surfaceDir + relocations) % DIRS, maxBlocks: RELOCATE_BLOCKS }), relocate: true }
+  return { ...act('explore', { target, mode: 'branch', dir: (s.memory.baseDir + 1 + relocations) % DIRS, maxBlocks: RELOCATE_BLOCKS }), relocate: true }
 }
 
 // Each failed surface search lengthens the next one so the bot spirals outward instead of pacing the same ground.

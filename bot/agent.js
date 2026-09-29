@@ -88,8 +88,23 @@ function trackShelter(memory, action) {
   memory.shelters = 0
 }
 
+const DIG_STUCK = new Set(['blocked', 'timeout'])
+
+// Consecutive dig_down failures without any descent; a relocation hop (or a success) starts the count over.
+function trackDigging(memory, action, result) {
+  if (action.relocate) {
+    memory.digFails = 0
+    memory.relocations = (memory.relocations ?? 0) + 1
+    return
+  }
+  if (action.skill !== 'dig_down') return
+  const stuck = !result.ok && !result.descended && DIG_STUCK.has(result.reason)
+  memory.digFails = stuck ? (memory.digFails ?? 0) + 1 : 0
+}
+
 function remember(run, action, result) {
   trackShelter(run.memory, action)
+  trackDigging(run.memory, action, result)
   run.memory.drownings = result.reason === 'drowning' ? (run.memory.drownings ?? 0) + 1 : 0
   if (result.ok) return
   if (action.optional) {
@@ -97,7 +112,7 @@ function remember(run, action, result) {
     const key = action.args[0] ?? action.skill
     fails[key] = (fails[key] ?? 0) + 1
   }
-  if (action.skill !== 'explore') return
+  if (action.skill !== 'explore' || action.relocate) return
   const { mode } = action.args[0]
   if (mode === 'branch') run.memory.leg++
   else {
@@ -149,7 +164,7 @@ function stuckTracker(bot) {
 async function runObjective(bot, { objective, home, params = jitterParams(), deadline = Infinity, maxDeaths = 3, rand = Math.random }) {
   const run = {
     objective, home, params, deadline, deposited: 0, recentlyAttacked: false, deaths: 0, decisions: 0, stopped: false,
-    memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), surfaceLeg: 0, optionalFails: {}, shelters: 0, noShelter: 0, drownings: 0 },
+    memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), surfaceLeg: 0, optionalFails: {}, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, relocations: 0 },
   }
   bot.objectiveRun = run
   bot.runDeadline = deadline
@@ -173,7 +188,8 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       const action = nextAction(observe(bot, run))
       if (!action) return finish(run, 'done')
       const diamondsBefore = inventoryCounts(bot).diamond ?? 0
-      const result = await runSkill(bot, action.skill, ...action.args)
+      const yBefore = bot.entity?.position.y
+      const result = { ...await runSkill(bot, action.skill, ...action.args), descended: bot.entity?.position.y < yBefore - 1 }
       run.decisions++
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')

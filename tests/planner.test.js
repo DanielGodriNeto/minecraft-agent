@@ -245,3 +245,13 @@ test('planner: after repeated shelters it fights a close hostile, flees when wea
   assert.ok(!['shelter', 'flee', 'fight'].includes(nextAction(state(hurt)).skill))
   assert.strictEqual(nextAction(state({ ...hurt, memory: { ...memory, noShelter: 0 }, hostileClose: true })).skill, 'shelter')
 })
+
+test('planner: after two failed dig_downs the bot relocates before digging again, on the surface and underground', () => {
+  const geared = { iron_pickaxe: 1, stone_pickaxe: 1, stick: 8 }
+  const memory = (digFails, relocations = 0) => ({ leg: 0, baseDir: 1, surfaceDir: 2, surfaceLeg: 0, digFails, relocations })
+  assert.strictEqual(nextAction(state({ inv: geared, memory: memory(1) })).skill, 'dig_down')
+  const hop = nextAction(state({ inv: geared, memory: memory(2, 1) }))
+  assert.deepStrictEqual([hop.skill, hop.relocate, hop.args[0].mode, hop.args[0].dir, hop.args[0].maxBlocks], ['explore', true, 'surface', 3, 8])
+  const branch = nextAction(state({ inv: geared, y: 0, memory: memory(2) }))
+  assert.deepStrictEqual([branch.skill, branch.relocate, branch.args[0].mode, branch.args[0].dir, branch.args[0].maxBlocks], ['explore', true, 'branch', 2, 8])
+})
