@@ -16,7 +16,7 @@ const SMELTS = { iron_ingot: 'raw_iron', gold_ingot: 'raw_gold', copper_ingot: '
 const WOODS = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak', 'mangrove', 'cherry', 'pale_oak']
 const FUELS = ['coal', 'charcoal', ...WOODS.map(w => `${w}_planks`), ...WOODS.map(w => `${w}_log`)]
 const PATCH_BLOCKS = ['cobblestone', 'cobbled_deepslate', 'dirt']
-const PLACE_MS = 5000
+const GUARD_MS = 5000
 const TUNNEL_OUT = 3
 const STEP_TICKS = 40
 const STEP_RANGE = 2.5
@@ -51,8 +51,11 @@ function stopPathing(bot) {
   bot.clearControlStates()
 }
 
+// Same for any other library await (equip, place, window clicks, transfers, look).
+const guard = (promise, ms = GUARD_MS) => withTimeout(promise, ms, () => {})
+
 // Window opens can hang forever on a lost packet.
-const opened = (promise) => withTimeout(promise, OPEN_MS, () => {})
+const opened = (promise) => guard(promise, OPEN_MS)
 
 async function goto(bot, goal, ms = PATH_MS) {
   try {
@@ -161,7 +164,7 @@ async function breakBlock(bot, block) {
     const current = bot.blockAt(block.position)
     if (!current.diggable) throw new Fail('undiggable')
     const tool = toolFor(bot, current)
-    if (tool) await bot.equip(tool, 'hand')
+    if (tool) await guard(bot.equip(tool, 'hand'))
     if (needsPickaxe(current) && !current.canHarvest(bot.heldItem?.type)) throw new Fail('no_tool')
     await withTimeout(bot.dig(current, true), bot.digTime(current) * 2 + 1000, () => bot.stopDigging())
   }
@@ -219,7 +222,7 @@ async function placeFromInventory(bot, name) {
   const item = findItem(bot, name)
   if (!item) throw new Fail('missing')
   const feet = bot.entity.position.floored()
-  await bot.equip(item, 'hand')
+  await guard(bot.equip(item, 'hand'))
   for (let spot = placeSpot(bot, feet); spot; spot = placeSpot(bot, feet)) {
     if (await tryPlace(bot, spot)) return bot.blockAt(spot)
   }
@@ -278,8 +281,8 @@ async function patchFloor(bot, landing) {
   const item = PATCH_BLOCKS.map(n => findItem(bot, n)).find(Boolean)
   const face = FACES.find(f => f[1] !== 1 && isSolid(at(bot, spot, ...f)))
   if (!item || !face) throw new Fail('no_floor')
-  await bot.equip(item, 'hand')
-  await withTimeout(bot.placeBlock(at(bot, spot, ...face), { x: -face[0], y: -face[1], z: -face[2] }), PLACE_MS, () => {})
+  await guard(bot.equip(item, 'hand'))
+  await guard(bot.placeBlock(at(bot, spot, ...face), { x: -face[0], y: -face[1], z: -face[2] }))
   if (!isSolid(bot.blockAt(spot))) throw new Fail('no_floor')
 }
 
@@ -294,7 +297,7 @@ async function stepTo(bot, feet) {
   const center = feet.offset(0.5, 0, 0.5)
   bot.setControlState('sneak', false)
   for (let tick = 0; tick < STEP_TICKS && !arrived(bot, feet); tick++) {
-    await bot.lookAt(center, true)
+    await guard(bot.lookAt(center, true))
     bot.setControlState('jump', feet.y > Math.floor(bot.entity.position.y))
     bot.setControlState('forward', true)
     await bot.waitForTicks(1)
@@ -476,7 +479,7 @@ async function craftOnce(bot, window, displayIds, itemId) {
       await bot.waitForTicks(5)
       bot._client.write('craft_recipe_request', { windowId: window.id, recipeId, makeAll: false })
       if (!await poll(bot, () => window.slots[0]?.type === itemId, 1000)) continue
-      await bot.clickWindow(0, 0, 1)
+      await guard(bot.clickWindow(0, 0, 1))
       await bot._syncWindow(window) // ponytail: private API; the shift-click result is server-authoritative
       return
     }
@@ -532,10 +535,10 @@ async function smelt(bot, name) {
 async function smeltAt(bot, station, input, fuel) {
   const furnace = await opened(bot.openFurnace(station.block))
   try {
-    await furnace.putFuel(findItem(bot, fuel).type, null, 1)
-    await furnace.putInput(findItem(bot, input).type, null, 1)
+    await guard(furnace.putFuel(findItem(bot, fuel).type, null, 1))
+    await guard(furnace.putInput(findItem(bot, input).type, null, 1))
     if (!await poll(bot, () => furnace.outputItem(), 15000)) throw new Fail('timeout')
-    await furnace.takeOutput()
+    await guard(furnace.takeOutput())
   } finally {
     furnace.close()
   }
@@ -544,14 +547,14 @@ async function smeltAt(bot, station, input, fuel) {
 async function equip(bot, name, destination = 'hand') {
   const item = findItem(bot, name)
   if (!item) throw new Fail('missing')
-  await bot.equip(item, destination)
+  await guard(bot.equip(item, destination))
 }
 
 async function eat(bot) {
   if (bot.food >= 20) throw new Fail('not_hungry')
   const food = bot.inventory.items().find(i => bot.registry.foodsByName[i.name])
   if (!food) throw new Fail('missing')
-  await bot.equip(food, 'hand')
+  await guard(bot.equip(food, 'hand'))
   await withTimeout(bot.consume(), 5000, () => bot.deactivateItem())
 }
 
@@ -573,7 +576,7 @@ async function deposit(bot, { x, y, z }, items = ['diamond']) {
       const item = bot.registry.itemsByName[name]
       const n = countItem(bot, name)
       const fits = Math.min(n, freeSpace(chest, item))
-      if (fits > 0) await chest.deposit(item.id, null, fits)
+      if (fits > 0) await guard(chest.deposit(item.id, null, fits))
       full ||= fits < n
     }
   } finally {
