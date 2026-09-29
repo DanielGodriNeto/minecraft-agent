@@ -112,7 +112,10 @@ function nextAction(s) {
   if (!has(s, 'iron_pickaxe')) {
     // Stock wood while trees are in view: tables and sticks are needed again underground.
     if (s.visible.log && count(s, 'log') + count(s, 'planks') / 4 < s.params.woodStock) return mineAct('log')
-    if (!has(s, 'wooden_pickaxe') && !has(s, 'stone_pickaxe')) return obtain(s, 'wooden_pickaxe', 1)
+    if (!has(s, 'wooden_pickaxe') && !has(s, 'stone_pickaxe')) {
+      // Restocking underground: skip the wooden tier when the stone for a stone pickaxe is at hand.
+      return obtain(s, count(s, 'stone') >= 3 ? 'stone_pickaxe' : 'wooden_pickaxe', 1)
+    }
     if (!has(s, 'stone_pickaxe')) return obtain(s, 'stone_pickaxe', 1)
     return obtain(s, 'iron_pickaxe', 1)
   }
