@@ -153,9 +153,26 @@ function stickStock(s) {
   return atSurface(s) && (s.inv.stick ?? 0) < SURFACE_STICKS ? obtain(s, 'stick', SURFACE_STICKS) : null
 }
 
+// Walled in when there are blocks for it, otherwise run. The exit side follows the direction the bot was heading.
+function takeCover(s) {
+  if (!s.canShelter) return act('flee')
+  return act('shelter', atSurface(s) ? s.memory.surfaceDir : s.memory.baseDir)
+}
+
+// Surface work is the tech tree before the iron pickaxe, or a trip home.
+const surfaceWork = (s) => !has(s, 'iron_pickaxe') || shouldReturn(s)
+
+function dangerStep(s) {
+  if (!s.hostileNear) return null
+  if (s.recentlyAttacked || s.health < s.params.fleeHealth) return takeCover(s)
+  if (s.isNight && s.y >= s.surfaceY - 2 && !surfaceWork(s)) return takeCover(s)
+  return null
+}
+
 function nextAction(s) {
   if (objectiveDone(s)) return null
-  if (s.hostileNear && (s.health < s.params.fleeHealth || s.recentlyAttacked)) return act('flee')
+  const danger = dangerStep(s)
+  if (danger) return danger
   if (s.food <= 14 && s.hasFood) return act('eat')
   const junk = junkAction(s)
   if (junk) return junk

@@ -1,5 +1,5 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
-const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe } = require('./skills.js')
+const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, placeableCount, SHELTER_MIN } = require('./skills.js')
 const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 
 const STUCK_FAILURES = 3
@@ -51,7 +51,8 @@ function observe(bot, run) {
     y: Math.floor(pos.y),
     surfaceY: run.home.y,
     isNight: bot.time.timeOfDay >= 13000 && bot.time.timeOfDay < 23000,
-    hostileNear: bot.nearestEntity(e => e.type === 'hostile' && e.position.distanceTo(pos) < 8) !== null,
+    hostileNear: nearestHostile(bot) !== null,
+    canShelter: placeableCount(bot) >= SHELTER_MIN,
     visible,
     tableNear: near('crafting_table', STATION_NEAR),
     furnaceNear: near('furnace', STATION_NEAR),
