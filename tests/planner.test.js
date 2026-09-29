@@ -9,7 +9,7 @@ const STONES = ['cobblestone', 'cobbled_deepslate']
 
 function state(over = {}) {
   return {
-    inv: {}, health: 20, food: 20, hasFood: false, y: 70, surfaceY: 70, isNight: false, hostileNear: false, canShelter: false,
+    inv: {}, health: 20, food: 20, hasFood: false, y: 70, surfaceY: 70, isNight: false, hostileNear: false, canShelter: false, animalNear: false,
     visible: {}, tableNear: false, furnaceNear: false, freeSlots: 30, pickLeft: 0,
     home: { x: 0, y: 70, z: 0 }, distHome: 0, objective: { item: 'diamond', count: 'max' }, deposited: 0,
     params: DEFAULT_PARAMS, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0 },
@@ -205,4 +205,29 @@ test('planner: at night on the surface with a hostile around and nothing to do t
   assert.notStrictEqual(nextAction(state({ ...night, hostileNear: false })).skill, 'shelter')
   assert.notStrictEqual(nextAction(state({ ...night, inv: {} })).skill, 'shelter')
   assert.notStrictEqual(nextAction(state({ ...night, inv: { iron_pickaxe: 1, diamond: 1 }, distHome: 100 })).skill, 'shelter')
+})
+
+test('planner: eats from food 17 down, and hunts an animal when hungry with nothing to eat', () => {
+  assert.strictEqual(nextAction(state({ food: 17, hasFood: true })).skill, 'eat')
+  assert.notStrictEqual(nextAction(state({ food: 18, hasFood: true })).skill, 'eat')
+  assert.deepStrictEqual(nextAction(state({ food: 17, animalNear: true })), { skill: 'hunt', args: [], optional: true })
+  assert.notStrictEqual(nextAction(state({ food: 18, animalNear: true })).skill, 'hunt')
+  assert.notStrictEqual(nextAction(state({ food: 10 })).skill, 'hunt')
+  assert.notStrictEqual(nextAction(state({ food: 10, animalNear: true, y: 40 })).skill, 'hunt')
+  assert.strictEqual(nextAction(state({ food: 10, animalNear: true, hasFood: true })).skill, 'eat')
+})
+
+test('planner: a hunt that failed four times is not tried again', () => {
+  const memory = (n) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: { hunt: n } })
+  assert.strictEqual(nextAction(state({ food: 10, animalNear: true, memory: memory(3) })).skill, 'hunt')
+  assert.notStrictEqual(nextAction(state({ food: 10, animalNear: true, memory: memory(4) })).skill, 'hunt')
+})
+
+test('planner: weak on the surface it tops up food before a descent, but only while not full', () => {
+  const geared = { iron_pickaxe: 1 }
+  assert.strictEqual(nextAction(state({ inv: geared, health: 10, food: 19, hasFood: true })).skill, 'eat')
+  assert.strictEqual(nextAction(state({ inv: geared, health: 10, food: 19, animalNear: true })).skill, 'hunt')
+  assert.strictEqual(nextAction(state({ inv: geared, health: 10, food: 20, hasFood: true })).skill, 'dig_down')
+  assert.strictEqual(nextAction(state({ inv: geared, health: 10, food: 19 })).skill, 'dig_down')
+  assert.strictEqual(nextAction(state({ inv: geared, health: 16, food: 19, hasFood: true })).skill, 'dig_down')
 })

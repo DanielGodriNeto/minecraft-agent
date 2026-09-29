@@ -39,6 +39,10 @@ const LOW_PICK = 20
 const SURFACE_STICKS = 8 // enough for the spare and iron pickaxes so nothing needs a trip back up
 const SURFACE_SLACK = 8
 const MAX_SPARE_FAILS = 2
+const MAX_HUNT_FAILS = 4
+const EAT_AT = 17 // natural regeneration needs food >= 18
+const WEAK_HEALTH = 12
+const FULL_FOOD = 20
 
 // Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
 const BIGGEST_STACK = new Set(['planks', 'stone'])
@@ -169,11 +173,21 @@ function dangerStep(s) {
   return null
 }
 
+// Eat when hungry, or when weak on the surface (before a descent) and not full; hunt when there is nothing to eat.
+function foodStep(s) {
+  const weak = atSurface(s) && s.health < WEAK_HEALTH && s.food < FULL_FOOD
+  if (s.food > EAT_AT && !weak) return null
+  if (s.hasFood) return act('eat')
+  if (!s.animalNear || !atSurface(s) || (s.memory.optionalFails?.hunt ?? 0) >= MAX_HUNT_FAILS) return null
+  return { ...act('hunt'), optional: true }
+}
+
 function nextAction(s) {
   if (objectiveDone(s)) return null
   const danger = dangerStep(s)
   if (danger) return danger
-  if (s.food <= 14 && s.hasFood) return act('eat')
+  const food = foodStep(s)
+  if (food) return food
   const junk = junkAction(s)
   if (junk) return junk
   if (shouldReturn(s)) {

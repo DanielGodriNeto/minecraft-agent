@@ -74,3 +74,9 @@ test('isLost: a respawn more than 256 blocks from home', () => {
   assert.strictEqual(isLost({ x: 100, y: 70, z: 100 }, home), false)
   assert.strictEqual(isLost({ x: 250, y: 70, z: 100 }, home), true)
 })
+
+test('remember: a failed hunt is counted under its skill name', () => {
+  const run = { memory: { optionalFails: {} } }
+  remember(run, { skill: 'hunt', args: [], optional: true }, { ok: false })
+  assert.deepStrictEqual(run.memory.optionalFails, { hunt: 1 })
+})

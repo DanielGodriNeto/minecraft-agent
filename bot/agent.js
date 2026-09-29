@@ -1,5 +1,5 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
-const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, placeableCount, SHELTER_MIN } = require('./skills.js')
+const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, SHELTER_MIN } = require('./skills.js')
 const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 
 const STUCK_FAILURES = 3
@@ -53,6 +53,7 @@ function observe(bot, run) {
     isNight: bot.time.timeOfDay >= 13000 && bot.time.timeOfDay < 23000,
     hostileNear: nearestHostile(bot) !== null,
     canShelter: placeableCount(bot) >= SHELTER_MIN,
+    animalNear: nearestAnimal(bot) !== null,
     visible,
     tableNear: near('crafting_table', STATION_NEAR),
     furnaceNear: near('furnace', STATION_NEAR),
@@ -73,7 +74,8 @@ function remember(run, action, result) {
   if (result.ok) return
   if (action.optional) {
     const fails = run.memory.optionalFails
-    fails[action.args[0]] = (fails[action.args[0]] ?? 0) + 1
+    const key = action.args[0] ?? action.skill
+    fails[key] = (fails[key] ?? 0) + 1
   }
   if (action.skill !== 'explore') return
   const { mode } = action.args[0]
