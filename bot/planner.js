@@ -28,12 +28,13 @@ const SURFACE_BLOCKS = 64
 const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 6, fleeHealth: 14 }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14 }
 
 const PURE_JUNK = ['dirt', 'gravel', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
 const STONE_JUNK = ['cobblestone', 'cobbled_deepslate']
 const KEEP_STONE = 16
 const RETURN_BEFORE_MS = 8 * 60000
+const SPARE_STICKS = 4
 
 // Recipes take one plank type (recipe data is per type), so "planks" means the biggest single stack.
 const count = (s, item) => {
@@ -123,6 +124,19 @@ function junkAction(s) {
   return null
 }
 
+// Spare stone pickaxe and sticks for the long descent. Underground there is no wood to fetch, so this
+// only crafts from what is carried and is skipped when the materials are missing.
+function spareStep(s) {
+  if (!has(s, 'iron_pickaxe')) return null
+  const needPick = !has(s, 'stone_pickaxe')
+  const sticksWanted = SPARE_STICKS + (needPick ? 2 : 0)
+  const sticks = s.inv.stick ?? 0
+  if (sticks < sticksWanted && (count(s, 'planks') >= 2 || has(s, 'log'))) return obtain(s, 'stick', sticksWanted)
+  const tableOk = s.tableNear || has(s, 'crafting_table') || count(s, 'planks') >= 4 || has(s, 'log')
+  if (needPick && sticks >= 2 && count(s, 'stone') >= 3 && tableOk) return obtain(s, 'stone_pickaxe', 1)
+  return null
+}
+
 function nextAction(s) {
   if (objectiveDone(s)) return null
   if (s.hostileNear && (s.health < s.params.fleeHealth || s.recentlyAttacked)) return act('flee')
@@ -145,7 +159,7 @@ function nextAction(s) {
     if (!has(s, 'stone_pickaxe')) return obtain(s, 'stone_pickaxe', 1)
     return obtain(s, 'iron_pickaxe', 1)
   }
-  return gather(s, 'diamond')
+  return spareStep(s) ?? gather(s, 'diamond')
 }
 
 module.exports = { nextAction, DEFAULT_PARAMS, SOURCES, GROUPS }

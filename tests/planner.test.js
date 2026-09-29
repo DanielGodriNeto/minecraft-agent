@@ -135,3 +135,18 @@ test('planner: surface search grows with each failed leg and is capped', () => {
   const reach = (surfaceLeg) => nextAction(state({ memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg } })).args[0].maxBlocks
   assert.deepStrictEqual([0, 1, 2, 4, 9].map(reach), [64, 96, 128, 192, 192])
 })
+
+test('planner: iron-geared bot crafts spare sticks and a stone pickaxe before descending', () => {
+  const geared = { iron_pickaxe: 1, oak_planks: 8, cobblestone: 5, crafting_table: 1 }
+  assert.deepStrictEqual(nextAction(state({ inv: geared, y: 16 })), { skill: 'craft', args: ['stick', 4] })
+  assert.deepStrictEqual(nextAction(state({ inv: { ...geared, stick: 6 }, y: 16 })), { skill: 'craft', args: ['stone_pickaxe', 1] })
+  assert.deepStrictEqual(nextAction(state({ inv: { ...geared, oak_planks: 0, oak_log: 1 }, y: 16 })), { skill: 'craft', args: ['oak_planks', 4] })
+})
+
+test('planner: spares are skipped when the materials are not carried', () => {
+  const dig = { skill: 'dig_down', args: [DEFAULT_PARAMS.branchY] }
+  assert.deepStrictEqual(nextAction(state({ inv: { iron_pickaxe: 1 }, y: 16 })), dig)
+  assert.deepStrictEqual(nextAction(state({ inv: { iron_pickaxe: 1, cobblestone: 5, oak_planks: 1 }, y: 16 })), dig)
+  const done = { iron_pickaxe: 1, stone_pickaxe: 1, stick: 4, oak_planks: 8, cobblestone: 5 }
+  assert.deepStrictEqual(nextAction(state({ inv: done, y: 16 })), dig)
+})
