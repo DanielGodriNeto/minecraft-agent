@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -218,4 +218,16 @@ test('patchFaces: solid neighbours of the hole, never the top face, minus faces 
   assert.deepStrictEqual(patchFaces(bot(world(open), failed), spot), [[0, 0, -1]])
   const enclosed = { '1,10,0': 'air', '-1,10,0': 'air', '0,10,1': 'air', '0,10,-1': 'air', '0,9,0': 'air' }
   assert.deepStrictEqual(patchFaces(bot(world(enclosed)), spot), [])
+})
+
+test('ledgeFloor: a diggable floor over solid ground within two blocks, unless lava is near', () => {
+  const p = new Vec3(0, 10, 0)
+  const pillar = { '0,8,0': 'air', '0,7,0': 'air' }
+  const floor = (w) => ledgeFloor(w, p)?.position
+  assert.deepStrictEqual(floor(world({ '0,8,0': 'air' })), new Vec3(0, 9, 0))
+  assert.deepStrictEqual(floor(world({ '0,8,0': 'air', '0,7,0': 'air', '0,6,0': 'air' })) ?? null, null)
+  assert.deepStrictEqual(floor(world({ '0,8,0': 'air', '0,7,0': 'stone', '0,9,1': 'air' })), new Vec3(0, 9, 0))
+  assert.strictEqual(ledgeFloor(world({ ...pillar, '0,9,0': 'air' }), p), null)
+  assert.strictEqual(ledgeFloor(world({ '0,9,0': 'bedrock' }), p), null)
+  assert.strictEqual(ledgeFloor(world({ '1,8,0': 'lava' }), p), null)
 })

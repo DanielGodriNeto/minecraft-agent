@@ -538,10 +538,31 @@ function onCanopy(bot, p) {
   return !nearLava(bot, floor.position) && !nearLava(bot, floor.position.offset(0, -1, 0))
 }
 
+// Breaks the block under the bot and waits to land.
+async function dropThrough(bot, floor) {
+  await breakBlock(bot, floor)
+  await poll(bot, () => bot.entity.onGround, 1500)
+}
+
 async function dropThroughCanopy(bot, p) {
   if (!onCanopy(bot, p)) return false
-  await breakBlock(bot, at(bot, p, 0, -1, 0))
-  await poll(bot, () => bot.entity.onGround, 1500)
+  await dropThrough(bot, at(bot, p, 0, -1, 0))
+  return true
+}
+
+// Standing on a small pillar or ledge: the floor block, when solid ground is at most 2 blocks below it and no lava is near.
+function ledgeFloor(bot, p) {
+  const floor = at(bot, p, 0, -1, 0)
+  if (!isSolid(floor) || !floor.diggable) return null
+  const grounded = [-2, -3].some(dy => isSolid(at(bot, p, 0, dy, 0)))
+  const lava = [-1, -2, -3].some(dy => nearLava(bot, p.offset(0, dy, 0)))
+  return grounded && !lava ? floor : null
+}
+
+async function dropFromLedge(bot, p) {
+  const floor = ledgeFloor(bot, p)
+  if (!floor) return false
+  await dropThrough(bot, floor)
   return true
 }
 
@@ -589,6 +610,7 @@ async function digDown(bot, targetY) {
       d = taken
       continue
     }
+    if (options.every(o => o.reason === 'no_floor') && await dropFromLedge(bot, p)) continue
     const out = options.find(o => tunnelSafe(bot, tunnelCells(p, DIRS[o.dir])))
     if (!out) throw new Fail('blocked', mostCommon(options.map(o => o.reason)))
     if (tunnels++ >= MAX_TUNNEL_OUTS) throw new Fail('blocked', 'tunnel_limit')
@@ -796,4 +818,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor }
