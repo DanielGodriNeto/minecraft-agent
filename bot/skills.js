@@ -125,13 +125,16 @@ function nearestHostile(bot, range = HOSTILE_RANGE) {
 
 // ---- building blocks ----
 
+// Only pickaxe blocks are worth refusing to dig bare-handed; snow, dirt, leaves... are dug regardless of drops.
+const needsPickaxe = (block) => block.harvestTools && /mineable\/pickaxe|^incorrect_for_/.test(block.material)
+
 async function breakBlock(bot, block) {
   for (let tries = 0; tries < 5 && !OPEN.has(bot.blockAt(block.position)?.name); tries++) {
     const current = bot.blockAt(block.position)
     if (!current.diggable) throw new Fail('undiggable')
     const tool = bot.pathfinder.bestHarvestTool(current)
     if (tool) await bot.equip(tool, 'hand')
-    if (current.harvestTools && !current.canHarvest(bot.heldItem?.type)) throw new Fail('no_tool')
+    if (needsPickaxe(current) && !current.canHarvest(bot.heldItem?.type)) throw new Fail('no_tool')
     await withTimeout(bot.dig(current, true), bot.digTime(current) * 2 + 1000, () => bot.stopDigging())
   }
   if (!OPEN.has(bot.blockAt(block.position)?.name)) throw new Fail('dig_failed')
