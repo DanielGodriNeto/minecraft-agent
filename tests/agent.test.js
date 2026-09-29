@@ -56,3 +56,15 @@ test('remember: failed optional crafts are counted per item, successes and requi
   remember(run, { skill: 'craft', args: ['iron_pickaxe', 1] }, { ok: false })
   assert.deepStrictEqual(run.memory.optionalFails, { stone_pickaxe: 2 })
 })
+
+test('stuck: successful skills that neither move the bot a block nor change the inventory count as idle', () => {
+  const track = createStuckTracker()
+  const results = Array.from({ length: 6 }, (_, i) => track(ok, snap(i * 0.1)))
+  assert.deepStrictEqual(results, [false, false, false, false, false, true])
+})
+
+test('stuck: an idle streak is broken by moving a block or by an inventory change', () => {
+  const track = createStuckTracker()
+  const steps = [snap(0), snap(0), snap(0), snap(0), snap(2), snap(2), snap(2), snap(2), snap(2, '{"a":1}'), snap(2, '{"a":1}')]
+  assert.ok(steps.map(s => track(ok, s)).every(r => !r))
+})

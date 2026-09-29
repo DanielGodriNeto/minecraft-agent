@@ -5,6 +5,8 @@ const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
 const STUCK_WINDOW = 12
+const STUCK_IDLE = 5
+const IDLE_MOVE = 1
 const NEAR = 16
 const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock is not usable
 
@@ -83,16 +85,23 @@ function remember(run, action, result) {
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
 
 // Stuck = STUCK_FAILURES failed skills in a row with no inventory change and < STUCK_MOVE blocks moved,
-// or a full window of decisions with no success, or one that went nowhere and gained nothing (oscillation).
+// or a full window of decisions with no success, or one that went nowhere and gained nothing (oscillation),
+// or STUCK_IDLE decisions in a row that moved < IDLE_MOVE blocks and changed nothing, successful or not.
 // Pure: takes a { pos: {x,y,z}, inv: string } snapshot taken after each decision.
 function createStuckTracker() {
   let failures = 0
+  let idle = 0
   let anchor = null
+  let previous = null
   const window = []
   const stalled = () => window.length === STUCK_WINDOW && (
     window.every(w => !w.ok) ||
     (distance(window[0].pos, window.at(-1).pos) < STUCK_MOVE && window.every(w => w.inv === window[0].inv)))
   return (result, snapshot) => {
+    const unchanged = previous?.inv === snapshot.inv && distance(previous.pos, snapshot.pos) < IDLE_MOVE
+    idle = unchanged ? idle + 1 : 0
+    previous = snapshot
+    if (idle >= STUCK_IDLE) return true
     window.push({ ok: result.ok, ...snapshot })
     if (window.length > STUCK_WINDOW) window.shift()
     if (result.ok || !anchor || anchor.inv !== snapshot.inv || distance(anchor.pos, snapshot.pos) >= STUCK_MOVE) {

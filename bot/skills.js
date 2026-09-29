@@ -622,6 +622,7 @@ async function goUp(bot, targetY) {
   const high = (p) => Math.floor(p.y) >= targetY
   await followTrail(bot, high)
   if (!high(bot.entity.position)) await goto(bot, new goals.GoalY(targetY), 120000)
+  if (!high(bot.entity.position)) throw new Fail('not_reached')
   bot.trail = []
 }
 
