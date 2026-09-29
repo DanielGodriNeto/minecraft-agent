@@ -214,7 +214,11 @@ async function reach(bot, block, ms = PATH_MS) {
 const SEGMENTED = new Set(['pink_petals', 'wildflowers', 'leaf_litter'])
 const REFUSED = /refused to place/i
 const isFree = (block) => block !== null && block.boundingBox === 'empty' && !isLava(block) && !SEGMENTED.has(block.name)
-const canHold = (bot, p) => isFree(bot.blockAt(p)) && !bot.refusedSpots?.has(p.toString()) && isSolid(at(bot, p, 0, -1, 0))
+const PLACE_FACES = [[0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]]
+const canHold = (bot, p) => isFree(bot.blockAt(p)) && !bot.refusedSpots?.has(p.toString()) && placeFace(bot, p) !== undefined
+
+// Offset of a solid neighbour to place against, the block below preferred.
+const placeFace = (bot, spot) => PLACE_FACES.find(f => isSolid(at(bot, spot, ...f)))
 
 // Cells around the bot at feet, head and below-feet level (the last one after a dig down).
 function placeSpot(bot, feet) {
@@ -224,7 +228,7 @@ function placeSpot(bot, feet) {
 // Boxed in (1-wide tunnel): dig out a side wall at feet level.
 async function digSpot(bot, feet) {
   const wall = DIRS.map(([dx, dz]) => bot.blockAt(feet.offset(dx, 0, dz)))
-    .find(b => b?.diggable && !nearLava(bot, b.position) && isSolid(at(bot, b.position, 0, -1, 0)))
+    .find(b => b?.diggable && !nearLava(bot, b.position))
   if (!wall) throw new Fail('no_space')
   await breakBlock(bot, wall)
   return wall.position
@@ -237,7 +241,8 @@ async function tryPlace(bot, spot, name) {
   if (!item) throw new Fail('missing')
   try {
     await guard(bot.equip(item, 'hand'))
-    await guard(bot.placeBlock(at(bot, spot, 0, -1, 0), { x: 0, y: 1, z: 0 }))
+    const face = placeFace(bot, spot)
+    await guard(bot.placeBlock(at(bot, spot, ...face), { x: -face[0], y: -face[1], z: -face[2] }))
     return true
   } catch (e) {
     if (!REFUSED.test(e.message)) throw e
@@ -681,4 +686,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace }

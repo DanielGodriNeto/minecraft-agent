@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -118,4 +118,13 @@ test('checkCancelled: throws the stored reason only while the token is cancelled
   assert.doesNotThrow(() => checkCancelled({}))
   assert.doesNotThrow(() => checkCancelled({ skillCancel: { cancelled: false } }))
   assert.throws(() => checkCancelled({ skillCancel: { cancelled: true, reason: 'timeout' } }), { reason: 'timeout' })
+})
+
+test('placeSpot: a spot without a floor is fine when it has any solid neighbour to place against', () => {
+  const feet = new Vec3(0, 10, 0)
+  const bot = world({ '1,10,0': 'air', '1,9,0': 'air' })
+  assert.deepStrictEqual(placeSpot(bot, feet), new Vec3(1, 10, 0))
+  assert.deepStrictEqual(placeFace(bot, new Vec3(1, 10, 0)), [1, 0, 0])
+  assert.deepStrictEqual(placeFace(world({ '1,10,0': 'air' }), new Vec3(1, 10, 0)), [0, -1, 0])
+  assert.strictEqual(placeFace(world({ '1,10,0': 'air', '1,9,0': 'air', '2,10,0': 'air', '1,10,1': 'air', '1,10,-1': 'air', '1,11,0': 'air', '0,10,0': 'air' }), new Vec3(1, 10, 0)), undefined)
 })
