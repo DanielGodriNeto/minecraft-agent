@@ -27,16 +27,26 @@ const DIRS = 4
 
 const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 6, fleeHealth: 14 }
 
-const count = (s, item) => (GROUPS[item] ?? [item]).reduce((n, name) => n + (s.inv[name] ?? 0), 0)
+const PURE_JUNK = ['dirt', 'gravel', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
+const STONE_JUNK = ['cobblestone', 'cobbled_deepslate']
+const KEEP_STONE = 16
+const RETURN_BEFORE_MS = 8 * 60000
+
+// Recipes take one plank type (recipe data is per type), so "planks" means the biggest single stack.
+const count = (s, item) => {
+  const counts = (GROUPS[item] ?? [item]).map(name => s.inv[name] ?? 0)
+  return item === 'planks' ? Math.max(...counts) : counts.reduce((n, c) => n + c, 0)
+}
 const has = (s, item) => count(s, item) > 0
 const act = (skill, ...args) => ({ skill, args })
 const mineAct = (key) => act('mine', SOURCES[key].blocks, SOURCES[key].maxAbove ?? null)
 
-// Planks come from whichever log type is in the inventory.
+// Planks come from the held log type that extends the biggest existing plank stack.
 function concrete(s, item) {
   if (item !== 'planks') return item
-  const log = GROUPS.log.find(l => has(s, l))
-  return log.replace('_log', '_planks')
+  const planksOf = (log) => s.inv[log.replace('_log', '_planks')] ?? 0
+  const logs = GROUPS.log.filter(l => has(s, l)).sort((a, b) => planksOf(b) - planksOf(a) || s.inv[b] - s.inv[a])
+  return logs[0].replace('_log', '_planks')
 }
 
 function obtain(s, item, n) {
@@ -91,6 +101,7 @@ function objectiveDone(s) {
 function shouldReturn(s) {
   const carried = count(s, 'diamond')
   if (carried === 0) return false
+  if (s.deposited === 0 || s.msLeft < RETURN_BEFORE_MS) return true // secure the first diamond; bank before time runs out
   const target = s.objective.count === 'max' ? Infinity : s.objective.count - s.deposited
   return carried >= Math.min(target, s.params.returnAt)
     || s.freeSlots <= 1
@@ -99,10 +110,19 @@ function shouldReturn(s) {
     || (s.isNight && s.y >= s.surfaceY - 2)
 }
 
+function junkAction(s) {
+  if (s.freeSlots > 2) return null
+  if (PURE_JUNK.some(name => has(s, name))) return act('toss', PURE_JUNK, 0)
+  if (STONE_JUNK.some(name => (s.inv[name] ?? 0) > KEEP_STONE)) return act('toss', STONE_JUNK, KEEP_STONE)
+  return null
+}
+
 function nextAction(s) {
   if (objectiveDone(s)) return null
-  if (s.hostileNear && s.health < s.params.fleeHealth) return act('flee')
+  if (s.hostileNear && (s.health < s.params.fleeHealth || s.recentlyAttacked)) return act('flee')
   if (s.food <= 14 && s.hasFood) return act('eat')
+  const junk = junkAction(s)
+  if (junk) return junk
   if (shouldReturn(s)) {
     if (s.distHome <= 4) return act('deposit', s.home)
     if (s.y < s.surfaceY - 8) return act('go_up', s.surfaceY)

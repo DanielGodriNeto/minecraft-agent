@@ -20,7 +20,7 @@ function state(over = {}) {
 // Independent ground truth: what one craft of each item consumes.
 function craftable(s, item) {
   const table = s.tableNear || (s.inv.crafting_table ?? 0) > 0
-  const planks = sum(s.inv, PLANKS)
+  const planks = Math.max(...PLANKS.map(k => s.inv[k] ?? 0)) // recipes take a single plank type
   const sticks = s.inv.stick ?? 0
   if (item.endsWith('_planks')) return (s.inv[item.replace('_planks', '_log')] ?? 0) >= 1
   switch (item) {
@@ -100,4 +100,33 @@ test('planner: safety and objective', () => {
 test('planner: restocks a broken pickaxe from what it carries', () => {
   const s = state({ y: -58, inv: { cobblestone: 3, stick: 4, crafting_table: 1 } })
   assert.deepStrictEqual(nextAction(s), { skill: 'craft', args: ['stone_pickaxe', 1] })
+})
+
+test('planner: secures the first diamond and banks before time runs out', () => {
+  const geared = { iron_pickaxe: 1, diamond: 1 }
+  assert.strictEqual(nextAction(state({ inv: geared, distHome: 200, pickLeft: 100 })).skill, 'return_home')
+  const banked = state({ inv: geared, deposited: 1, distHome: 200, y: -58, pickLeft: 100 })
+  assert.notStrictEqual(nextAction({ ...banked, y: 70, msLeft: 20 * 60000 }).skill, 'return_home')
+  assert.strictEqual(nextAction({ ...banked, y: 70, msLeft: 7 * 60000 }).skill, 'return_home')
+  assert.strictEqual(nextAction(state({ inv: { iron_pickaxe: 1 }, deposited: 1, msLeft: 60000, pickLeft: 100 })).skill, 'dig_down')
+})
+
+test('planner: flees a hostile that already hurt it, even at full health', () => {
+  assert.strictEqual(nextAction(state({ hostileNear: true, recentlyAttacked: true })).skill, 'flee')
+  assert.notStrictEqual(nextAction(state({ hostileNear: true })).skill, 'flee')
+  assert.notStrictEqual(nextAction(state({ recentlyAttacked: true })).skill, 'flee')
+})
+
+test('planner: tosses junk only when the inventory is nearly full', () => {
+  assert.strictEqual(nextAction(state({ inv: { dirt: 30 }, freeSlots: 5 })).skill, 'explore')
+  assert.deepStrictEqual(nextAction(state({ inv: { dirt: 30 }, freeSlots: 2 })).args[1], 0)
+  const stone = nextAction(state({ inv: { cobblestone: 40 }, freeSlots: 1 }))
+  assert.deepStrictEqual([stone.skill, stone.args[1]], ['toss', 16])
+  assert.notStrictEqual(nextAction(state({ inv: { cobblestone: 16, cobbled_deepslate: 16 }, freeSlots: 1 })).skill, 'toss')
+})
+
+test('planner: plank recipes use one plank type', () => {
+  const mixed = { oak_planks: 2, birch_planks: 2 }
+  assert.deepStrictEqual(nextAction(state({ inv: { ...mixed, oak_log: 1 }, visible: { log: false } })), { skill: 'craft', args: ['oak_planks', 4] })
+  assert.deepStrictEqual(nextAction(state({ inv: { oak_planks: 1, birch_planks: 2, birch_log: 1, oak_log: 3 } })).args, ['birch_planks', 4])
 })
