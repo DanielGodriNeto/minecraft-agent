@@ -1,8 +1,9 @@
 node_modules/
 server/*
-!server/fetch-paper.sh
+!server/fetch-jars.sh
 !server/start.sh
 !server/server.properties
+!server/diamonds.properties
 !server/eula.txt
 !server/whitelist.json
 !server/ops.json
