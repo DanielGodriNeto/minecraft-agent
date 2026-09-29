@@ -455,6 +455,18 @@ test('go_up: fails not_reached when no block can be placed', async () => {
   }
 })
 
+test('run: escape skills are not aborted by low oxygen or drowning damage', async () => {
+  const bot = fakeBot(50)
+  bot.blockAt = () => ({ name: 'water' })
+  const result = await run(bot, async () => {
+    bot.oxygenLevel = 5
+    bot.emit('breath')
+    bot.health = 18
+    bot.emit('health')
+  }, false, true)
+  assert.strictEqual(result.ok, true)
+})
+
 test('tunnelSafe: refuses only cells in or next to water or lava, a missing floor is bridged instead', () => {
   const cells = [new Vec3(1, 11, 0), new Vec3(1, 10, 0)]
   assert.strictEqual(tunnelSafe(world(), cells), true)

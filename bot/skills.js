@@ -49,6 +49,7 @@ const SUFFOCATION_ABORT = 3
 const ABORTS = new Set(['attacked', 'drowning', 'suffocating'])
 const HAZARD_CAUSE = { lava: 'lava', flowing_lava: 'lava', fire: 'fire', soul_fire: 'fire', magma_block: 'magma', cactus: 'cactus', sweet_berry_bush: 'berry_bush' }
 const NON_INTERRUPTIBLE = new Set(['flee', 'eat', 'shelter', 'fight'])
+const ESCAPES = new Set(['go_up', 'flee', 'shelter']) // how the bot gets out of water, so drowning must not abort them
 const PLACEABLE = ['cobblestone', 'cobbled_deepslate', 'dirt', 'stone', 'deepslate', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
 const FOOD_ANIMALS = new Set(['cow', 'pig', 'sheep', 'chicken', 'rabbit'])
 const ANIMAL_RANGE = 24
@@ -211,7 +212,7 @@ function skillCapMs(bot, now = Date.now()) {
 
 // A skill is aborted when a hostile hurts the bot, so the planner can react (flee) instead of
 // finishing a 30 s walk while being hit. flee/eat/shelter are not interruptible.
-async function run(bot, skill, interruptible) {
+async function run(bot, skill, interruptible, escaping = false) {
   const capMs = skillCapMs(bot)
   let ticks = 0
   let lastHealth = bot.health
@@ -225,7 +226,7 @@ async function run(bot, skill, interruptible) {
     bot.stopDigging()
   }
   const tick = () => { ticks++ }
-  const onBreath = () => { if (isDrowning(bot)) abort('drowning') }
+  const onBreath = () => { if (!escaping && isDrowning(bot)) abort('drowning') }
   const onHealth = () => {
     const lost = lastHealth - bot.health
     lastHealth = bot.health
@@ -233,7 +234,7 @@ async function run(bot, skill, interruptible) {
     const entry = damageEntry(bot)
     damage.push(entry)
     if (damage.length > DAMAGE_LOG_MAX) damage.shift()
-    if (entry.cause === 'drowning') return abort('drowning')
+    if (entry.cause === 'drowning') return escaping ? undefined : abort('drowning')
     if (entry.cause === 'suffocation' && (suffocated += lost) >= SUFFOCATION_ABORT) return abort('suffocating')
     if (!interruptible || cancel.cancelled || !nearestHostile(bot)) return
     abort('attacked')
@@ -793,11 +794,31 @@ async function pillarUp(bot, targetY) {
   }
 }
 
+// Holds jump while the head is in water, so the bot swims up instead of sinking between path steps.
+function swimAssist(bot) {
+  let swimming = false
+  const tick = () => {
+    const wet = headWet(bot)
+    if (wet || swimming) bot.setControlState('jump', wet)
+    swimming = wet
+  }
+  bot.on('physicsTick', tick)
+  return () => {
+    bot.off('physicsTick', tick)
+    if (swimming) bot.setControlState('jump', false)
+  }
+}
+
 async function goUp(bot, targetY) {
   const high = (p) => Math.floor(p.y) >= targetY
-  await followTrail(bot, high)
-  if (!high(bot.entity.position)) await goto(bot, new goals.GoalY(targetY), GO_UP_PATH_MS, true).catch(() => {})
-  if (!high(bot.entity.position)) await pillarUp(bot, targetY)
+  const stopSwimming = swimAssist(bot)
+  try {
+    await followTrail(bot, high)
+    if (!high(bot.entity.position)) await goto(bot, new goals.GoalY(targetY), GO_UP_PATH_MS, true).catch(() => {})
+    if (!high(bot.entity.position)) await pillarUp(bot, targetY)
+  } finally {
+    stopSwimming()
+  }
   if (!high(bot.entity.position)) throw new Fail('not_reached')
   bot.trail = []
 }
@@ -1117,7 +1138,7 @@ function logSkill(bot, entry) {
 // Every skill resolves to { ok, reason, ticks } and never throws.
 async function runSkill(bot, name, ...args) {
   const before = snapshot(bot)
-  const { damage, ...result } = await run(bot, () => SKILLS[name](bot, ...args), !NON_INTERRUPTIBLE.has(name))
+  const { damage, ...result } = await run(bot, () => SKILLS[name](bot, ...args), !NON_INTERRUPTIBLE.has(name), ESCAPES.has(name))
   if (result.reason === 'suffocating') await freeHead(bot)
   logSkill(bot, { t: Date.now(), bot: bot.username, run: bot.runTag ?? null, skill: name, args: args.map(logArg), result, ...(damage && { damage }), before, after: snapshot(bot) })
   return result
