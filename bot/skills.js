@@ -6,6 +6,7 @@ const PATH_MS = 30000
 const OPEN_MS = 10000
 const TOSS_MS = 5000
 const STATION_REACH_MS = 8000
+const HOP_MS = 12000
 const SKILL_CAP_MS = 180000
 const OPEN = new Set(['air', 'cave_air', 'void_air', 'water'])
 const LAVA = new Set(['lava', 'flowing_lava'])
@@ -230,13 +231,27 @@ async function tunnelStep(bot, cells, feet) {
 
 // ---- skills ----
 
+// One 8-block surface hop; a blocked hop is retried to either side before the whole call gives up.
+async function surfaceHop(bot, p, dir) {
+  let failure
+  for (const d of [dir, (dir + 1) % 4, (dir + 3) % 4]) {
+    const [dx, dz] = DIRS[d]
+    try {
+      return await goto(bot, new goals.GoalNearXZ(p.x + dx * 8, p.z + dz * 8, 2), HOP_MS)
+    } catch (e) {
+      failure = e
+    }
+  }
+  throw failure
+}
+
 async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64, maxAbove = null }) {
   const [dx, dz] = DIRS[dir]
   for (let moved = 0; moved < maxBlocks; moved += mode === 'surface' ? 8 : 1) {
     if (findVisible(bot, target, maxAbove)) return
     const p = bot.entity.position.floored()
     if (mode === 'surface') {
-      await goto(bot, new goals.GoalNearXZ(p.x + dx * 8, p.z + dz * 8, 2))
+      await surfaceHop(bot, p, dir)
       continue
     }
     const ahead = p.offset(dx, 0, dz)
