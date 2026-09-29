@@ -54,7 +54,7 @@ function observe(bot, run) {
     food: bot.food,
     hasFood: bot.inventory.items().some(i => bot.registry.foodsByName[i.name]),
     y: Math.floor(pos.y),
-    surfaceY: run.home.y,
+    surfaceY: run.surfaceY,
     isNight: isNight(bot),
     enclosed: sealed(bot, pos.floored()),
     hostileNear: nearestHostile(bot) !== null,
@@ -201,7 +201,7 @@ function stuckTracker(bot) {
 // home: storage chest position. Resolves with why the run ended.
 async function runObjective(bot, { objective, home, params = jitterParams(), deadline = Infinity, maxDeaths = 3, rand = Math.random }) {
   const run = {
-    objective, home, params, deadline, deposited: 0, recentlyAttacked: false, deaths: 0, decisions: 0, stopped: false,
+    objective, home, surfaceY: home.y, params, deadline, deposited: 0, recentlyAttacked: false, deaths: 0, decisions: 0, stopped: false,
     memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), surfaceLeg: 0, optionalFails: {}, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, relocations: 0 },
   }
   bot.objectiveRun = run
