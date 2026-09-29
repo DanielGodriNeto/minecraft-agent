@@ -8,7 +8,8 @@ const LAVA = new Set(['lava', 'flowing_lava'])
 const FACES = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]]
 const SMELTS = { iron_ingot: 'raw_iron', gold_ingot: 'raw_gold', copper_ingot: 'raw_copper' }
-const FUELS = ['coal', 'charcoal', 'oak_planks', 'oak_log']
+const WOODS = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak', 'mangrove', 'cherry', 'pale_oak']
+const FUELS = ['coal', 'charcoal', ...WOODS.map(w => `${w}_planks`), ...WOODS.map(w => `${w}_log`)]
 const HOSTILE_RANGE = 16
 
 class Fail extends Error {
@@ -84,8 +85,10 @@ function isVisible(bot, block) {
   return FACES.some(f => OPEN.has(at(bot, block.position, ...f)?.name)) && bot.canSeeBlock(block)
 }
 
-function findVisible(bot, name, maxDistance = 32) {
-  const positions = bot.findBlocks({ matching: blockId(bot, name), maxDistance, count: 64 })
+// names: one block name or a list (e.g. every log type).
+function findVisible(bot, names, maxDistance = 32) {
+  const matching = [names].flat().map(n => blockId(bot, n))
+  const positions = bot.findBlocks({ matching, maxDistance, count: 64 })
   return positions.map(p => bot.blockAt(p)).find(b => b && isVisible(bot, b)) ?? null
 }
 
