@@ -110,9 +110,10 @@ Skill rules:
 
 ---
 
-## Budget (measured in Phase 2.4, then these numbers are replaced by real ones)
-Assumed: N = 10 bots, runs capped at 60 min (`max` mode), ~5 min stop/restore/restart per batch,
-8 h unattended per night → ~7 batches of 10 = ~70 runs/night.
+## Budget (measured in Phase 2.4)
+Measured: N = 12 bots, runs capped at 60 min (`max` mode), ~1 min restore + restart + placement per
+batch (14 GB world copy), 8 h unattended per night → ~7 batches of 12 = ~84 runs/night.
+(The table below still uses the pre-measurement N = 10 estimate; with N = 12 each row needs ~15% fewer nights.)
 
 | Use | Nights | Runs / episodes | Skill decisions |
 |---|---|---|---|
@@ -193,9 +194,11 @@ Descope rule: if week 5 ends with failures, ship `mine`/`dig_down`/`deposit` fir
       Planner parameters (branch y, spacing, return thresholds) get small random jitter per run
       so recorded data covers more states.
 - [ ] 2.3 `max` loop: return and deposit when inventory full, pickaxe low, food low, or night + surface
-- [ ] 2.4 **Capacity benchmark (before any eval):** raise bot count until server TPS < 19 or
+- [x] 2.4 **Capacity benchmark (before any eval):** raise bot count until server TPS < 19 or
       CPU > 85%; set N to the last good value; rewrite the Budget table with measured N,
-      run length and restore overhead
+      run length and restore overhead.
+      **Measured** (`node bot/bench.js 4,8,12,16 8`): N=4/8/12 pass (min TPS 20/19.8/19.2, CPU median
+      7/11/13%), N=16 fails (min TPS 17.6). **N = 12**; the limit is server TPS, not CPU.
 - [ ] 2.5 Eval harness at that N: fresh spawn → runs on a slot set → success rate,
       diamonds/hour, deaths/hour, stuck rate, 95% CI. Tune against **dev slots 100–199**;
       run the held-out slots 0–99 once for the gate
