@@ -60,6 +60,11 @@ const WEAPONS = ['netherite_sword', 'diamond_sword', 'iron_sword', 'stone_sword'
   'netherite_axe', 'diamond_axe', 'iron_axe', 'stone_axe', 'golden_axe', 'wooden_axe', 'wooden_pickaxe', 'stone_pickaxe']
 const SHELTER_MIN = 6
 const SHELTER_WAIT_MS = 30000
+const DAWN_WAIT_MS = 150000
+const REST_MS = 60000
+const REST_HEALTH = 14
+const NIGHT_START = 13000
+const NIGHT_END = 23000
 const FIGHT_RANGE = 4
 const FIGHT_MS = 15000
 const SAFE_HEALTH = 16
@@ -1040,6 +1045,15 @@ async function sealRoof(bot, feet) {
   for (const [dx, dz] of DIRS) if (await seal(bot, feet.offset(dx, 2, dz))) return seal(bot, roof)
 }
 
+const isNight = (bot) => bot.time.timeOfDay >= NIGHT_START && bot.time.timeOfDay < NIGHT_END
+
+// What a sealed bot waits for. `holds`: if the wait runs out without `done`, stay sealed instead of digging out.
+const SHELTER_WAITS = {
+  threat: { ms: SHELTER_WAIT_MS, done: safeToLeave },
+  dawn: { ms: DAWN_WAIT_MS, done: (bot) => !isNight(bot), holds: true },
+  rest: { ms: REST_MS, done: (bot) => bot.health >= REST_HEALTH },
+}
+
 const shelterCells = (feet) => [0, 1].flatMap(dy => DIRS.map(([dx, dz]) => feet.offset(dx, dy, dz)))
 const sealed = (bot, feet) => [...shelterCells(feet), feet.offset(0, 2, 0)].every(c => isSolid(bot.blockAt(c)))
 
@@ -1065,13 +1079,16 @@ async function openSide(bot, feet, dir) {
   throw new Fail('no_exit')
 }
 
-// Walls the bot into a 1x1x2 cell, waits out the danger, then digs out toward dir (any side if that one is unsafe).
-async function shelter(bot, dir = 0) {
+// Walls the bot into a 1x1x2 cell, waits (`until`: 'threat' = the danger passes, 'dawn', 'rest' = health back),
+// then digs out toward dir (any side if that one is unsafe).
+async function shelter(bot, dir = 0, until = 'threat') {
   if (placeableCount(bot) < SHELTER_MIN) return flee(bot)
   const feet = bot.entity.position.floored()
   await wall(bot, feet)
   if (!sealed(bot, feet)) throw new Fail('not_sealed')
-  await poll(bot, () => safeToLeave(bot), SHELTER_WAIT_MS)
+  const wait = SHELTER_WAITS[until]
+  const done = await poll(bot, () => wait.done(bot), wait.ms)
+  if (wait.holds && !done) return
   await openSide(bot, feet, dir)
   if (nearestHostile(bot)) throw new Fail('hostile_waiting')
 }
@@ -1167,4 +1184,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal }

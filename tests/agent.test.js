@@ -118,3 +118,12 @@ test('remember: two dig_down failures without descent arm a relocation, which re
   remember(run, { skill: 'explore', args: [{ mode: 'branch' }], relocate: true }, { ok: false, reason: 'not_found' })
   assert.deepStrictEqual([run.memory.digFails, run.memory.relocations, run.memory.leg], [0, 1, 0])
 })
+
+test('remember: keyed optional waits count under their key and do not trip the shelter pause; night digs are counted', () => {
+  const run = { memory: { optionalFails: {}, shelters: 0, noShelter: 0 } }
+  const dawn = { skill: 'shelter', args: [1, 'dawn'], optional: true, key: 'dawn' }
+  for (let i = 0; i < 3; i++) remember(run, dawn, { ok: false, reason: 'not_sealed' })
+  assert.deepStrictEqual([run.memory.optionalFails, run.memory.noShelter], [{ dawn: 3 }, 0])
+  remember(run, { skill: 'dig_down', args: [66], key: 'night_dig' }, { ok: true })
+  assert.strictEqual(run.memory.nightDigs, 1)
+})

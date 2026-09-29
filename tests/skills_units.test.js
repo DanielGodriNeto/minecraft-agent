@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -332,6 +332,40 @@ test('shelter: fewer than six placeable blocks falls back to flee without placin
   const result = await run(bot, () => SKILLS.shelter(bot, 0), false)
   assert.strictEqual(result.ok, true)
   assert.strictEqual(placed.size, 0)
+})
+
+test('shelter dawn: digs out once it is day, stays sealed while it is still night', async () => {
+  const day = shelterBot()
+  day.bot.time = { timeOfDay: 1000 }
+  assert.strictEqual((await run(day.bot, () => SKILLS.shelter(day.bot, 1, 'dawn'), false)).ok, true)
+  assert.strictEqual(day.dug.size, 2)
+  const dark = shelterBot()
+  dark.bot.time = { timeOfDay: 14000 }
+  const { ms } = SHELTER_WAITS.dawn
+  SHELTER_WAITS.dawn.ms = 30
+  try {
+    assert.strictEqual((await run(dark.bot, () => SKILLS.shelter(dark.bot, 1, 'dawn'), false)).ok, true)
+  } finally {
+    SHELTER_WAITS.dawn.ms = ms
+  }
+  assert.strictEqual(dark.dug.size, 0)
+})
+
+test('shelter rest: leaves once health is back, and after the wait even if it is not', async () => {
+  const healed = shelterBot()
+  healed.bot.health = 15
+  await run(healed.bot, () => SKILLS.shelter(healed.bot, 1, 'rest'), false)
+  assert.strictEqual(healed.dug.size, 2)
+  const hurt = shelterBot()
+  hurt.bot.health = 5
+  const { ms } = SHELTER_WAITS.rest
+  SHELTER_WAITS.rest.ms = 30
+  try {
+    await run(hurt.bot, () => SKILLS.shelter(hurt.bot, 1, 'rest'), false)
+  } finally {
+    SHELTER_WAITS.rest.ms = ms
+  }
+  assert.strictEqual(hurt.dug.size, 2)
 })
 
 test('shelter: is cancellation-aware while walling in', async () => {

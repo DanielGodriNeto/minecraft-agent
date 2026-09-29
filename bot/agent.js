@@ -1,5 +1,5 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
-const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
+const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
 const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 
 const STUCK_FAILURES = 3
@@ -54,7 +54,8 @@ function observe(bot, run) {
     hasFood: bot.inventory.items().some(i => bot.registry.foodsByName[i.name]),
     y: Math.floor(pos.y),
     surfaceY: run.home.y,
-    isNight: bot.time.timeOfDay >= 13000 && bot.time.timeOfDay < 23000,
+    isNight: isNight(bot),
+    enclosed: sealed(bot, pos.floored()),
     hostileNear: nearestHostile(bot) !== null,
     hostileClose: nearestHostile(bot, FIGHT_RANGE) !== null,
     canShelter: placeableCount(bot) >= SHELTER_MIN,
@@ -79,7 +80,7 @@ function observe(bot, run) {
 // Sheltering again and again next to a hostile that never leaves achieves nothing: after a few in a row the planner fights instead.
 function trackShelter(memory, action) {
   if (memory.noShelter > 0) memory.noShelter--
-  if (action.skill !== 'shelter') {
+  if (action.skill !== 'shelter' || action.key) {
     memory.shelters = 0
     return
   }
@@ -105,11 +106,12 @@ function trackDigging(memory, action, result) {
 function remember(run, action, result) {
   trackShelter(run.memory, action)
   trackDigging(run.memory, action, result)
+  if (action.key === 'night_dig') run.memory.nightDigs = (run.memory.nightDigs ?? 0) + 1
   run.memory.drownings = result.reason === 'drowning' ? (run.memory.drownings ?? 0) + 1 : 0
   if (result.ok) return
   if (action.optional) {
     const fails = run.memory.optionalFails
-    const key = action.args[0] ?? action.skill
+    const key = action.key ?? action.args[0] ?? action.skill
     fails[key] = (fails[key] ?? 0) + 1
   }
   if (action.skill !== 'explore' || action.relocate) return

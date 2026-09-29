@@ -48,6 +48,13 @@ const FULL_FOOD = 20
 const DROWN_RISE = 4
 const FIGHT_HEALTH = 8
 const MAX_DIG_FAILS = 2
+const MAX_WAIT_FAILS = 4
+const MAX_NIGHT_DIGS = 6
+const NIGHT_DEPTH = 4 // below the surface with a pickaxe; by hand it is HAND_DEPTH
+const HAND_DEPTH = 3
+const NIGHT_BAND = 12 // shallower than this and underground at night counts as the night hole
+const NIGHT_WAIT_MIN_MS = 15 * 60000 // closer to the deadline than this, a diamond trip home does not wait for dawn
+const REST_BELOW = 8
 const RELOCATE_BLOCKS = 8
 
 // Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
@@ -180,6 +187,32 @@ function stickStock(s) {
   return atSurface(s) && (s.inv.stick ?? 0) < SURFACE_STICKS ? obtain(s, 'stick', SURFACE_STICKS) : null
 }
 
+const underground = (s) => s.y < s.surfaceY - 2
+const waitFails = (s, key) => s.memory.optionalFails?.[key] ?? 0
+
+// Sealed into a cell until `until` ('dawn' or 'rest'); counted as optional under its own key so a cell that never seals is dropped.
+function holdUp(s, until) {
+  if (!s.canShelter || waitFails(s, until) >= MAX_WAIT_FAILS) return null
+  const dir = atSurface(s) ? s.memory.surfaceDir : s.memory.baseDir
+  return { ...act('shelter', dir, until), optional: true, key: until }
+}
+
+// Hurt, alone and below ground: regenerate in a sealed cell (needs food >= 18, so eating comes first).
+function restStep(s) {
+  if (s.health >= REST_BELOW || s.hostileNear || !underground(s) || s.food <= EAT_AT) return null
+  return holdUp(s, 'rest')
+}
+
+// The night belongs underground: from the surface dig a short shaft (by hand if there is no pickaxe), then wait for dawn.
+function nightStep(s) {
+  if (!s.isNight || has(s, 'diamond') || has(s, 'iron_pickaxe')) return null
+  if (!underground(s)) {
+    if ((s.memory.digFails ?? 0) >= MAX_DIG_FAILS || (s.memory.nightDigs ?? 0) >= MAX_NIGHT_DIGS) return null
+    return { ...act('dig_down', s.surfaceY - (pickaxeCount(s) > 0 ? NIGHT_DEPTH : HAND_DEPTH)), key: 'night_dig' }
+  }
+  return s.y >= s.surfaceY - NIGHT_BAND ? holdUp(s, 'dawn') : null
+}
+
 // Walled in when there are blocks for it, otherwise run. The exit side follows the direction the bot was heading.
 function takeCover(s) {
   if (!s.canShelter) return act('flee')
@@ -198,7 +231,7 @@ function standGround(s) {
 // A hostile in reach gets fought first: sealing in or running with it adjacent only gives it free hits.
 function dangerStep(s) {
   if (s.drowning) return act('go_up', s.y + DROWN_RISE)
-  if (!s.hostileNear) return null
+  if (!s.hostileNear || s.enclosed) return null
   if (s.hostileClose && s.health >= FIGHT_HEALTH) return act('fight')
   const threatened = s.recentlyAttacked || s.health < s.params.fleeHealth
     || (s.isNight && s.y >= s.surfaceY - 2 && !surfaceWork(s))
@@ -221,10 +254,14 @@ function nextAction(s) {
   if (danger) return danger
   const food = foodStep(s)
   if (food) return food
+  const waiting = restStep(s) ?? nightStep(s)
+  if (waiting) return waiting
   const junk = junkAction(s)
   if (junk) return junk
   if (shouldReturn(s)) {
     if (s.distHome <= 4) return act('deposit', s.home)
+    const dawn = s.isNight && underground(s) && !(s.msLeft < NIGHT_WAIT_MIN_MS) ? holdUp(s, 'dawn') : null
+    if (dawn) return dawn
     if (s.y < s.surfaceY - 8) return act('go_up', s.surfaceY)
     return act('return_home', s.home)
   }

@@ -277,3 +277,53 @@ test('planner: a stone sword follows the stone pickaxe when stone and a stick ar
   const failed = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: { stone_sword: 2 } }
   assert.notStrictEqual(nextAction(state({ inv: { ...armed, cobblestone: 2 }, memory: failed })).args[0], 'stone_sword')
 })
+
+test('planner: enclosed in a sealed cell, a close hostile is ignored', () => {
+  assert.notStrictEqual(nextAction(state({ hostileNear: true, hostileClose: true, enclosed: true })).skill, 'fight')
+})
+
+const night = { isNight: true, canShelter: true }
+const shaft = (s) => nextAction(state({ ...night, ...s }))
+
+test('planner: at night on the surface it digs a short shaft, by hand without a pickaxe', () => {
+  assert.deepStrictEqual(shaft({ inv: { wooden_pickaxe: 1 } }), { skill: 'dig_down', args: [66], key: 'night_dig' })
+  assert.deepStrictEqual(shaft({ inv: {} }), { skill: 'dig_down', args: [67], key: 'night_dig' })
+  assert.notStrictEqual(shaft({ isNight: false, inv: {} }).skill, 'dig_down')
+})
+
+test('planner: the night shaft is skipped with an iron pickaxe, diamonds, failed digs or too many earlier shafts', () => {
+  assert.strictEqual(shaft({ inv: { iron_pickaxe: 1 } }).key, undefined)
+  assert.strictEqual(shaft({ inv: { diamond: 1, stone_pickaxe: 1 }, distHome: 200 }).key, undefined)
+  const memory = (extra) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, ...extra })
+  assert.notStrictEqual(shaft({ inv: {}, memory: memory({ digFails: 2 }) }).key, 'night_dig')
+  assert.notStrictEqual(shaft({ inv: {}, memory: memory({ nightDigs: 6 }) }).key, 'night_dig')
+})
+
+test('planner: in the night shaft it seals in until dawn, unless it cannot, has failed too often, or is deep', () => {
+  assert.deepStrictEqual(shaft({ y: 65 }), { skill: 'shelter', args: [0, 'dawn'], optional: true, key: 'dawn' })
+  assert.deepStrictEqual(shaft({ y: 65, memory: { leg: 0, baseDir: 0, surfaceDir: 3, surfaceLeg: 0 } }).args, [3, 'dawn'])
+  assert.notStrictEqual(shaft({ y: 65, canShelter: false }).skill, 'shelter')
+  assert.notStrictEqual(shaft({ y: 65, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: { dawn: 4 } } }).skill, 'shelter')
+  assert.notStrictEqual(shaft({ y: 40 }).skill, 'shelter')
+  assert.notStrictEqual(shaft({ y: 65, isNight: false }).skill, 'shelter')
+})
+
+test('planner: with diamonds underground at night it waits for dawn before the trip home, unless time is short', () => {
+  const loaded = { inv: { iron_pickaxe: 1, diamond: 1 }, y: -58, distHome: 200 }
+  assert.deepStrictEqual(shaft(loaded).args, [0, 'dawn'])
+  assert.strictEqual(shaft({ ...loaded, msLeft: 10 * 60000 }).skill, 'go_up')
+  assert.strictEqual(shaft({ ...loaded, isNight: false }).skill, 'go_up')
+  assert.strictEqual(shaft({ ...loaded, canShelter: false }).skill, 'go_up')
+  assert.strictEqual(shaft({ ...loaded, distHome: 2, y: 60 }).skill, 'deposit')
+})
+
+test('planner: hurt and alone underground it rests sealed in, once fed', () => {
+  const hurt = { health: 5, y: 40, canShelter: true, inv: { iron_pickaxe: 1 } }
+  assert.deepStrictEqual(nextAction(state(hurt)), { skill: 'shelter', args: [0, 'rest'], optional: true, key: 'rest' })
+  assert.notStrictEqual(nextAction(state({ ...hurt, health: 8 })).skill, 'shelter')
+  assert.notStrictEqual(nextAction(state({ ...hurt, y: 70 })).skill, 'shelter')
+  assert.notStrictEqual(nextAction(state({ ...hurt, canShelter: false })).skill, 'shelter')
+  assert.notStrictEqual(nextAction(state({ ...hurt, food: 16 })).skill, 'shelter')
+  assert.strictEqual(nextAction(state({ ...hurt, food: 16, hasFood: true })).skill, 'eat')
+  assert.notStrictEqual(nextAction(state({ ...hurt, hostileNear: true })).args?.[1], 'rest')
+})
