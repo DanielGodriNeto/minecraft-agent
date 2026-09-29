@@ -1196,18 +1196,21 @@ async function freeHead(bot) {
 }
 
 const MAX_HOME_FAILS = 2
+const UNREACHABLE = new Set(['no_path', 'timeout', 'not_reached'])
 
 async function returnHome(bot, home) {
   const nearHome = (p) => Math.hypot(p.x - home.x, p.z - home.z) <= HOME_RANGE && p.y >= home.y - HOME_SLACK
   await followTrail(bot, nearHome)
   const ms = nearHome(bot.entity.position) ? HOME_MS : FAR_HOME_MS
+  const memory = bot.objectiveRun?.memory ?? {}
   try {
     await goto(bot, new goals.GoalNear(home.x, home.y, home.z, 3), ms)
-    bot.homeFails = 0
+    memory.homeFails = 0
   } catch (e) {
-    bot.homeFails = (bot.homeFails ?? 0) + 1
-    if (bot.homeFails < MAX_HOME_FAILS || !findItem(bot, 'chest')) throw e
-    bot.homeFails = 0
+    if (!(e instanceof Fail && UNREACHABLE.has(e.reason))) throw e
+    memory.homeFails = (memory.homeFails ?? 0) + 1
+    if (memory.homeFails < MAX_HOME_FAILS || !findItem(bot, 'chest')) throw e
+    memory.homeFails = 0
     await adoptChest(bot)
   }
 }

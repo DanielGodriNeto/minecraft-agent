@@ -208,6 +208,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
   bot.runDeadline = deadline
   const onDeath = () => {
     run.deaths++
+    run.memory.homeFails = 0
     bot.trail = [] // respawn is at home
     stopPathing(bot) // a dead bot must not keep chasing its old goal
   }

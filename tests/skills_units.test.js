@@ -768,7 +768,7 @@ test('return_home: the second failed trip with a chest in the pack places it as 
   const { bot, placed } = shelterBot()
   const items = bot.inventory.items
   bot.inventory.items = () => [...items(), { name: 'chest', count: 1, type: 2 }]
-  bot.objectiveRun = { home: { x: 50, y: 10, z: 50 } }
+  bot.objectiveRun = { home: { x: 50, y: 10, z: 50 }, memory: {} }
   bot.trail = []
   bot.pathfinder.goto = async () => { throw new Error('No path') }
   const home = { x: 50, y: 10, z: 50 }
@@ -778,4 +778,32 @@ test('return_home: the second failed trip with a chest in the pack places it as 
   const second = await run(bot, () => SKILLS.return_home(bot, home), false)
   assert.strictEqual(second.ok, true)
   assert.strictEqual(placed.size, 1)
+})
+
+function homeBot() {
+  const { bot, placed } = shelterBot()
+  const items = bot.inventory.items
+  bot.inventory.items = () => [...items(), { name: 'chest', count: 1, type: 2 }]
+  bot.objectiveRun = { home: { x: 50, y: 10, z: 50 }, memory: {} }
+  bot.trail = []
+  return { bot, placed }
+}
+const HOME = { x: 50, y: 10, z: 50 }
+
+test('return_home: a success between two failures resets the count, so no chest is adopted', async () => {
+  const { bot, placed } = homeBot()
+  bot.pathfinder.goto = async () => { throw new Error('No path') }
+  await run(bot, () => SKILLS.return_home(bot, HOME), false)
+  bot.pathfinder.goto = async () => {}
+  assert.strictEqual((await run(bot, () => SKILLS.return_home(bot, HOME), false)).ok, true)
+  bot.pathfinder.goto = async () => { throw new Error('No path') }
+  assert.strictEqual((await run(bot, () => SKILLS.return_home(bot, HOME), false)).ok, false)
+  assert.strictEqual(placed.size, 0)
+})
+
+test('return_home: cancellations do not count as unreachable', async () => {
+  const { bot, placed } = homeBot()
+  bot.pathfinder.goto = async () => { throw new Fail('interrupted') }
+  for (let i = 0; i < 3; i++) await run(bot, () => SKILLS.return_home(bot, HOME), false)
+  assert.strictEqual(placed.size, 0)
 })
