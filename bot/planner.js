@@ -16,6 +16,7 @@ const RECIPES = {
   stone_sword: { out: 1, in: { stone: 2, stick: 1 }, table: true },
   iron_pickaxe: { out: 1, in: { iron_ingot: 3, stick: 2 }, table: true },
   furnace: { out: 1, in: { stone: 8 }, table: true },
+  chest: { out: 1, in: { planks: 8 }, table: true },
 }
 // Where raw materials come from: blocks to mine, and how to find them when none is visible.
 const SOURCES = {
@@ -33,7 +34,11 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 
 const PURE_JUNK = ['dirt', 'gravel', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
 const STONE_JUNK = ['cobblestone', 'cobbled_deepslate']
-const KEEP_STONE = 16
+// Backup materials held before a descent, so recovery skills (table, pickaxe, pillar, shelter, adoptChest) never lack them.
+// planks counts logs as four; stone is cobblestone for pillars, scaffolds and a shelter seal; food is any edible item.
+const RESERVE = { planks: 16, chest: 1, stone: 32, food: 6 }
+const MAX_RESTOCK_STEPS = 12 // per item and trip, so restocking can never become a loop
+const MAX_RESTOCK_FAILS = 2
 const RETURN_BEFORE_MS = 8 * 60000
 const PICKAXES = ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe']
 const SWORDS = ['stone_sword', 'iron_sword', 'diamond_sword', 'netherite_sword']
@@ -169,7 +174,7 @@ function shouldReturn(s) {
 function junkAction(s) {
   if (s.freeSlots > 2) return null
   if (PURE_JUNK.some(name => has(s, name))) return act('toss', PURE_JUNK, 0)
-  if (STONE_JUNK.some(name => (s.inv[name] ?? 0) > KEEP_STONE)) return act('toss', STONE_JUNK, KEEP_STONE)
+  if (STONE_JUNK.some(name => (s.inv[name] ?? 0) > RESERVE.stone)) return act('toss', STONE_JUNK, RESERVE.stone)
   return null
 }
 
@@ -236,6 +241,26 @@ function takeCover(s) {
   return act('shelter', atSurface(s) ? s.memory.surfaceDir : s.memory.baseDir)
 }
 
+const restockOpen = (s, item) => {
+  const { steps = 0, fails = 0 } = s.memory.restock?.[item] ?? {}
+  return steps < MAX_RESTOCK_STEPS && fails < MAX_RESTOCK_FAILS
+}
+
+// With the iron pickaxe and a calm surface, top the reserve up from what is in view, most valuable first:
+// wood (it makes the chest, table and sticks), the chest, stone, food. Anything out of reach is skipped, never searched for.
+function reserveStep(s) {
+  if (!has(s, 'iron_pickaxe') || !atSurface(s) || s.hostileNear || s.isNight || s.msLeft < RETURN_BEFORE_MS) return null
+  const wood = count(s, 'planks') + 4 * count(s, 'log')
+  const steps = [
+    ['planks', wood < RESERVE.planks && s.visible.log, () => mineAct('log')],
+    ['chest', !has(s, 'chest') && wood >= RECIPES.chest.in.planks, () => obtain(s, 'chest', 1)],
+    ['stone', count(s, 'stone') < RESERVE.stone && s.visible.stone, () => mineAct('stone')],
+    ['food', (s.foodCount ?? 0) < RESERVE.food && s.animalNear, () => ({ ...act('hunt'), optional: true })],
+  ]
+  const [item, , build] = steps.find(([key, needed]) => needed && restockOpen(s, key)) ?? []
+  return item ? { ...build(), restock: item } : null
+}
+
 // Surface work is the tech tree before the iron pickaxe, or a trip home.
 const surfaceWork = (s) => !has(s, 'iron_pickaxe') || shouldReturn(s)
 
@@ -285,6 +310,8 @@ function nextAction(s) {
     return act('return_home', s.home)
   }
   if (s.visible.diamond && has(s, 'iron_pickaxe')) return mineAct('diamond')
+  const restock = reserveStep(s)
+  if (restock) return restock
   if (!has(s, 'iron_pickaxe')) {
     // Stock wood while trees are in view: tables and sticks are needed again underground.
     if (s.visible.log && count(s, 'log') + count(s, 'planks') / 4 < s.params.woodStock) return mineAct('log')
@@ -298,4 +325,4 @@ function nextAction(s) {
   return swordStep(s) ?? spareStep(s) ?? gather(s, 'diamond')
 }
 
-module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS }
+module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE }

@@ -53,6 +53,7 @@ function observe(bot, run) {
     health: bot.health,
     food: bot.food,
     hasFood: bot.inventory.items().some(i => bot.registry.foodsByName[i.name]),
+    foodCount: bot.inventory.items().reduce((n, i) => n + (bot.registry.foodsByName[i.name] ? i.count : 0), 0),
     y: Math.floor(pos.y),
     surfaceY: run.surfaceY,
     isNight: isNight(bot),
@@ -131,7 +132,15 @@ function failBranchLeg(memory, result) {
   memory.hazardUp = true
 }
 
+// Restock steps and failures per reserve item; the planner stops offering an item once either budget is spent.
+function trackRestock(memory, action, result) {
+  const counts = ((memory.restock ??= {})[action.restock] ??= { steps: 0, fails: 0 })
+  counts.steps++
+  if (!result.ok) counts.fails++
+}
+
 function remember(run, action, result) {
+  if (action.restock) trackRestock(run.memory, action, result)
   trackShelter(run.memory, action)
   trackDigging(run.memory, action, result)
   if (action.key === 'night_dig') run.memory.nightDigs = (run.memory.nightDigs ?? 0) + 1
@@ -218,6 +227,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
   const onDeath = () => {
     run.deaths++
     run.memory.homeFails = 0
+    run.memory.restock = {}
     bot.trail = [] // respawn is at home
     stopPathing(bot) // a dead bot must not keep chasing its old goal
   }
@@ -246,6 +256,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       const result = { ...await runSkill(bot, action.skill, ...action.args), descended: bot.entity?.position.y < yBefore - 1 }
       run.decisions++
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
+      if (action.skill === 'deposit' && result.ok) run.memory.restock = {} // a new trip gets a fresh restock budget
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
       remember(run, action, result)
       resetTrail(bot, run.home)

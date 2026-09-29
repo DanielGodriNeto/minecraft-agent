@@ -192,3 +192,11 @@ test('stuck: a successful toss neither resets the failure count nor looks like p
   assert.strictEqual(track({ ok: true }, { skill: 'toss' }, before), false)
   assert.strictEqual(track({ ok: false }, failed, {}), true)
 })
+
+test('remember: restock steps and failures are counted per item, on the item that was restocked', () => {
+  const run = { memory: { optionalFails: {} } }
+  remember(run, { skill: 'mine', args: [], restock: 'stone' }, { ok: true })
+  remember(run, { skill: 'mine', args: [], restock: 'stone' }, { ok: false })
+  remember(run, { skill: 'hunt', args: [], restock: 'food', optional: true }, { ok: false })
+  assert.deepStrictEqual(run.memory.restock, { stone: { steps: 2, fails: 1 }, food: { steps: 1, fails: 1 } })
+})

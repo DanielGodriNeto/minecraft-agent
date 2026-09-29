@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
-const { nextAction, DEFAULT_PARAMS } = require('../bot/planner.js')
+const { nextAction, DEFAULT_PARAMS, RESERVE } = require('../bot/planner.js')
 
 const WOODS = ['oak', 'spruce', 'birch']
 const sum = (inv, names) => names.reduce((n, k) => n + (inv[k] ?? 0), 0)
@@ -26,6 +26,7 @@ function craftable(s, item) {
   switch (item) {
     case 'stick': return planks >= 2
     case 'crafting_table': return planks >= 4
+    case 'chest': return table && planks >= 8
     case 'wooden_pickaxe': return table && planks >= 3 && sticks >= 2
     case 'stone_pickaxe': return table && sum(s.inv, STONES) >= 3 && sticks >= 2
     case 'iron_pickaxe': return table && (s.inv.iron_ingot ?? 0) >= 3 && sticks >= 2
@@ -122,7 +123,7 @@ test('planner: tosses junk only when the inventory is nearly full', () => {
   assert.strictEqual(nextAction(state({ inv: { dirt: 30 }, freeSlots: 5 })).skill, 'explore')
   assert.deepStrictEqual(nextAction(state({ inv: { dirt: 30 }, freeSlots: 2 })).args[1], 0)
   const stone = nextAction(state({ inv: { cobblestone: 40 }, freeSlots: 1 }))
-  assert.deepStrictEqual([stone.skill, stone.args[1]], ['toss', 16])
+  assert.deepStrictEqual([stone.skill, stone.args[1]], ['toss', 32])
   assert.notStrictEqual(nextAction(state({ inv: { cobblestone: 16, cobbled_deepslate: 16 }, freeSlots: 1 })).skill, 'toss')
 })
 
@@ -359,4 +360,60 @@ test('planner: after repeated branch hazards it climbs a few blocks before minin
 test('planner: without a pickaxe or wood the bot looks for logs instead of digging down', () => {
   const action = nextAction(state({ inv: { dirt: 20 }, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, digFails: 1, lastDigReason: 'no_tool' } }))
   assert.deepStrictEqual([action.skill, action.args[0].mode], ['explore', 'surface'])
+})
+
+// Reserve kit: backup materials held before a descent, restocked from what is close, never at the cost of a stuck loop.
+const kit = { iron_pickaxe: 1, stone_sword: 1, stone_pickaxe: 1, oak_planks: 16, cobblestone: 32, chest: 1, stick: 8 }
+const reserved = (over = {}) => state({ inv: kit, foodCount: 6, pickLeft: 100, ...over })
+const nearby = { visible: { log: true, stone: true }, animalNear: true }
+const memoryWith = (restock) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, restock })
+
+test('reserve: a full kit goes straight to the descent', () => {
+  assert.strictEqual(nextAction(reserved({ ...nearby })).skill, 'dig_down')
+})
+
+test('reserve: each missing item schedules its restock, wood first then chest, stone, food', () => {
+  const everything = { ...nearby, foodCount: 0 }
+  const missing = { iron_pickaxe: 1, stone_sword: 1, stone_pickaxe: 1, stick: 8 }
+  const first = (inv, over = {}) => nextAction(state({ inv, pickLeft: 100, ...everything, ...over }))
+  assert.deepStrictEqual([first(missing).skill, first(missing).restock], ['mine', 'planks'])
+  const withWood = { ...missing, oak_planks: 16 }
+  assert.deepStrictEqual([first(withWood, { tableNear: true }).skill, first(withWood, { tableNear: true }).args[0], first(withWood, { tableNear: true }).restock], ['craft', 'chest', 'chest'])
+  const withChest = { ...withWood, chest: 1 }
+  assert.deepStrictEqual([first(withChest).skill, first(withChest).restock], ['mine', 'stone'])
+  const withStone = { ...withChest, cobblestone: 32 }
+  assert.deepStrictEqual([first(withStone).skill, first(withStone).restock], ['hunt', 'food'])
+  assert.strictEqual(first({ ...withStone }, { foodCount: 6 }).skill, 'dig_down')
+})
+
+test('reserve: logs count as four planks each', () => {
+  const inv = { ...kit, oak_planks: 0, oak_log: 4 }
+  assert.strictEqual(nextAction(reserved({ inv, ...nearby })).skill, 'dig_down')
+})
+
+test('reserve: an item that failed twice, or used its step budget, is skipped and the descent goes on', () => {
+  const s = (restock) => reserved({ ...nearby, foodCount: 0, inv: { ...kit, cobblestone: 0, oak_planks: 16 }, memory: memoryWith(restock) })
+  assert.strictEqual(nextAction(s({ stone: { steps: 1, fails: 1 } })).restock, 'stone')
+  assert.strictEqual(nextAction(s({ stone: { steps: 2, fails: 2 }, food: { steps: 12, fails: 0 } })).skill, 'dig_down')
+})
+
+test('reserve: nothing obtainable nearby still descends', () => {
+  const s = state({ inv: { iron_pickaxe: 1, stone_sword: 1 }, foodCount: 0 })
+  assert.strictEqual(nextAction(s).skill, 'dig_down')
+})
+
+test('reserve: no restock with a hostile near, at night, underground, or before the iron pickaxe', () => {
+  const missing = { inv: { iron_pickaxe: 1 }, foodCount: 0, ...nearby }
+  assert.strictEqual(nextAction(state({ ...missing })).restock, 'planks')
+  assert.notStrictEqual(nextAction(state({ ...missing, hostileNear: true })).restock, 'planks')
+  assert.notStrictEqual(nextAction(state({ ...missing, isNight: true })).restock, 'planks')
+  assert.strictEqual(nextAction(state({ ...missing, y: 20 })).restock, undefined)
+  assert.strictEqual(nextAction(state({ ...missing, inv: { stone_pickaxe: 1 } })).restock, undefined)
+})
+
+test('reserve: tossing never cuts stone below the reserve, and a deposit only carries diamonds', () => {
+  const toss = nextAction(state({ inv: { cobblestone: 40 }, freeSlots: 1 }))
+  assert.deepStrictEqual([toss.skill, toss.args[1]], ['toss', RESERVE.stone])
+  assert.notStrictEqual(nextAction(state({ inv: { cobblestone: RESERVE.stone }, freeSlots: 1 })).skill, 'toss')
+  assert.deepStrictEqual(nextAction(state({ inv: { diamond: 1, chest: 1, cobblestone: 64 }, distHome: 1 })), { skill: 'deposit', args: [{ x: 0, y: 70, z: 0 }] })
 })
