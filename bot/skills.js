@@ -30,6 +30,7 @@ const FAR_HOME_MS = 120000
 const MAX_TUNNEL_OUTS = 2
 const HOSTILE_RANGE = 16
 const CANCEL_GRACE_MS = 2000
+const TRAIL_STALE = 8
 const PICKUP_REACH_UP = 1.5
 const CANOPY = /_(leaves|log|wood)$/
 
@@ -369,6 +370,12 @@ function resetTrail(bot, home) {
   if (p && Math.hypot(p.x - home.x, p.y - home.y, p.z - home.z) < HOME_RESET) bot.trail = []
 }
 
+// A trail whose end is far from the bot (teleport, respawn, walked elsewhere) would send it the wrong way.
+function resetStaleTrail(bot) {
+  const last = bot.trail?.at(-1)
+  if (last && bot.entity.position.distanceTo(last) > TRAIL_STALE) bot.trail = []
+}
+
 // A repeated cell means the bot went in a circle: cut everything between the two visits.
 function dropLoops(trail) {
   const kept = []
@@ -520,6 +527,7 @@ const mostCommon = (values) => {
 }
 
 async function digDown(bot, targetY) {
+  resetStaleTrail(bot)
   let d = 0
   let tunnels = 0
   while (Math.floor(bot.entity.position.y) > targetY) {
@@ -543,6 +551,7 @@ async function goUp(bot, targetY) {
   const high = (p) => Math.floor(p.y) >= targetY
   await followTrail(bot, high)
   if (!high(bot.entity.position)) await goto(bot, new goals.GoalY(targetY), 120000)
+  bot.trail = []
 }
 
 // Server recipe book: displayId -> result item. Sent at login and on every unlock, so this must be
@@ -738,4 +747,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail }
