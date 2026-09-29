@@ -1,7 +1,8 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
-const { cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot } = require('../bot/skills.js')
+const { EventEmitter } = require('node:events')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -76,4 +77,45 @@ test('placeSpot: skips flower beds and spots the server refused', () => {
   assert.deepStrictEqual(placeSpot(bot(air({ '1,10,0': 'pink_petals' })), feet), new Vec3(0, 10, 1))
   assert.deepStrictEqual(placeSpot(bot(air(), new Set(['(1, 10, 0)'])), feet), new Vec3(0, 10, 1))
   assert.strictEqual(placeSpot(bot(world()), feet), undefined)
+})
+
+function fakeBot(hostileAt = 10) {
+  const bot = new EventEmitter()
+  return Object.assign(bot, {
+    health: 20,
+    entity: { position: new Vec3(0, 10, 0) },
+    pathfinder: { setGoal() {} },
+    clearControlStates() {},
+    stopDigging() {},
+    nearestEntity: (match) => [{ type: 'hostile', position: new Vec3(hostileAt, 10, 0) }].find(match) ?? null,
+  })
+}
+
+const spin = async (bot) => { for (;;) { checkCancelled(bot); await new Promise(r => setTimeout(r, 1)) } }
+
+test('run: a hit from a hostile 10 blocks away cancels the skill loop and reports attacked', async () => {
+  const bot = fakeBot()
+  let stopped = false
+  const result = await run(bot, async () => {
+    setTimeout(() => { bot.health = 10; bot.emit('health') }, 5)
+    try { await spin(bot) } finally { stopped = true }
+  }, true)
+  assert.strictEqual(result.reason, 'attacked')
+  assert.strictEqual(stopped, true)
+  assert.strictEqual(bot.skillCancel, null)
+})
+
+test('run: damage is ignored for non-interruptible skills and when no hostile is in range', async () => {
+  const hit = async (bot) => { bot.health = 10; bot.emit('health') }
+  assert.strictEqual((await run(fakeBot(), async () => {}, true)).ok, true)
+  for (const [bot, interruptible] of [[fakeBot(), false], [fakeBot(50), true]]) {
+    const result = await run(bot, async () => { await hit(bot) }, interruptible)
+    assert.strictEqual(result.ok, true)
+  }
+})
+
+test('checkCancelled: throws the stored reason only while the token is cancelled', () => {
+  assert.doesNotThrow(() => checkCancelled({}))
+  assert.doesNotThrow(() => checkCancelled({ skillCancel: { cancelled: false } }))
+  assert.throws(() => checkCancelled({ skillCancel: { cancelled: true, reason: 'timeout' } }), { reason: 'timeout' })
 })

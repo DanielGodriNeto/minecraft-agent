@@ -29,7 +29,7 @@ const HOME_MS = 30000
 const FAR_HOME_MS = 120000
 const MAX_TUNNEL_OUTS = 2
 const HOSTILE_RANGE = 16
-const ATTACK_RANGE = 6
+const CANCEL_GRACE_MS = 2000
 
 class Fail extends Error {
   constructor(reason, detail) { super(reason); this.reason = reason; this.detail = detail }
@@ -65,42 +65,65 @@ async function goto(bot, goal, ms = PATH_MS) {
   }
 }
 
+// Manual loops call this every iteration: run() cancels a skill by flagging its token, since a timed-out
+// or interrupted skill's promise is abandoned but its loops would otherwise keep driving the bot.
+function checkCancelled(bot) {
+  if (bot.skillCancel?.cancelled) throw new Fail(bot.skillCancel.reason)
+}
+
 async function poll(bot, fn, ms) {
   const end = Date.now() + ms
   while (Date.now() < end) {
+    checkCancelled(bot)
     if (fn()) return true
     await bot.waitForTicks(2)
   }
   return fn()
 }
 
+// Gives an abandoned skill a moment to notice its cancelled token before the next skill takes the controls.
+async function settle(pending, ms) {
+  let timer
+  const grace = new Promise(resolve => { timer = setTimeout(resolve, ms) })
+  await Promise.race([pending.catch(() => {}), grace])
+  clearTimeout(timer)
+}
+
 // A skill is aborted when a hostile hurts the bot, so the planner can react (flee) instead of
 // finishing a 30 s walk while being hit. flee/eat are not interruptible.
 async function run(bot, skill, interruptible) {
   let ticks = 0
-  let attacked = false
   let lastHealth = bot.health
+  const cancel = bot.skillCancel = { cancelled: false, reason: null }
+  const abort = (reason) => {
+    cancel.cancelled = true
+    cancel.reason ??= reason
+    stopPathing(bot)
+    bot.stopDigging()
+  }
   const tick = () => { ticks++ }
   const onHealth = () => {
     const hurt = bot.health < lastHealth
     lastHealth = bot.health
-    if (!interruptible || attacked || !hurt || !nearestHostile(bot, ATTACK_RANGE)) return
-    attacked = true
-    stopPathing(bot)
-    bot.stopDigging()
+    if (!interruptible || cancel.cancelled || !hurt || !nearestHostile(bot)) return
+    abort('attacked')
   }
   bot.on('physicsTick', tick)
   bot.on('health', onHealth)
+  const pending = Promise.resolve().then(skill)
   try {
-    await withTimeout(skill(), SKILL_CAP_MS, () => { stopPathing(bot); bot.stopDigging() })
+    await withTimeout(pending, SKILL_CAP_MS, () => abort('timeout'))
     return { ok: true, reason: null, ticks }
   } catch (e) {
-    if (attacked) return { ok: false, reason: 'attacked', ticks }
+    if (cancel.reason === 'attacked') return { ok: false, reason: 'attacked', ticks }
     if (e instanceof Fail) return { ok: false, reason: e.reason, ...(e.detail && { detail: e.detail }), ticks }
     return { ok: false, reason: 'error', detail: e.message, ticks }
   } finally {
+    cancel.cancelled = true
+    if (cancel.reason) await settle(pending, CANCEL_GRACE_MS)
     bot.off('physicsTick', tick)
     bot.off('health', onHealth)
+    bot.skillCancel = null
     stopPathing(bot)
   }
 }
@@ -161,6 +184,7 @@ function toolFor(bot, block) {
 
 async function breakBlock(bot, block) {
   for (let tries = 0; tries < 5 && !OPEN.has(bot.blockAt(block.position)?.name); tries++) {
+    checkCancelled(bot)
     const current = bot.blockAt(block.position)
     if (!current.diggable) throw new Fail('undiggable')
     const tool = toolFor(bot, current)
@@ -277,6 +301,7 @@ const tunnelSafe = (bot, cells) => !cells.some(c => nearLava(bot, c)) && isSolid
 
 // Fills the hole under a landing cell from a solid neighbour of it.
 async function patchFloor(bot, landing) {
+  checkCancelled(bot)
   const spot = landing.offset(0, -1, 0)
   const item = PATCH_BLOCKS.map(n => findItem(bot, n)).find(Boolean)
   const face = FACES.find(f => f[1] !== 1 && isSolid(at(bot, spot, ...f)))
@@ -297,6 +322,7 @@ async function stepTo(bot, feet) {
   const center = feet.offset(0.5, 0, 0.5)
   bot.setControlState('sneak', false)
   for (let tick = 0; tick < STEP_TICKS && !arrived(bot, feet); tick++) {
+    checkCancelled(bot)
     await guard(bot.lookAt(center, true))
     bot.setControlState('jump', feet.y > Math.floor(bot.entity.position.y))
     bot.setControlState('forward', true)
@@ -338,6 +364,7 @@ function dropLoops(trail) {
 }
 
 async function tunnelStep(bot, cells, feet) {
+  checkCancelled(bot)
   noteTrail(bot)
   for (const c of cells) await breakBlock(bot, bot.blockAt(c))
   await moveTo(bot, feet)
@@ -346,6 +373,7 @@ async function tunnelStep(bot, cells, feet) {
 
 // Cleared again on the way back because gravel or water may have filled the old tunnel.
 async function retrace(bot, crumb) {
+  checkCancelled(bot)
   const feet = bot.entity.position.floored()
   const cells = [crumb, crumb.offset(0, 1, 0)]
   if (crumb.y > feet.y) cells.push(feet.offset(0, 1, 0), feet.offset(0, 2, 0))
@@ -357,6 +385,7 @@ async function retrace(bot, crumb) {
 async function followTrail(bot, done) {
   const trail = bot.trail = dropLoops(bot.trail ?? [])
   while (trail.length && !done(bot.entity.position)) {
+    checkCancelled(bot)
     await retrace(bot, trail.at(-1))
     trail.pop()
   }
@@ -368,6 +397,7 @@ async function followTrail(bot, done) {
 async function surfaceHop(bot, p, dir) {
   let failure
   for (const d of [dir, (dir + 1) % 4, (dir + 3) % 4]) {
+    checkCancelled(bot)
     const [dx, dz] = DIRS[d]
     try {
       return await goto(bot, new goals.GoalNearXZ(p.x + dx * 8, p.z + dz * 8, 2), HOP_MS)
@@ -380,6 +410,7 @@ async function surfaceHop(bot, p, dir) {
 
 async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64, maxAbove = null }) {
   for (let moved = 0; moved < maxBlocks; moved += mode === 'surface' ? 8 : 1) {
+    checkCancelled(bot)
     if (findVisible(bot, target, maxAbove)) return
     const p = bot.entity.position.floored()
     if (mode === 'surface') {
@@ -420,6 +451,7 @@ async function mine(bot, name, maxAbove = null) {
 // All four staircase directions refused: dig a short level tunnel to somewhere the staircase may work.
 async function tunnelOut(bot, dir) {
   for (let i = 0; i < TUNNEL_OUT; i++) {
+    checkCancelled(bot)
     const cells = tunnelCells(bot.entity.position.floored(), DIRS[dir])
     if (!tunnelSafe(bot, cells)) return
     await tunnelStep(bot, cells, cells[1])
@@ -430,6 +462,7 @@ async function digDown(bot, targetY) {
   let d = 0
   let tunnels = 0
   while (Math.floor(bot.entity.position.y) > targetY) {
+    checkCancelled(bot)
     const p = bot.entity.position.floored()
     const options = [0, 1, 2, 3].map(i => (d + i) % 4).map(dir => ({ dir, reason: stairRefusal(bot, p, DIRS[dir]) }))
     const patchable = PATCH_BLOCKS.some(n => findItem(bot, n))
@@ -646,4 +679,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot }
