@@ -106,8 +106,9 @@ function trackDigging(memory, action, result) {
   }
   if (action.relocate) {
     memory.relocations = (memory.relocations ?? 0) + 1
-    memory.relocFailed = !result.ok
-    if (result.ok) memory.digFails = 0
+    const hopped = result.ok || result.reason === 'not_found' // a surface hop never finds ore, but it did move the bot
+    memory.relocFailed = !hopped
+    if (hopped) memory.digFails = 0
     return
   }
   if (action.skill !== 'dig_down') return

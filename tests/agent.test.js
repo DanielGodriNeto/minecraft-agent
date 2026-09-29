@@ -127,6 +127,16 @@ test('remember: a failed relocation hop keeps digFails, still turns the directio
   assert.strictEqual(run.memory.relocFailed, false)
 })
 
+test('remember: a not_found relocation hop moved the bot, so it resets digFails; a hazard hop does not', () => {
+  const hop = { skill: 'explore', args: [{ mode: 'surface' }], relocate: true }
+  const run = { memory: { leg: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: {}, digFails: 2 } }
+  remember(run, hop, { ok: false, reason: 'not_found' })
+  assert.deepStrictEqual([run.memory.digFails, run.memory.relocations, run.memory.relocFailed], [0, 1, false])
+  run.memory.digFails = 2
+  remember(run, hop, { ok: false, reason: 'hazard' })
+  assert.deepStrictEqual([run.memory.digFails, run.memory.relocFailed], [2, true])
+})
+
 test('remember: finishing a hazard climb forces a relocation hop before the next dig_down', () => {
   const run = { memory: { optionalFails: {}, hazardUp: true } }
   remember(run, { skill: 'go_up', args: [-54], key: 'hazard_up' }, { ok: true })
