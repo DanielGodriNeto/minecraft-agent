@@ -1,5 +1,5 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
-const { runSkill, findVisible } = require('./skills.js')
+const { runSkill, findVisible, stopPathing } = require('./skills.js')
 const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 
 const STUCK_FAILURES = 3
@@ -50,6 +50,8 @@ function observe(bot, run) {
     distHome: pos.distanceTo(pos.clone().set(run.home.x, run.home.y, run.home.z)),
     objective: run.objective,
     deposited: run.deposited,
+    msLeft: run.deadline - Date.now(),
+    recentlyAttacked: run.recentlyAttacked,
     params: run.params,
     memory: run.memory,
   }
@@ -80,11 +82,14 @@ function stuckTracker(bot) {
 // home: storage chest position. Resolves with why the run ended.
 async function runObjective(bot, { objective, home, params = jitterParams(), deadline = Infinity, maxDeaths = 3, rand = Math.random }) {
   const run = {
-    objective, home, params, deposited: 0, deaths: 0, decisions: 0, stopped: false,
+    objective, home, params, deadline, deposited: 0, recentlyAttacked: false, deaths: 0, decisions: 0, stopped: false,
     memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4) },
   }
   bot.objectiveRun = run
-  const onDeath = () => { run.deaths++ }
+  const onDeath = () => {
+    run.deaths++
+    stopPathing(bot) // a dead bot must not keep chasing its old goal
+  }
   bot.on('death', onDeath)
   const isStuck = stuckTracker(bot)
   try {
@@ -101,11 +106,12 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
       remember(run, action, result)
-      if (isStuck(result)) return finish(run, 'stuck')
+      run.recentlyAttacked = result.reason === 'attacked'
+      if (result.reason !== 'attacked' && isStuck(result)) return finish(run, 'stuck')
     }
   } finally {
     bot.off('death', onDeath)
-    bot.objectiveRun = null
+    if (bot.objectiveRun === run) bot.objectiveRun = null
   }
 }
 
@@ -116,7 +122,7 @@ function finish(run, reason) {
 function stopObjective(bot) {
   if (!bot.objectiveRun) return false
   bot.objectiveRun.stopped = true
-  bot.pathfinder.setGoal(null)
+  stopPathing(bot)
   bot.stopDigging()
   return true
 }
