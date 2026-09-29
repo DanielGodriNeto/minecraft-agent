@@ -7,6 +7,7 @@ const req = require('node:module').createRequire(path.join(__dirname, '../bot/bo
 const { createBot } = req('./bot.js')
 const { runObjective, jitterParams } = req('./agent.js')
 const { startServer, restore } = req('./server.js')
+const { placeAtSlot } = req('./eval.js')
 const slots = req('./slots.json')
 
 const SLOT = slots.find(s => s.id === 101) // dev set
@@ -28,11 +29,10 @@ async function freshBot(logName) {
   bot.skillLogPath = path.join(__dirname, '..', 'logs', `${logName}.jsonl`)
   fs.rmSync(bot.skillLogPath, { force: true })
   await new Promise(r => bot.once('spawn', r))
-  for (const cmd of ['time set 0', 'gamemode survival Bot0', 'clear Bot0', `spawnpoint Bot0 ${SLOT.x} ${SLOT.y} ${SLOT.z}`,
-    `setblock ${SLOT.x + 2} ${SLOT.y} ${SLOT.z} chest`, `tp Bot0 ${SLOT.x + 0.5} ${SLOT.y} ${SLOT.z + 0.5}`]) await server.command(cmd)
+  await server.command('time set 0')
+  const home = await placeAtSlot(server, bot, SLOT)
   await bot.waitForTicks(40)
-  await bot.waitForChunksToLoad()
-  return { x: SLOT.x + 2, y: SLOT.y, z: SLOT.z }
+  return home
 }
 
 const skillLog = () => fs.readFileSync(bot.skillLogPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
