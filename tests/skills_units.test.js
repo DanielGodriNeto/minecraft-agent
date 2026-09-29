@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -289,7 +289,9 @@ function shelterBot({ blocks = 12, hostile = null } = {}) {
     equip: async () => {},
     placeBlock: async (ref, face) => {
       left--
-      placed.set(`${ref.position.x + face.x},${ref.position.y + face.y},${ref.position.z + face.z}`, true)
+      const key = `${ref.position.x + face.x},${ref.position.y + face.y},${ref.position.z + face.z}`
+      placed.set(key, true)
+      dug.delete(key)
     },
     dig: async (block) => { dug.add(`${block.position.x},${block.position.y},${block.position.z}`) },
     digTime: () => 0,
@@ -451,7 +453,7 @@ test('go_up: fails not_reached when no block can be placed', async () => {
   }
 })
 
-test('tunnelSafe: refuses cells in or next to water or lava, and cells without a floor', () => {
+test('tunnelSafe: refuses only cells in or next to water or lava, a missing floor is bridged instead', () => {
   const cells = [new Vec3(1, 11, 0), new Vec3(1, 10, 0)]
   assert.strictEqual(tunnelSafe(world(), cells), true)
   assert.strictEqual(tunnelSafe(world({ '1,10,0': 'water' }), cells), false)
@@ -459,7 +461,7 @@ test('tunnelSafe: refuses cells in or next to water or lava, and cells without a
   assert.strictEqual(tunnelSafe(world({ '1,12,0': 'water' }), cells), false)
   assert.strictEqual(tunnelSafe(world({ '1,9,0': 'water' }), cells), false)
   assert.strictEqual(tunnelSafe(world({ '1,10,1': 'lava' }), cells), false)
-  assert.strictEqual(tunnelSafe(world({ '1,9,0': 'air' }), cells), false)
+  assert.strictEqual(tunnelSafe(world({ '1,9,0': 'air' }), cells), true)
 })
 
 test('run: low oxygen aborts any skill with drowning, and so does a drowning hit', async () => {
@@ -481,4 +483,33 @@ test('run: low oxygen aborts any skill with drowning, and so does a drowning hit
   assert.strictEqual(hit.reason, 'drowning')
   const fine = fakeBot()
   assert.strictEqual((await run(fine, async () => { fine.oxygenLevel = 10; fine.emit('breath') }, true)).ok, true)
+})
+
+test('floored: bridges a hole under the landing cell with a carried block, false without one', async () => {
+  const landing = new Vec3(1, 10, 0)
+  const { bot, placed, dug } = shelterBot()
+  assert.strictEqual(await floored(bot, landing), true)
+  assert.strictEqual(placed.size, 0)
+  dug.add('1,9,0')
+  assert.strictEqual(await floored(bot, landing), true)
+  assert.strictEqual(placed.has('1,9,0'), true)
+  const empty = shelterBot({ blocks: 0 })
+  empty.dug.add('1,9,0')
+  assert.strictEqual(await floored(empty.bot, landing), false)
+})
+
+test('pickUpDrop: a drop that cannot be fetched fails once and is skipped afterwards', async () => {
+  const drop = { id: 9, name: 'item', position: new Vec3(0.5, 10, 0.5) }
+  const bot = Object.assign(new EventEmitter(), {
+    entity: { position: new Vec3(0.5, 10, 0.5) },
+    entities: { 9: drop },
+    nearestEntity: (match) => [drop].find(match) ?? null,
+    waitForTicks: () => new Promise(r => setTimeout(r, 1)),
+    pathfinder: { goto: async () => {}, setGoal() {} },
+    clearControlStates() {},
+    stopDigging() {},
+  })
+  const pos = new Vec3(0, 10, 0)
+  await assert.rejects(run(bot, () => pickUpDrop(bot, pos), false).then(r => { if (!r.ok) throw new Error(r.reason) }), { message: 'pickup_failed' })
+  assert.strictEqual((await run(bot, () => pickUpDrop(bot, pos), false)).ok, true)
 })

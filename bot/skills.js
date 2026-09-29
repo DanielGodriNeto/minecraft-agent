@@ -311,16 +311,23 @@ function pickupGoalY(feetY, dropY) {
   return dropY - feetY > PICKUP_REACH_UP ? null : Math.floor(Math.min(dropY, feetY))
 }
 
+// A drop that could not be fetched once is skipped afterwards, so one stuck item does not fail every mine.
 async function pickUpDrop(bot, pos) {
-  const dropNear = () => bot.nearestEntity(e => e.name === 'item' && e.position.distanceTo(pos.offset(0.5, 0.5, 0.5)) < 3)
+  const skipped = bot.skippedDrops ??= new Set()
+  const dropNear = () => bot.nearestEntity(e => e.name === 'item' && !skipped.has(e.id) && e.position.distanceTo(pos.offset(0.5, 0.5, 0.5)) < 3)
   await poll(bot, dropNear, 1000)
   const drop = dropNear()
   if (!drop) return
   const goalY = () => pickupGoalY(bot.entity.position.y, drop.position.y)
   await poll(bot, () => !bot.entities[drop.id] || goalY() !== null, 1000)
   if (!bot.entities[drop.id] || goalY() === null) return
-  await goto(bot, new goals.GoalNear(drop.position.x, goalY(), drop.position.z, 1), 10000)
-  if (!await poll(bot, () => !bot.entities[drop.id], 3000)) throw new Fail('pickup_failed')
+  try {
+    await goto(bot, new goals.GoalNear(drop.position.x, goalY(), drop.position.z, 1), 10000)
+    if (!await poll(bot, () => !bot.entities[drop.id], 3000)) throw new Fail('pickup_failed')
+  } catch (e) {
+    skipped.add(drop.id)
+    throw e
+  }
 }
 
 async function reach(bot, block, ms = PATH_MS, scaffold = false) {
@@ -423,7 +430,12 @@ function stairRefusal(bot, p, dir) {
 }
 
 const tunnelCells = (p, [dx, dz]) => [p.offset(dx, 1, dz), p.offset(dx, 0, dz)]
-const tunnelSafe = (bot, cells) => !cells.some(c => nearLava(bot, c) || nearWater(bot, c)) && isSolid(at(bot, cells[1], 0, -1, 0))
+const tunnelSafe = (bot, cells) => !cells.some(c => nearLava(bot, c) || nearWater(bot, c))
+
+// A missing floor under the landing cell is bridged with a carried block; false when that is not possible.
+async function floored(bot, landing) {
+  return isSolid(at(bot, landing, 0, -1, 0)) || patched(bot, landing)
+}
 
 // Solid neighbours of the hole under a landing cell that a block can be placed against, minus faces that failed before.
 function patchFaces(bot, spot) {
@@ -577,6 +589,7 @@ async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64, 
     }
     const cells = tunnelCells(p, DIRS[dir])
     if (!tunnelSafe(bot, cells)) throw new Fail('hazard')
+    if (!await floored(bot, cells[1])) throw new Fail('no_floor')
     await tunnelStep(bot, cells, cells[1])
   }
   if (!findVisible(bot, target, maxAbove)) throw new Fail('not_found')
@@ -611,7 +624,7 @@ async function tunnelOut(bot, dir) {
   for (let i = 0; i < TUNNEL_OUT; i++) {
     checkCancelled(bot)
     const cells = tunnelCells(bot.entity.position.floored(), DIRS[dir])
-    if (!tunnelSafe(bot, cells)) return
+    if (!tunnelSafe(bot, cells) || !await floored(bot, cells[1])) return
     await tunnelStep(bot, cells, cells[1])
   }
 }
@@ -1053,4 +1066,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, placeableCount, safeToLeave, SHELTER_MIN, nearestHostile, bestWeapon, nearestAnimal }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SHELTER_MIN, nearestHostile, bestWeapon, nearestAnimal }
