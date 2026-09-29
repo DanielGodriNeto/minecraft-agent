@@ -1,13 +1,17 @@
 // Phase 2.5 eval harness. Server must NOT be running; this script owns it.
 //   node eval.js snapshot                         save the pregenerated world as the pristine copy
-//   node eval.js <first> <last> [bots] [minutes]  run slots first..last in batches, e.g. 100 199 10 60
+//   node eval.js <first> <last> [bots] [minutes] [instances]
+//                                                 run slots first..last in batches, e.g. 100 199 10 60;
+//                                                 instances > 1 runs that many Paper servers in parallel
+//                                                 (server/run-<n>/, port 25565+n, ~14 GB world copy each)
 // Results: logs/eval.jsonl (one line per run); summary printed at the end.
 const fs = require('node:fs')
 const path = require('node:path')
 const { createBot } = require('./bot.js')
 const { runObjective, stopObjective, jitterParams } = require('./agent.js')
 const { summarize, mulberry32 } = require('./metrics.js')
-const { startServer, snapshot, restore } = require('./server.js')
+const os = require('node:os')
+const { startServer, snapshot, restore, checkDiskFor, instanceSpec, maxInstances } = require('./server.js')
 
 const SLOTS = JSON.parse(fs.readFileSync(path.join(__dirname, 'slots.json'), 'utf8'))
 const RESULTS = path.join(__dirname, '..', 'logs', 'eval.jsonl')
@@ -86,7 +90,28 @@ function partial(bot, reason, detail) {
   return { reason, detail, deposited: run?.deposited ?? 0, deaths: run?.deaths ?? 0, decisions: run?.decisions ?? 0 }
 }
 
-async function runOne(bot, slot, home, start, minutes, difficulty, log) {
+// Round-robin: batch i goes to worker i % workers. Batches all last the same time, so shares stay balanced.
+function distribute(batches, workers) {
+  const shares = Array.from({ length: workers }, () => [])
+  batches.forEach((batch, i) => shares[i % workers].push(batch))
+  return shares
+}
+
+function chunk(items, size) {
+  const out = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+function parseInstances(arg, totalMemGb = os.totalmem() / 2 ** 30) {
+  const n = Number(arg)
+  if (!Number.isInteger(n) || n < 1) throw new Error(`instances must be a positive integer, got ${arg}`)
+  const cap = maxInstances(totalMemGb)
+  if (n > cap) throw new Error(`at most ${cap} instances fit ${totalMemGb.toFixed(0)} GB RAM (6 GB heap each, 24 GB total)`)
+  return n
+}
+
+async function runOne(bot, slot, home, start, minutes, difficulty, log, instance) {
   const rand = mulberry32(slot.id)
   bot.runTag = `slot${slot.id}-${start}`
   const disconnected = new Promise(resolve => {
@@ -107,18 +132,25 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log) {
   } catch (e) {
     result = partial(bot, 'error', e.message)
   }
-  const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, minutes: (Date.now() - start) / 60000, difficulty }
+  const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, minutes: (Date.now() - start) / 60000, difficulty, ...(instance.total > 1 && { instance: instance.index + 1 }) }
   fs.appendFileSync(RESULTS, JSON.stringify(run) + '\n')
-  console.log(JSON.stringify(run))
+  console.log(`${instance.total > 1 ? `[i${instance.index + 1}] ` : ''}${JSON.stringify(run)}`)
   return run
 }
 
 // opts.log: file receiving one line per run (null = none); opts.onStart(server): called once the runs begin,
 // returns a stop function that is called when they end.
-async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart } = {}) {
-  restore()
-  const server = await startServer()
-  const bots = slots.map((_, i) => createBot({ username: `Bot${i}` }))
+// opts.instance: { index, total } picks the server dir and port (default: the single server/ on 25565).
+async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, instance = { index: 0, total: 1 } } = {}) {
+  const { dir, port } = instanceSpec(instance.index, instance.total)
+  restore(dir)
+  const server = await startServer('diamonds', { dir, port })
+  const bots = slots.map((_, i) => {
+    const bot = createBot({ username: `Bot${i}`, port })
+    // Skill logs stay skills-Bot<i>.jsonl for one instance; parallel instances would interleave, so they get skills-i<n>-Bot<i>.jsonl.
+    if (instance.total > 1 && !process.env.SKILL_LOG) bot.skillLogPath = path.join(__dirname, '..', 'logs', `skills-i${instance.index + 1}-${bot.username}.jsonl`)
+    return bot
+  })
   let stopWatching
   try {
     await Promise.all(bots.map(b => withDeadline(once(b, 'spawn'), SPAWN_MS, `${b.username} spawn`)))
@@ -127,7 +159,7 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart } =
     for (const [i, slot] of slots.entries()) homes.push(await placeAtSlot(server, bots[i], slot).catch(e => e))
     const start = Date.now()
     stopWatching = onStart?.(server)
-    return await Promise.all(slots.map((slot, i) => runOne(bots[i], slot, homes[i], start, minutes, difficulty, log)))
+    return await Promise.all(slots.map((slot, i) => runOne(bots[i], slot, homes[i], start, minutes, difficulty, log, instance)))
   } finally {
     stopWatching?.()
     bots.forEach(b => b.end())
@@ -135,18 +167,23 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart } =
   }
 }
 
-async function main([first, last, bots = '10', minutes = '60']) {
+async function runShare(share, index, total, minutes, difficulty) {
+  const runs = []
+  for (const batch of share) runs.push(...await runBatch(batch, minutes, difficulty, { instance: { index, total } }))
+  return runs
+}
+
+async function main([first, last, bots = '10', minutes = '60', instances = '1']) {
   if (first === 'snapshot') return snapshot()
   if (Number(bots) > MAX_BOTS) throw new Error(`at most ${MAX_BOTS} bots (only Bot0..Bot${MAX_BOTS - 1} are whitelisted)`)
   const difficulty = readDifficulty()
   const slots = SLOTS.filter(s => s.id >= Number(first) && s.id <= Number(last))
+  const shares = distribute(chunk(slots, Number(bots)), Math.min(parseInstances(instances), Math.ceil(slots.length / Number(bots))))
+  checkDiskFor(shares.map((_, i) => instanceSpec(i, shares.length)))
   fs.mkdirSync(path.dirname(RESULTS), { recursive: true })
-  const runs = []
-  for (let i = 0; i < slots.length; i += Number(bots)) {
-    runs.push(...await runBatch(slots.slice(i, i + Number(bots)), Number(minutes), difficulty))
-  }
+  const runs = (await Promise.all(shares.map((share, i) => runShare(share, i, shares.length, Number(minutes), difficulty)))).flat()
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { distribute, chunk, parseInstances, placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })

@@ -202,6 +202,8 @@ Descope rule: if week 5 ends with failures, ship `mine`/`dig_down`/`deposit` fir
 - [ ] 2.5 Eval harness at that N: fresh spawn → runs on a slot set → success rate,
       diamonds/hour, deaths/hour, stuck rate, 95% CI. Tune against **dev slots 100–199**;
       run the held-out slots 0–99 once for the gate
+      `node eval.js <first> <last> 12 60 K` runs K Paper servers in parallel (server/run-<n>/, port 25565+n,
+      6 GB heap each, K <= 4); each needs its own ~14 GB world copy + 10 GB margin free (checked up front).
 
 **Tests**
 - [x] `test_planner_order` — never attempts a craft whose inputs it can't have

@@ -9,7 +9,51 @@ const SERVER_DIR = path.join(__dirname, '..', 'server')
 const WORLD = path.join(SERVER_DIR, 'diamonds')
 const PRISTINE = path.join(SERVER_DIR, 'snapshots', 'diamonds-pristine')
 const START_MS = 300000
-const JAVA_ARGS = ['-Xms2G', '-Xmx6G', '-jar', 'paper-1.21.11-132.jar', '--nogui'] // keep in sync with start.sh
+const BASE_PORT = 25565
+const HEAP_GB = 6 // per instance; keep in sync with start.sh
+const TOTAL_HEAP_GB = 24 // all instances together, leaves the rest of the RAM to the OS and the bots
+const DISK_MARGIN = 10 * 2 ** 30
+const javaArgs = (heapGb) => ['-Xms2G', `-Xmx${heapGb}G`, '-jar', 'paper-1.21.11-132.jar', '--nogui']
+// Files a Paper instance needs from server/ (world and logs are per instance). whitelist/ops are re-synced on every start.
+const SHARED = ['paper-1.21.11-132.jar', 'libraries', 'versions', 'cache', 'plugins', 'config', 'bukkit.yml', 'spigot.yml',
+  'commands.yml', 'help.yml', 'permissions.yml']
+const SYNCED = ['whitelist.json', 'ops.json', 'banned-players.json', 'banned-ips.json', 'eula.txt']
+
+// One instance: server/ on 25565; several: server/run-<n>/ on 25565+n (n = 1..total).
+function instanceSpec(index, total) {
+  if (total === 1) return { dir: SERVER_DIR, port: BASE_PORT }
+  return { dir: path.join(SERVER_DIR, `run-${index + 1}`), port: BASE_PORT + index + 1 }
+}
+
+// Instances the RAM allows (8 GB left to the OS and the bots) within the total heap budget.
+const maxInstances = (totalMemGb, heapGb = HEAP_GB) => Math.max(1, Math.floor(Math.min(TOTAL_HEAP_GB, totalMemGb - 8) / heapGb))
+
+function assertDiskSpace(freeBytes, neededBytes, what) {
+  const need = neededBytes + DISK_MARGIN
+  if (freeBytes >= need) return
+  const gb = (b) => (b / 2 ** 30).toFixed(1)
+  throw new Error(`not enough disk for ${what}: need ${gb(need)} GB (incl. ${gb(DISK_MARGIN)} GB margin), free ${gb(freeBytes)} GB`)
+}
+
+const withPort = (props, port) => props.replace(/^(server-port|query\.port)=.*$/gm, `$1=${port}`)
+
+function freeBytes(dir) {
+  const { bavail, bsize } = fs.statfsSync(dir)
+  return bavail * bsize
+}
+
+function dirSize(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true, recursive: true })
+    .reduce((sum, e) => sum + (e.isFile() ? fs.statSync(path.join(e.parentPath, e.name)).size : 0), 0)
+}
+
+function prepareInstance(dir, props, port) {
+  fs.mkdirSync(dir, { recursive: true })
+  for (const name of SHARED) if (!fs.existsSync(path.join(dir, name))) fs.cpSync(path.join(SERVER_DIR, name), path.join(dir, name), { recursive: true })
+  for (const name of SYNCED) if (fs.existsSync(path.join(SERVER_DIR, name))) fs.copyFileSync(path.join(SERVER_DIR, name), path.join(dir, name))
+  const file = `${props}.properties`
+  fs.writeFileSync(path.join(dir, file), withPort(fs.readFileSync(path.join(SERVER_DIR, file), 'utf8'), port))
+}
 
 function waitForLine(lines, pattern, ms) {
   return new Promise((resolve, reject) => {
@@ -19,8 +63,9 @@ function waitForLine(lines, pattern, ms) {
   })
 }
 
-async function startServer(props = 'diamonds') {
-  const proc = spawn('java', [...JAVA_ARGS, '--config', `${props}.properties`], { cwd: SERVER_DIR, stdio: ['pipe', 'pipe', 'inherit'] })
+async function startServer(props = 'diamonds', { dir = SERVER_DIR, port = BASE_PORT, heapGb = HEAP_GB } = {}) {
+  if (dir !== SERVER_DIR) prepareInstance(dir, props, port)
+  const proc = spawn('java', [...javaArgs(heapGb), '--config', `${props}.properties`], { cwd: dir, stdio: ['pipe', 'pipe', 'inherit'] })
   const lines = readline.createInterface({ input: proc.stdout })
   const exited = new Promise(resolve => proc.once('exit', resolve))
   const kill = () => proc.kill()
@@ -58,10 +103,23 @@ function snapshot() {
   fs.cpSync(WORLD, PRISTINE, { recursive: true })
 }
 
-function restore() {
+let pristineBytes
+const pristineSize = () => (pristineBytes ??= dirSize(PRISTINE))
+
+// Pristine world copied into <dir>/diamonds; fails before copying when the disk can't hold it.
+function restore(dir = SERVER_DIR) {
   if (!fs.existsSync(PRISTINE)) throw new Error(`no pristine snapshot at ${PRISTINE}`)
-  fs.rmSync(WORLD, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
-  fs.cpSync(PRISTINE, WORLD, { recursive: true })
+  const world = path.join(dir, 'diamonds')
+  fs.rmSync(world, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
+  fs.mkdirSync(dir, { recursive: true })
+  assertDiskSpace(freeBytes(dir), pristineSize(), `restoring ${world}`)
+  fs.cpSync(PRISTINE, world, { recursive: true })
 }
 
-module.exports = { startServer, snapshot, restore, WORLD, PRISTINE }
+// Fail fast before an eval starts: every instance without a world yet needs a full pristine copy.
+function checkDiskFor(specs) {
+  const missing = specs.filter(({ dir }) => !fs.existsSync(path.join(dir, 'diamonds'))).length
+  assertDiskSpace(freeBytes(SERVER_DIR), missing * pristineSize(), `${missing} new world copies`)
+}
+
+module.exports = { startServer, snapshot, restore, checkDiskFor, instanceSpec, maxInstances, assertDiskSpace, withPort, freeBytes, pristineSize, WORLD, PRISTINE }
