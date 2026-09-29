@@ -6,5 +6,69 @@
   {
     "uuid": "d0fb9b2e-4a4a-36de-aca5-9cfbd833c354",
     "name": "DiamondBot"
+  },
+  {
+    "uuid": "ee2337bd-ef1b-3585-94ad-53fcd1977dd2",
+    "name": "Bot0"
+  },
+  {
+    "uuid": "51a4b33d-8b80-3bde-806f-de4086b03058",
+    "name": "Bot1"
+  },
+  {
+    "uuid": "16beaa94-ff1b-37a7-8afb-c22dcb8c16d1",
+    "name": "Bot2"
+  },
+  {
+    "uuid": "73f370b4-497b-347a-a6bb-50d07eb88947",
+    "name": "Bot3"
+  },
+  {
+    "uuid": "c760baae-cdc1-3595-98d0-c7a6e074d851",
+    "name": "Bot4"
+  },
+  {
+    "uuid": "957bd75a-2799-3660-aa34-d1833e9c00b3",
+    "name": "Bot5"
+  },
+  {
+    "uuid": "88f0f096-1002-3386-8cc0-5371a30bd66f",
+    "name": "Bot6"
+  },
+  {
+    "uuid": "9aa06467-c242-3704-9d28-2b9ef52e9d26",
+    "name": "Bot7"
+  },
+  {
+    "uuid": "a2aded80-15d4-38c5-8a6f-e532eedf9bde",
+    "name": "Bot8"
+  },
+  {
+    "uuid": "84789adf-47f8-367c-b639-0544ccf93ad2",
+    "name": "Bot9"
+  },
+  {
+    "uuid": "dd0e24e4-744e-3f4c-97dc-32ceefa9fdd7",
+    "name": "Bot10"
+  },
+  {
+    "uuid": "1197a1e1-1f22-395d-ae93-9836bfcec466",
+    "name": "Bot11"
+  },
+  {
+    "uuid": "d1b6b006-dda2-300d-82c6-b45b3c57f0d4",
+    "name": "Bot12"
+  },
+  {
+    "uuid": "0685a1bc-d22d-3055-b860-88b198c1a2c2",
+    "name": "Bot13"
+  },
+  {
+    "uuid": "611d3f14-4877-3dbb-8d40-ab6a074c914d",
+    "name": "Bot14"
+  },
+  {
+    "uuid": "8760a068-783d-3a3f-9b76-d3d4e0d6745e",
+    "name": "Bot15"
   }
 ]
