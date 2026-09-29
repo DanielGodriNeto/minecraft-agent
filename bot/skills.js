@@ -154,13 +154,29 @@ async function reach(bot, block) {
   await goto(bot, new goals.GoalLookAtBlock(block.position, bot.world, { reach: 4 }))
 }
 
+// Plants and snow layers are replaced by the server, so any non-lava block without a hitbox is a free spot.
+const isFree = (block) => block !== null && block.boundingBox === 'empty' && !isLava(block)
+const canHold = (bot, p) => isFree(bot.blockAt(p)) && isSolid(at(bot, p, 0, -1, 0))
+
+// Cells around the bot at feet, head and below-feet level (the last one after a dig down).
+function placeSpot(bot, feet) {
+  return [0, 1, -1].flatMap(dy => DIRS.map(([dx, dz]) => feet.offset(dx, dy, dz))).find(p => canHold(bot, p))
+}
+
+// Boxed in (1-wide tunnel): dig out a side wall at feet level.
+async function digSpot(bot, feet) {
+  const wall = DIRS.map(([dx, dz]) => bot.blockAt(feet.offset(dx, 0, dz)))
+    .find(b => b?.diggable && !nearLava(bot, b.position) && isSolid(at(bot, b.position, 0, -1, 0)))
+  if (!wall) throw new Fail('no_space')
+  await breakBlock(bot, wall)
+  return wall.position
+}
+
 async function placeFromInventory(bot, name) {
   const item = findItem(bot, name)
   if (!item) throw new Fail('missing')
   const feet = bot.entity.position.floored()
-  const spot = DIRS.map(([dx, dz]) => feet.offset(dx, 0, dz))
-    .find(p => OPEN.has(bot.blockAt(p)?.name) && OPEN.has(at(bot, p, 0, 1, 0)?.name) && isSolid(at(bot, p, 0, -1, 0)))
-  if (!spot) throw new Fail('no_space')
+  const spot = placeSpot(bot, feet) ?? await digSpot(bot, feet)
   await bot.equip(item, 'hand')
   await bot.placeBlock(at(bot, spot, 0, -1, 0), { x: 0, y: 1, z: 0 })
   return bot.blockAt(spot)
