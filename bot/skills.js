@@ -231,9 +231,13 @@ async function digSpot(bot, feet) {
 }
 
 // False when the server refused this spot; it is remembered so it is not tried again.
-async function tryPlace(bot, spot) {
+// The item is equipped right before placing: digging a spot re-equips a pickaxe.
+async function tryPlace(bot, spot, name) {
+  const item = findItem(bot, name)
+  if (!item) throw new Fail('missing')
   try {
-    await bot.placeBlock(at(bot, spot, 0, -1, 0), { x: 0, y: 1, z: 0 })
+    await guard(bot.equip(item, 'hand'))
+    await guard(bot.placeBlock(at(bot, spot, 0, -1, 0), { x: 0, y: 1, z: 0 }))
     return true
   } catch (e) {
     if (!REFUSED.test(e.message)) throw e
@@ -243,15 +247,13 @@ async function tryPlace(bot, spot) {
 }
 
 async function placeFromInventory(bot, name) {
-  const item = findItem(bot, name)
-  if (!item) throw new Fail('missing')
+  if (!findItem(bot, name)) throw new Fail('missing')
   const feet = bot.entity.position.floored()
-  await guard(bot.equip(item, 'hand'))
   for (let spot = placeSpot(bot, feet); spot; spot = placeSpot(bot, feet)) {
-    if (await tryPlace(bot, spot)) return bot.blockAt(spot)
+    if (await tryPlace(bot, spot, name)) return bot.blockAt(spot)
   }
   const dug = await digSpot(bot, feet)
-  if (!await tryPlace(bot, dug)) throw new Fail('place_refused')
+  if (!await tryPlace(bot, dug, name)) throw new Fail('place_refused')
   return bot.blockAt(dug)
 }
 
