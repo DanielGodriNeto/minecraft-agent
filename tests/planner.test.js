@@ -96,3 +96,8 @@ test('planner: safety and objective', () => {
   assert.strictEqual(nextAction(state({ objective: { item: 'diamond', count: 2 }, deposited: 2 })), null)
   assert.strictEqual(nextAction(state({ objective: { item: 'diamond', count: 2 }, inv: { diamond: 2, iron_pickaxe: 1 }, distHome: 2 })).skill, 'deposit')
 })
+
+test('planner: restocks a broken pickaxe from what it carries', () => {
+  const s = state({ y: -58, inv: { cobblestone: 3, stick: 4, crafting_table: 1 } })
+  assert.deepStrictEqual(nextAction(s), { skill: 'craft', args: ['stone_pickaxe', 1] })
+})
