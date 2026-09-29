@@ -340,16 +340,33 @@ function stairRefusal(bot, p, dir) {
 const tunnelCells = (p, [dx, dz]) => [p.offset(dx, 1, dz), p.offset(dx, 0, dz)]
 const tunnelSafe = (bot, cells) => !cells.some(c => nearLava(bot, c)) && isSolid(at(bot, cells[1], 0, -1, 0))
 
-// Fills the hole under a landing cell from a solid neighbour of it.
+// Solid neighbours of the hole under a landing cell that a block can be placed against, minus faces that failed before.
+function patchFaces(bot, spot) {
+  return FACES.filter(f => f[1] !== 1 && isSolid(at(bot, spot, ...f)) && !bot.refusedFaces?.has(`${spot}|${f}`))
+}
+
+// False when this face failed (server refusal, timeout, or no block appeared); it is remembered so it is not retried.
+async function placeAgainst(bot, spot, face, item) {
+  try {
+    await guard(bot.equip(item, 'hand'))
+    await guard(bot.placeBlock(at(bot, spot, ...face), { x: -face[0], y: -face[1], z: -face[2] }))
+    if (isSolid(bot.blockAt(spot))) return true
+  } catch {}
+  bot.refusedFaces = (bot.refusedFaces ?? new Set()).add(`${spot}|${face}`)
+  return false
+}
+
+// Fills the hole under a landing cell from any solid neighbour of it. 'no_floor' when every face failed,
+// so the caller can try another direction.
 async function patchFloor(bot, landing) {
-  checkCancelled(bot)
   const spot = landing.offset(0, -1, 0)
   const item = PATCH_BLOCKS.map(n => findItem(bot, n)).find(Boolean)
-  const face = FACES.find(f => f[1] !== 1 && isSolid(at(bot, spot, ...f)))
-  if (!item || !face) throw new Fail('no_floor')
-  await guard(bot.equip(item, 'hand'))
-  await guard(bot.placeBlock(at(bot, spot, ...face), { x: -face[0], y: -face[1], z: -face[2] }))
-  if (!isSolid(bot.blockAt(spot))) throw new Fail('no_floor')
+  if (!item) throw new Fail('no_floor')
+  for (const face of patchFaces(bot, spot)) {
+    checkCancelled(bot)
+    if (await placeAgainst(bot, spot, face, item)) return
+  }
+  throw new Fail('no_floor')
 }
 
 // Standing on the ground (or swimming, when the cell is water) in the feet cell, near its centre.
@@ -779,4 +796,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces }

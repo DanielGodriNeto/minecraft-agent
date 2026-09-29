@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -207,4 +207,15 @@ test('damageCause: hostile in range first, then hazard blocks, drowning, unknown
   assert.strictEqual(damageCause(at({ '0,11,0': 'water' }, { oxygenLevel: 12 })), 'drowning')
   assert.strictEqual(damageCause(at({ '0,11,0': 'water' }, { oxygenLevel: 20 })), 'unknown')
   assert.strictEqual(damageCause(at({})), 'unknown')
+})
+
+test('patchFaces: solid neighbours of the hole, never the top face, minus faces that already failed', () => {
+  const spot = new Vec3(0, 10, 0)
+  const bot = (w, refusedFaces) => ({ ...w, refusedFaces })
+  const open = { '1,10,0': 'air', '0,10,1': 'air', '0,11,0': 'stone' }
+  assert.deepStrictEqual(patchFaces(bot(world(open)), spot), [[-1, 0, 0], [0, -1, 0], [0, 0, -1]])
+  const failed = new Set(['(0, 10, 0)|-1,0,0', '(0, 10, 0)|0,-1,0'])
+  assert.deepStrictEqual(patchFaces(bot(world(open), failed), spot), [[0, 0, -1]])
+  const enclosed = { '1,10,0': 'air', '-1,10,0': 'air', '0,10,1': 'air', '0,10,-1': 'air', '0,9,0': 'air' }
+  assert.deepStrictEqual(patchFaces(bot(world(enclosed)), spot), [])
 })
