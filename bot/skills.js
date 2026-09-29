@@ -38,6 +38,13 @@ const DAMAGE_LOG_MAX = 10
 const HAZARD_CAUSE = { lava: 'lava', flowing_lava: 'lava', fire: 'fire', soul_fire: 'fire', magma_block: 'magma', cactus: 'cactus', sweet_berry_bush: 'berry_bush' }
 const NON_INTERRUPTIBLE = new Set(['flee', 'eat', 'shelter'])
 const PLACEABLE = ['cobblestone', 'cobbled_deepslate', 'dirt', 'stone', 'deepslate', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
+const FOOD_ANIMALS = new Set(['cow', 'pig', 'sheep', 'chicken', 'rabbit'])
+const ANIMAL_RANGE = 24
+const HUNT_MS = 20000
+const ATTACK_REACH = 3
+const ATTACK_TICKS = 12
+const WEAPONS = ['netherite_sword', 'diamond_sword', 'iron_sword', 'stone_sword', 'golden_sword', 'wooden_sword',
+  'netherite_axe', 'diamond_axe', 'iron_axe', 'stone_axe', 'golden_axe', 'wooden_axe', 'wooden_pickaxe', 'stone_pickaxe']
 const SHELTER_MIN = 6
 const SHELTER_WAIT_MS = 30000
 const SAFE_RANGE = 8
@@ -752,6 +759,45 @@ async function flee(bot) {
   if (!await poll(bot, () => !nearestHostile(bot), 20000)) throw new Fail('timeout')
 }
 
+// Sword or axe, else a cheap pickaxe; null means bare hands (the good pickaxes are not worn out on animals).
+const bestWeapon = (items) => WEAPONS.map(name => items.find(i => i.name === name)).find(Boolean) ?? null
+
+function nearestAnimal(bot, range = ANIMAL_RANGE) {
+  return bot.nearestEntity(e => FOOD_ANIMALS.has(e.name) && e.position.distanceTo(bot.entity.position) <= range)
+}
+
+// Follows a fleeing animal until it is within reach, then swings on the attack cooldown. Resolves whether it is chasing.
+async function strike(bot, animal, chasing) {
+  const near = bot.entity.position.distanceTo(animal.position) <= ATTACK_REACH
+  if (near === chasing) bot.pathfinder.setGoal(near ? null : new goals.GoalFollow(animal, 2), true)
+  if (!near) {
+    await bot.waitForTicks(2)
+    return true
+  }
+  await guard(bot.lookAt(animal.position.offset(0, animal.height * 0.7, 0)))
+  bot.attack(animal)
+  await bot.waitForTicks(ATTACK_TICKS)
+  return false
+}
+
+async function hunt(bot, ms = HUNT_MS) {
+  const animal = nearestAnimal(bot)
+  if (!animal) throw new Fail('no_animal')
+  const weapon = bestWeapon(bot.inventory.items())
+  await guard(weapon ? bot.equip(weapon, 'hand') : bot.unequip('hand'))
+  const end = Date.now() + ms
+  let last = animal.position.clone()
+  let chasing = false
+  while (bot.entities[animal.id] && Date.now() < end) {
+    checkCancelled(bot)
+    last = animal.position.clone()
+    chasing = await strike(bot, animal, chasing)
+  }
+  stopPathing(bot)
+  if (bot.entities[animal.id]) throw new Fail('not_killed')
+  for (let i = 0; i < 2; i++) await pickUpDrop(bot, last.floored())
+}
+
 const placeableCount = (bot) => PLACEABLE.reduce((n, name) => n + countItem(bot, name), 0)
 
 // Regeneration needs food >= 18, so a hungry bot gains nothing by waiting for health.
@@ -863,7 +909,7 @@ async function returnHome(bot, home) {
 
 const SKILLS = {
   explore, approach, mine, dig_down: digDown, go_up: goUp, craft, smelt,
-  equip, eat, flee, shelter, deposit, toss, return_home: returnHome,
+  equip, eat, flee, shelter, hunt, deposit, toss, return_home: returnHome,
 }
 
 // ---- skill log: one JSON line per call, read by the Phase 3 recorder ----
@@ -891,4 +937,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, placeableCount, safeToLeave, SHELTER_MIN, nearestHostile }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, placeableCount, safeToLeave, SHELTER_MIN, nearestHostile, bestWeapon, nearestAnimal }

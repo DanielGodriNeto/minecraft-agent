@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, placeableCount, safeToLeave, SKILLS } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -306,4 +306,55 @@ test('shelter: is cancellation-aware while walling in', async () => {
 test('placeableCount: sums every placeable block type', () => {
   const bot = { inventory: { items: () => [{ name: 'dirt', count: 3 }, { name: 'cobblestone', count: 4 }, { name: 'stick', count: 9 }] } }
   assert.strictEqual(placeableCount(bot), 7)
+})
+
+test('bestWeapon: swords beat axes beat cheap pickaxes; the good pickaxes are never used', () => {
+  const items = (...names) => names.map(name => ({ name }))
+  assert.strictEqual(bestWeapon(items('wooden_pickaxe', 'iron_axe', 'stone_sword')).name, 'stone_sword')
+  assert.strictEqual(bestWeapon(items('wooden_pickaxe', 'iron_axe')).name, 'iron_axe')
+  assert.strictEqual(bestWeapon(items('stone_pickaxe', 'wooden_pickaxe')).name, 'wooden_pickaxe')
+  assert.strictEqual(bestWeapon(items('iron_pickaxe', 'diamond_pickaxe', 'stick')), null)
+})
+
+function huntBot({ hits = 2, animalAt = 2 } = {}) {
+  const animal = { id: 5, name: 'cow', height: 1.4, position: new Vec3(animalAt, 10, 0) }
+  const goals = []
+  const bot = Object.assign(new EventEmitter(), {
+    entity: { position: new Vec3(0, 10, 0) },
+    entities: { 5: animal },
+    inventory: { items: () => [{ name: 'stone_sword', type: 1 }] },
+    equipped: null,
+    equip: async (item) => { bot.equipped = item.name },
+    lookAt: async () => {},
+    attacks: 0,
+    attack() { if (++bot.attacks >= hits) delete bot.entities[5] },
+    pathfinder: { setGoal: (g) => goals.push(g) },
+    clearControlStates() {},
+    stopDigging() {},
+    waitForTicks: () => new Promise(r => setTimeout(r, 1)),
+    nearestEntity: (match) => [animal, { name: 'zombie', position: new Vec3(1, 10, 0) }].find(match) ?? null,
+  })
+  return { bot, goals }
+}
+
+test('hunt: equips the weapon and attacks until the animal is gone', async () => {
+  const { bot } = huntBot()
+  const result = await run(bot, () => SKILLS.hunt(bot), true)
+  assert.strictEqual(result.ok, true)
+  assert.strictEqual(bot.equipped, 'stone_sword')
+  assert.strictEqual(bot.attacks, 2)
+})
+
+test('hunt: chases an animal out of reach, and reports not_killed at the time limit', async () => {
+  const { bot, goals } = huntBot({ animalAt: 10 })
+  const result = await run(bot, () => SKILLS.hunt(bot, 50), true)
+  assert.strictEqual(result.reason, 'not_killed')
+  assert.strictEqual(bot.attacks, 0)
+  assert.strictEqual(goals.filter(Boolean).length, 1)
+})
+
+test('hunt: no_animal when none is in range, and nearestAnimal ignores hostiles and far animals', async () => {
+  const { bot } = huntBot({ animalAt: 30 })
+  assert.strictEqual(nearestAnimal(bot), null)
+  assert.strictEqual((await run(bot, () => SKILLS.hunt(bot), true)).reason, 'no_animal')
 })
