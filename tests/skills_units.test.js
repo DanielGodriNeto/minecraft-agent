@@ -1,7 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
-const { cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail } = require('../bot/skills.js')
+const { cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -20,7 +20,7 @@ test('cheapestPickaxe: falls back to iron when it is the only capable tool, null
 })
 
 const block = (name, pos) => ({
-  name, position: pos, diggable: name !== 'bedrock', boundingBox: ['air', 'water', 'lava'].includes(name) ? 'empty' : 'block',
+  name, position: pos, diggable: name !== 'bedrock', boundingBox: ['air', 'water', 'lava', 'pink_petals'].includes(name) ? 'empty' : 'block',
 })
 
 // Fake world: everything is stone except the given overrides ("x,y,z" -> name).
@@ -66,4 +66,14 @@ test('resetTrail: clears the trail only within 4 blocks of home', () => {
   resetTrail(far, home)
   assert.deepStrictEqual(far.trail, [1, 2])
   assert.doesNotThrow(() => resetTrail({ entity: null, trail: [] }, home))
+})
+
+test('placeSpot: skips flower beds and spots the server refused', () => {
+  const feet = new Vec3(0, 10, 0)
+  const air = (extra = {}) => world({ '1,10,0': 'air', '0,10,1': 'air', ...extra })
+  const bot = (w, refusedSpots) => ({ ...w, refusedSpots })
+  assert.deepStrictEqual(placeSpot(bot(air()), feet), new Vec3(1, 10, 0))
+  assert.deepStrictEqual(placeSpot(bot(air({ '1,10,0': 'pink_petals' })), feet), new Vec3(0, 10, 1))
+  assert.deepStrictEqual(placeSpot(bot(air(), new Set(['(1, 10, 0)'])), feet), new Vec3(0, 10, 1))
+  assert.strictEqual(placeSpot(bot(world()), feet), undefined)
 })

@@ -183,8 +183,11 @@ async function reach(bot, block, ms = PATH_MS) {
 }
 
 // Plants and snow layers are replaced by the server, so any non-lava block without a hitbox is a free spot.
-const isFree = (block) => block !== null && block.boundingBox === 'empty' && !isLava(block)
-const canHold = (bot, p) => isFree(bot.blockAt(p)) && isSolid(at(bot, p, 0, -1, 0))
+// Flower beds and leaf litter look the same but the server refuses to place into them.
+const SEGMENTED = new Set(['pink_petals', 'wildflowers', 'leaf_litter'])
+const REFUSED = /refused to place/i
+const isFree = (block) => block !== null && block.boundingBox === 'empty' && !isLava(block) && !SEGMENTED.has(block.name)
+const canHold = (bot, p) => isFree(bot.blockAt(p)) && !bot.refusedSpots?.has(p.toString()) && isSolid(at(bot, p, 0, -1, 0))
 
 // Cells around the bot at feet, head and below-feet level (the last one after a dig down).
 function placeSpot(bot, feet) {
@@ -200,14 +203,29 @@ async function digSpot(bot, feet) {
   return wall.position
 }
 
+// False when the server refused this spot; it is remembered so it is not tried again.
+async function tryPlace(bot, spot) {
+  try {
+    await bot.placeBlock(at(bot, spot, 0, -1, 0), { x: 0, y: 1, z: 0 })
+    return true
+  } catch (e) {
+    if (!REFUSED.test(e.message)) throw e
+    bot.refusedSpots = (bot.refusedSpots ?? new Set()).add(spot.toString())
+    return false
+  }
+}
+
 async function placeFromInventory(bot, name) {
   const item = findItem(bot, name)
   if (!item) throw new Fail('missing')
   const feet = bot.entity.position.floored()
-  const spot = placeSpot(bot, feet) ?? await digSpot(bot, feet)
   await bot.equip(item, 'hand')
-  await bot.placeBlock(at(bot, spot, 0, -1, 0), { x: 0, y: 1, z: 0 })
-  return bot.blockAt(spot)
+  for (let spot = placeSpot(bot, feet); spot; spot = placeSpot(bot, feet)) {
+    if (await tryPlace(bot, spot)) return bot.blockAt(spot)
+  }
+  const dug = await digSpot(bot, feet)
+  if (!await tryPlace(bot, dug)) throw new Fail('place_refused')
+  return bot.blockAt(dug)
 }
 
 // Resolves { block, placed }. An existing station that cannot be reached is replaced from inventory.
@@ -611,4 +629,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail }
+module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot }
