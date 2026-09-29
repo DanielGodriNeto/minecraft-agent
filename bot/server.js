@@ -9,6 +9,7 @@ const SERVER_DIR = path.join(__dirname, '..', 'server')
 const WORLD = path.join(SERVER_DIR, 'diamonds')
 const PRISTINE = path.join(SERVER_DIR, 'snapshots', 'diamonds-pristine')
 const START_MS = 300000
+const JAVA_ARGS = ['-Xms2G', '-Xmx6G', '-jar', 'paper-1.21.11-132.jar', '--nogui'] // keep in sync with start.sh
 
 function waitForLine(lines, pattern, ms) {
   return new Promise((resolve, reject) => {
@@ -19,13 +20,23 @@ function waitForLine(lines, pattern, ms) {
 }
 
 async function startServer(props = 'diamonds') {
-  const proc = spawn('sh', ['start.sh', props], { cwd: SERVER_DIR, stdio: ['pipe', 'pipe', 'inherit'] })
+  const proc = spawn('java', [...JAVA_ARGS, '--config', `${props}.properties`], { cwd: SERVER_DIR, stdio: ['pipe', 'pipe', 'inherit'] })
   const lines = readline.createInterface({ input: proc.stdout })
   const exited = new Promise(resolve => proc.once('exit', resolve))
-  await Promise.race([
-    waitForLine(lines, /Done \(/, START_MS),
-    exited.then(code => { throw new Error(`server exited during startup (${code})`) }),
-  ])
+  const kill = () => proc.kill()
+  const onSigint = () => { kill(); process.exit(130) }
+  process.on('exit', kill)
+  process.on('SIGINT', onSigint)
+  exited.then(() => { process.off('exit', kill); process.off('SIGINT', onSigint) })
+  try {
+    await Promise.race([
+      waitForLine(lines, /Done \(/, START_MS),
+      exited.then(code => { throw new Error(`server exited during startup (${code})`) }),
+    ])
+  } catch (e) {
+    kill()
+    throw e
+  }
   return {
     lines,
     // Sends a console command; with `reply`, resolves with the first output line matching it.
@@ -49,7 +60,7 @@ function snapshot() {
 
 function restore() {
   if (!fs.existsSync(PRISTINE)) throw new Error(`no pristine snapshot at ${PRISTINE}`)
-  fs.rmSync(WORLD, { recursive: true, force: true })
+  fs.rmSync(WORLD, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
   fs.cpSync(PRISTINE, WORLD, { recursive: true })
 }
 
