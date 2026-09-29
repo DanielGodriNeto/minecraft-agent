@@ -252,18 +252,23 @@ async function approach(bot, target) {
   await goto(bot, new goals.GoalNear(pos.x, pos.y, pos.z, 3))
 }
 
+const DIG_REASONS = new Set(['no_tool', 'undiggable', 'dig_failed'])
+
+// Any failure blacklists the block, or the planner keeps choosing the same one (e.g. a high log).
 async function mine(bot, name, maxAbove = null) {
   const block = findVisible(bot, name, maxAbove)
   if (!block) throw new Fail('not_visible')
-  try {
-    await reach(bot, block)
-  } catch (e) {
-    // Remember it, or the planner keeps choosing the same unreachable block (e.g. a high log).
-    bot.unreachable = (bot.unreachable ?? new Set()).add(block.position.toString())
-    throw e
+  const attempt = async (reason, step) => {
+    try {
+      await step()
+    } catch (e) {
+      bot.unreachable = (bot.unreachable ?? new Set()).add(block.position.toString())
+      throw e instanceof Fail && DIG_REASONS.has(e.reason) ? e : new Fail(reason)
+    }
   }
-  await breakBlock(bot, block)
-  await pickUpDrop(bot, block.position)
+  await attempt('reach_failed', () => reach(bot, block))
+  await attempt('dig_timeout', () => breakBlock(bot, block))
+  await attempt('pickup_failed', () => pickUpDrop(bot, block.position))
 }
 
 async function digDown(bot, targetY) {
