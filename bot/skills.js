@@ -5,6 +5,7 @@ const { goals } = require('mineflayer-pathfinder')
 const PATH_MS = 30000
 const OPEN_MS = 10000
 const TOSS_MS = 5000
+const STATION_REACH_MS = 8000
 const SKILL_CAP_MS = 180000
 const OPEN = new Set(['air', 'cave_air', 'void_air', 'water'])
 const LAVA = new Set(['lava', 'flowing_lava'])
@@ -150,8 +151,8 @@ async function pickUpDrop(bot, pos) {
   if (!await poll(bot, () => !bot.entities[drop.id], 3000)) throw new Fail('pickup_failed')
 }
 
-async function reach(bot, block) {
-  await goto(bot, new goals.GoalLookAtBlock(block.position, bot.world, { reach: 4 }))
+async function reach(bot, block, ms = PATH_MS) {
+  await goto(bot, new goals.GoalLookAtBlock(block.position, bot.world, { reach: 4 }), ms)
 }
 
 // Plants and snow layers are replaced by the server, so any non-lava block without a hitbox is a free spot.
@@ -182,11 +183,20 @@ async function placeFromInventory(bot, name) {
   return bot.blockAt(spot)
 }
 
+// Resolves { block, placed }. An existing station that cannot be reached is replaced from inventory.
 async function nearbyOrPlaced(bot, blockName) {
-  const pos = bot.findBlock({ matching: blockId(bot, blockName), maxDistance: 16 })
-  const block = pos ?? await placeFromInventory(bot, blockName)
+  const existing = bot.findBlock({ matching: blockId(bot, blockName), maxDistance: 16 })
+  if (existing) {
+    try {
+      await reach(bot, existing, STATION_REACH_MS)
+      return { block: existing, placed: false }
+    } catch (e) {
+      if (!(e instanceof Fail) || !findItem(bot, blockName)) throw new Fail('station_unreachable')
+    }
+  }
+  const block = await placeFromInventory(bot, blockName)
   await reach(bot, block)
-  return block
+  return { block, placed: true }
 }
 
 // Staircase step toward dir: clear head, mid and feet blocks ahead, then drop one block.
@@ -305,7 +315,7 @@ async function craft(bot, name, count = 1) {
     .filter(([, r]) => r.itemId === item.id && (r.fits2x2 || recipe.requiresTable))
     .map(([id]) => id)
   if (!displayIds.length) throw new Fail('recipe_locked')
-  const window = recipe.requiresTable ? await opened(bot.openBlock(await nearbyOrPlaced(bot, 'crafting_table'))) : bot.inventory
+  const window = recipe.requiresTable ? await opened(bot.openBlock((await nearbyOrPlaced(bot, 'crafting_table')).block)) : bot.inventory
   try {
     for (let made = 0; made < count; made += recipe.result.count) await craftOnce(bot, window, displayIds, item.id)
   } finally {
@@ -321,7 +331,7 @@ async function smelt(bot, name) {
   const fuel = FUELS.find(f => findItem(bot, f))
   if (!findItem(bot, input) || !fuel) throw new Fail('missing')
   const target = countItem(bot, name) + 1
-  const furnace = await opened(bot.openFurnace(await nearbyOrPlaced(bot, 'furnace')))
+  const furnace = await opened(bot.openFurnace((await nearbyOrPlaced(bot, 'furnace')).block))
   try {
     await furnace.putFuel(findItem(bot, fuel).type, null, 1)
     await furnace.putInput(findItem(bot, input).type, null, 1)

@@ -5,6 +5,7 @@ const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
 const NEAR = 16
+const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock is not usable
 
 // Small per-run jitter so recorded runs cover more states (plan 2.2).
 function jitterParams(rand = Math.random) {
@@ -28,7 +29,7 @@ function inventoryCounts(bot) {
 
 function observe(bot, run) {
   const pos = bot.entity.position
-  const near = (name) => bot.findBlock({ matching: bot.registry.blocksByName[name].id, maxDistance: NEAR }) !== null
+  const near = (name, maxDistance = NEAR) => bot.findBlock({ matching: bot.registry.blocksByName[name].id, maxDistance }) !== null
   const pick = bot.inventory.items().find(i => i.name === 'iron_pickaxe')
   const visible = {}
   for (const [key, source] of Object.entries(SOURCES)) visible[key] = findVisible(bot, source.blocks, source.maxAbove ?? null) !== null
@@ -42,8 +43,8 @@ function observe(bot, run) {
     isNight: bot.time.timeOfDay >= 13000 && bot.time.timeOfDay < 23000,
     hostileNear: bot.nearestEntity(e => e.type === 'hostile' && e.position.distanceTo(pos) < 8) !== null,
     visible,
-    tableNear: near('crafting_table'),
-    furnaceNear: near('furnace'),
+    tableNear: near('crafting_table', STATION_NEAR),
+    furnaceNear: near('furnace', STATION_NEAR),
     freeSlots: bot.inventory.emptySlotCount(),
     pickLeft: pick ? pick.maxDurability - pick.durabilityUsed : 0,
     home: run.home,
