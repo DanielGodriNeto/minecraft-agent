@@ -1,5 +1,5 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
-const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
+const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
 const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 
 const STUCK_FAILURES = 3
@@ -8,6 +8,8 @@ const STUCK_WINDOW = 12
 const STUCK_IDLE = 5
 const IDLE_MOVE = 1
 const NEAR = 16
+const MAX_DROWN_REACTIONS = 3
+const IDLE_EXEMPT = new Set(['shelter', 'eat', 'fight'])
 const LOST_BLOCKS = 256
 const MAX_SHELTERS = 2
 const SHELTER_PAUSE = 5
@@ -68,7 +70,7 @@ function observe(bot, run) {
     deposited: run.deposited,
     msLeft: run.deadline - Date.now(),
     recentlyAttacked: run.recentlyAttacked,
-    drowning: run.drowning,
+    drowning: (run.memory.drownings ?? 0) < MAX_DROWN_REACTIONS && isDrowning(bot),
     params: run.params,
     memory: run.memory,
   }
@@ -88,6 +90,7 @@ function trackShelter(memory, action) {
 
 function remember(run, action, result) {
   trackShelter(run.memory, action)
+  run.memory.drownings = result.reason === 'drowning' ? (run.memory.drownings ?? 0) + 1 : 0
   if (result.ok) return
   if (action.optional) {
     const fails = run.memory.optionalFails
@@ -145,10 +148,11 @@ function stuckTracker(bot) {
 // home: storage chest position. Resolves with why the run ended.
 async function runObjective(bot, { objective, home, params = jitterParams(), deadline = Infinity, maxDeaths = 3, rand = Math.random }) {
   const run = {
-    objective, home, params, deadline, deposited: 0, recentlyAttacked: false, drowning: false, deaths: 0, decisions: 0, stopped: false,
-    memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), surfaceLeg: 0, optionalFails: {}, shelters: 0, noShelter: 0 },
+    objective, home, params, deadline, deposited: 0, recentlyAttacked: false, deaths: 0, decisions: 0, stopped: false,
+    memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), surfaceLeg: 0, optionalFails: {}, shelters: 0, noShelter: 0, drownings: 0 },
   }
   bot.objectiveRun = run
+  bot.runDeadline = deadline
   const onDeath = () => {
     run.deaths++
     bot.trail = [] // respawn is at home
@@ -176,11 +180,11 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       remember(run, action, result)
       resetTrail(bot, home)
       run.recentlyAttacked = result.reason === 'attacked'
-      run.drowning = result.reason === 'drowning'
-      if (!run.recentlyAttacked && !run.drowning && isStuck(result)) return finish(run, 'stuck')
+      if (!run.recentlyAttacked && !IDLE_EXEMPT.has(action.skill) && isStuck(result)) return finish(run, 'stuck')
     }
   } finally {
     bot.off('death', onDeath)
+    bot.runDeadline = null
     if (bot.objectiveRun === run) bot.objectiveRun = null
   }
 }

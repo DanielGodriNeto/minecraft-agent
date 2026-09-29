@@ -95,3 +95,13 @@ test('remember: two shelters in a row pause sheltering for five decisions; anoth
   for (let i = 0; i < 4; i++) step('mine')
   assert.strictEqual(run.memory.noShelter, 0)
 })
+
+test('remember: consecutive drowning results are counted, any other result resets the count', () => {
+  const run = { memory: { optionalFails: {}, shelters: 0, noShelter: 0, drownings: 0 } }
+  const action = { skill: 'go_up', args: [1] }
+  remember(run, action, { ok: false, reason: 'drowning' })
+  remember(run, action, { ok: false, reason: 'drowning' })
+  assert.strictEqual(run.memory.drownings, 2)
+  remember(run, action, { ok: true })
+  assert.strictEqual(run.memory.drownings, 0)
+})
