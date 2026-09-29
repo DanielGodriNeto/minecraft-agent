@@ -1,6 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
-const { goals } = require('mineflayer-pathfinder')
+const { goals, Movements } = require('mineflayer-pathfinder')
 
 const PATH_MS = 30000
 const OPEN_MS = 10000
@@ -63,6 +63,14 @@ const guard = (promise, ms = GUARD_MS) => withTimeout(promise, ms, () => {})
 
 // Window opens can hang forever on a lost packet.
 const opened = (promise) => guard(promise, OPEN_MS)
+
+// goto must never pillar up under the bot (no scaffolding) or attempt parkour jumps.
+function skillMovements(bot) {
+  const movements = new Movements(bot)
+  movements.scafoldingBlocks = []
+  movements.allowParkour = false
+  return movements
+}
 
 async function goto(bot, goal, ms = PATH_MS) {
   try {
@@ -819,4 +827,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements }

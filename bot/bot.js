@@ -2,7 +2,7 @@ const path = require('node:path')
 const mineflayer = require('mineflayer')
 const { pathfinder } = require('mineflayer-pathfinder')
 const { parseCommand, isOwner } = require('./commands.js')
-const { trackRecipeBook, runSkill } = require('./skills.js')
+const { trackRecipeBook, runSkill, skillMovements } = require('./skills.js')
 const { runObjective, stopObjective } = require('./agent.js')
 const { keepHitboxOutOfBlocks } = require('./physicsfix.js')
 
@@ -61,6 +61,7 @@ function createBot(opts = {}, auth = authFromEnv()) {
   keepHitboxOutOfBlocks(bot)
   bot.skillLogPath = process.env.SKILL_LOG ?? path.join(__dirname, '..', 'logs', `skills-${options.username}.jsonl`)
   bot.loadPlugin(pathfinder)
+  bot.once('spawn', () => bot.pathfinder.setMovements(skillMovements(bot)))
   bot.on('error', console.error)
   bot.on('chat', (username, message) => {
     const owner = bot.players[username]

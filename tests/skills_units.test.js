@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -230,4 +230,10 @@ test('ledgeFloor: a diggable floor over solid ground within two blocks, unless l
   assert.strictEqual(ledgeFloor(world({ ...pillar, '0,9,0': 'air' }), p), null)
   assert.strictEqual(ledgeFloor(world({ '0,9,0': 'bedrock' }), p), null)
   assert.strictEqual(ledgeFloor(world({ '1,8,0': 'lava' }), p), null)
+})
+
+test('skillMovements: no scaffolding blocks and no parkour', () => {
+  const movements = skillMovements({ registry: require('../bot/node_modules/minecraft-data')('1.21.11') })
+  assert.deepStrictEqual(movements.scafoldingBlocks, [])
+  assert.strictEqual(movements.allowParkour, false)
 })
