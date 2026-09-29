@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -161,4 +161,22 @@ test('resetStaleTrail: drops a trail whose last crumb is more than 8 blocks away
   resetStaleTrail(far)
   assert.deepStrictEqual(far.trail, [])
   assert.doesNotThrow(() => resetStaleTrail({ entity: { position: new Vec3(0, 0, 0) } }))
+})
+
+test('arrived: swimming counts in a water cell, and 0.4 off-centre is close enough', () => {
+  const cell = new Vec3(5, 10, 5)
+  const swimmer = { entity: { position: { x: 5.5, y: 10.4, z: 5.5 }, onGround: false, isInWater: true }, blockAt: () => ({ name: 'water' }) }
+  assert.strictEqual(arrived(swimmer, cell), true)
+  assert.strictEqual(arrived({ ...swimmer, blockAt: () => ({ name: 'air' }) }, cell), false)
+  assert.strictEqual(arrived({ entity: { position: { x: 5.9, y: 10, z: 5.5 }, onGround: true } }, cell), true)
+})
+
+test('facing: true within about 10 degrees of the target direction, wrapping around', () => {
+  const bot = (yaw) => ({ entity: { position: { x: 0, y: 10, z: 0 }, yaw } })
+  const south = { x: 0, y: 10, z: 5 } // yaw 0 looks toward -z, PI toward +z
+  assert.strictEqual(facing(bot(Math.PI), south), true)
+  assert.strictEqual(facing(bot(-Math.PI + 0.1), south), true)
+  assert.strictEqual(facing(bot(Math.PI - 0.1), south), true)
+  assert.strictEqual(facing(bot(Math.PI - 0.3), south), false)
+  assert.strictEqual(facing(bot(0), south), false)
 })

@@ -20,7 +20,8 @@ const GUARD_MS = 5000
 const TUNNEL_OUT = 3
 const STEP_TICKS = 40
 const STEP_RANGE = 2.5
-const ARRIVE_DIST = 0.3
+const ARRIVE_DIST = 0.45
+const FACING_TOLERANCE = Math.PI / 18
 const TRAIL_MAX = 5000
 const HOME_RESET = 4
 const HOME_RANGE = 16
@@ -329,10 +330,19 @@ async function patchFloor(bot, landing) {
   if (!isSolid(bot.blockAt(spot))) throw new Fail('no_floor')
 }
 
-// Standing on the ground in the feet cell, near its centre.
+// Standing on the ground (or swimming, when the cell is water) in the feet cell, near its centre.
 function arrived(bot, feet) {
   const p = bot.entity.position
-  return bot.entity.onGround && Math.floor(p.y) === feet.y && Math.hypot(p.x - feet.x - 0.5, p.z - feet.z - 0.5) < ARRIVE_DIST
+  const supported = bot.entity.onGround || (bot.entity.isInWater && bot.blockAt(feet)?.name === 'water')
+  return Boolean(supported) && Math.floor(p.y) === feet.y && Math.hypot(p.x - feet.x - 0.5, p.z - feet.z - 0.5) < ARRIVE_DIST
+}
+
+// Within ~10 degrees of looking at the target horizontally; re-issuing lookAt every tick is wasted packets.
+function facing(bot, target) {
+  const p = bot.entity.position
+  const yaw = Math.atan2(p.x - target.x, p.z - target.z)
+  const turn = (bot.entity.yaw - yaw) % (2 * Math.PI)
+  return Math.abs(turn > Math.PI ? turn - 2 * Math.PI : turn < -Math.PI ? turn + 2 * Math.PI : turn) < FACING_TOLERANCE
 }
 
 // Walks into an adjacent, already cleared cell by holding forward (pathfinder needs ~1 s to plan each step).
@@ -341,7 +351,7 @@ async function stepTo(bot, feet) {
   bot.setControlState('sneak', false)
   for (let tick = 0; tick < STEP_TICKS && !arrived(bot, feet); tick++) {
     checkCancelled(bot)
-    await guard(bot.lookAt(center, true))
+    if (!facing(bot, center)) await guard(bot.lookAt(center, true))
     bot.setControlState('jump', feet.y > Math.floor(bot.entity.position.y))
     bot.setControlState('forward', true)
     await bot.waitForTicks(1)
@@ -747,4 +757,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing }
