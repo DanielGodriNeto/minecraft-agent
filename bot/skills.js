@@ -30,6 +30,8 @@ const FAR_HOME_MS = 120000
 const MAX_TUNNEL_OUTS = 2
 const HOSTILE_RANGE = 16
 const CANCEL_GRACE_MS = 2000
+const PICKUP_REACH_UP = 1.5
+const CANOPY = /_(leaves|log|wood)$/
 
 class Fail extends Error {
   constructor(reason, detail) { super(reason); this.reason = reason; this.detail = detail }
@@ -195,13 +197,21 @@ async function breakBlock(bot, block) {
   if (!OPEN.has(bot.blockAt(block.position)?.name)) throw new Fail('dig_failed')
 }
 
+// Goal height for collecting a drop: never above the bot's ground level, so the pathfinder cannot climb
+// onto leaves to reach it. null when the drop is too far above to be collected from here.
+function pickupGoalY(feetY, dropY) {
+  return dropY - feetY > PICKUP_REACH_UP ? null : Math.floor(Math.min(dropY, feetY))
+}
+
 async function pickUpDrop(bot, pos) {
   const dropNear = () => bot.nearestEntity(e => e.name === 'item' && e.position.distanceTo(pos.offset(0.5, 0.5, 0.5)) < 3)
   await poll(bot, dropNear, 1000)
   const drop = dropNear()
   if (!drop) return
-  const p = drop.position.floored()
-  await goto(bot, new goals.GoalBlock(p.x, p.y, p.z), 10000)
+  const goalY = () => pickupGoalY(bot.entity.position.y, drop.position.y)
+  await poll(bot, () => !bot.entities[drop.id] || goalY() !== null, 1000)
+  if (!bot.entities[drop.id] || goalY() === null) return
+  await goto(bot, new goals.GoalNear(drop.position.x, goalY(), drop.position.z, 1), 10000)
   if (!await poll(bot, () => !bot.entities[drop.id], 3000)) throw new Fail('pickup_failed')
 }
 
@@ -465,20 +475,55 @@ async function tunnelOut(bot, dir) {
   }
 }
 
+// Standing on leaves or a trunk: one block straight down gets off the canopy, unless lava is below.
+function onCanopy(bot, p) {
+  const floor = at(bot, p, 0, -1, 0)
+  if (!floor || !CANOPY.test(floor.name)) return false
+  return !nearLava(bot, floor.position) && !nearLava(bot, floor.position.offset(0, -1, 0))
+}
+
+async function dropThroughCanopy(bot, p) {
+  if (!onCanopy(bot, p)) return false
+  await breakBlock(bot, at(bot, p, 0, -1, 0))
+  await poll(bot, () => bot.entity.onGround, 1500)
+  return true
+}
+
+// Takes the first workable staircase step (open ones, then ones whose missing floor can be patched).
+// Returns the direction taken, or null when none worked.
+async function stairStep(bot, p, options) {
+  const patchable = PATCH_BLOCKS.some(n => findItem(bot, n))
+  const candidates = [...options.filter(o => !o.reason), ...options.filter(o => o.reason === 'no_floor' && patchable)]
+  for (const { dir, reason } of candidates) {
+    const cells = stairBlocks(p, DIRS[dir])
+    if (reason && !await patched(bot, cells[2])) continue
+    await tunnelStep(bot, cells, cells[2])
+    return dir
+  }
+  return null
+}
+
+async function patched(bot, landing) {
+  try {
+    await patchFloor(bot, landing)
+    return true
+  } catch (e) {
+    if (e instanceof Fail && e.reason === 'no_floor') return false
+    throw e
+  }
+}
+
 async function digDown(bot, targetY) {
   let d = 0
   let tunnels = 0
   while (Math.floor(bot.entity.position.y) > targetY) {
     checkCancelled(bot)
     const p = bot.entity.position.floored()
+    if (await dropThroughCanopy(bot, p)) continue
     const options = [0, 1, 2, 3].map(i => (d + i) % 4).map(dir => ({ dir, reason: stairRefusal(bot, p, DIRS[dir]) }))
-    const patchable = PATCH_BLOCKS.some(n => findItem(bot, n))
-    const choice = options.find(o => !o.reason) ?? options.find(o => o.reason === 'no_floor' && patchable)
-    if (choice) {
-      d = choice.dir
-      const cells = stairBlocks(p, DIRS[d])
-      if (choice.reason) await patchFloor(bot, cells[2])
-      await tunnelStep(bot, cells, cells[2])
+    const taken = await stairStep(bot, p, options)
+    if (taken !== null) {
+      d = taken
       continue
     }
     const out = options.find(o => tunnelSafe(bot, tunnelCells(p, DIRS[o.dir])))
@@ -686,4 +731,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy }

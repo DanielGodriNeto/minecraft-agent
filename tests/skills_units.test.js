@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -127,4 +127,21 @@ test('placeSpot: a spot without a floor is fine when it has any solid neighbour 
   assert.deepStrictEqual(placeFace(bot, new Vec3(1, 10, 0)), [1, 0, 0])
   assert.deepStrictEqual(placeFace(world({ '1,10,0': 'air' }), new Vec3(1, 10, 0)), [0, -1, 0])
   assert.strictEqual(placeFace(world({ '1,10,0': 'air', '1,9,0': 'air', '2,10,0': 'air', '1,10,1': 'air', '1,10,-1': 'air', '1,11,0': 'air', '0,10,0': 'air' }), new Vec3(1, 10, 0)), undefined)
+})
+
+test('pickupGoalY: clamps to the bot ground level and skips drops out of reach above', () => {
+  assert.strictEqual(pickupGoalY(64, 65.2), 64)
+  assert.strictEqual(pickupGoalY(64, 64.4), 64)
+  assert.strictEqual(pickupGoalY(64, 62.3), 62)
+  assert.strictEqual(pickupGoalY(64, 65.6), null)
+  assert.strictEqual(pickupGoalY(64, 68), null)
+})
+
+test('onCanopy: leaves and logs under the bot may be dug through unless lava is close', () => {
+  const p = new Vec3(0, 10, 0)
+  assert.strictEqual(onCanopy(world({ '0,9,0': 'oak_leaves' }), p), true)
+  assert.strictEqual(onCanopy(world({ '0,9,0': 'birch_log' }), p), true)
+  assert.strictEqual(onCanopy(world(), p), false)
+  assert.strictEqual(onCanopy(world({ '0,9,0': 'oak_leaves', '0,8,0': 'lava' }), p), false)
+  assert.strictEqual(onCanopy(world({ '0,9,0': 'oak_leaves', '0,7,0': 'lava' }), p), false)
 })
