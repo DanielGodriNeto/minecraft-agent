@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, placeableCount, safeToLeave, SKILLS } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -236,4 +236,74 @@ test('skillMovements: no scaffolding blocks and no parkour', () => {
   const movements = skillMovements({ registry: require('../bot/node_modules/minecraft-data')('1.21.11') })
   assert.deepStrictEqual(movements.scafoldingBlocks, [])
   assert.strictEqual(movements.allowParkour, false)
+})
+
+// Flat stone world (floor at y=9, bot feet at y=10) where placing and digging edit a shared block map.
+function shelterBot({ blocks = 12, hostile = null } = {}) {
+  const placed = new Map()
+  const dug = new Set()
+  const solidAt = (p) => (p.y < 10 || placed.has(`${p.x},${p.y},${p.z}`)) && !dug.has(`${p.x},${p.y},${p.z}`)
+  const blockAt = (p) => ({ name: solidAt(p) ? 'stone' : 'air', position: p, diggable: true, boundingBox: solidAt(p) ? 'block' : 'empty' })
+  let left = blocks
+  const bot = Object.assign(new EventEmitter(), {
+    health: 20, food: 20, refusedSpots: undefined,
+    stopDigging() {},
+    entity: { position: new Vec3(0.5, 10, 0.5) },
+    blockAt,
+    inventory: { items: () => (left > 0 ? [{ name: 'cobblestone', count: left, type: 1 }] : []) },
+    equip: async () => {},
+    placeBlock: async (ref, face) => {
+      left--
+      placed.set(`${ref.position.x + face.x},${ref.position.y + face.y},${ref.position.z + face.z}`, true)
+    },
+    dig: async (block) => { dug.add(`${block.position.x},${block.position.y},${block.position.z}`) },
+    digTime: () => 0,
+    pathfinder: { bestHarvestTool: () => null, setGoal() {} },
+    clearControlStates() {},
+    waitForTicks: async () => {},
+    nearestEntity: (match) => [hostile].filter(Boolean).find(match) ?? null,
+  })
+  return { bot, placed, dug, left: () => left }
+}
+
+test('shelter: seals a 1x1x2 cell in open ground with a roof, then digs out toward the requested side', async () => {
+  const { bot, placed, dug, left } = shelterBot()
+  const result = await run(bot, () => SKILLS.shelter(bot, 1), false)
+  assert.strictEqual(result.ok, true)
+  assert.strictEqual(placed.size, 10)
+  assert.strictEqual(left(), 2)
+  assert.deepStrictEqual([...dug].sort(), ['0,10,1', '0,11,1'])
+  assert.strictEqual(placed.has('0,12,0'), true)
+})
+
+test('shelter: waits while a hostile is within 8 blocks, and gives up at the wait cap', async () => {
+  const zombie = { type: 'hostile', name: 'zombie', position: new Vec3(3.5, 10, 0.5) }
+  const { bot } = shelterBot({ hostile: zombie })
+  assert.strictEqual(safeToLeave(bot), false)
+  zombie.position = new Vec3(12.5, 10, 0.5)
+  assert.strictEqual(safeToLeave(bot), true)
+  bot.health = 8
+  assert.strictEqual(safeToLeave(bot), false)
+  bot.food = 10
+  assert.strictEqual(safeToLeave(bot), true)
+})
+
+test('shelter: fewer than six placeable blocks falls back to flee without placing anything', async () => {
+  const { bot, placed } = shelterBot({ blocks: 5 })
+  const result = await run(bot, () => SKILLS.shelter(bot, 0), false)
+  assert.strictEqual(result.ok, true)
+  assert.strictEqual(placed.size, 0)
+})
+
+test('shelter: is cancellation-aware while walling in', async () => {
+  const { bot } = shelterBot()
+  const place = bot.placeBlock
+  bot.placeBlock = async (...args) => { bot.skillCancel.cancelled = true; bot.skillCancel.reason = 'timeout'; return place(...args) }
+  const result = await run(bot, () => SKILLS.shelter(bot, 0), false)
+  assert.strictEqual(result.reason, 'timeout')
+})
+
+test('placeableCount: sums every placeable block type', () => {
+  const bot = { inventory: { items: () => [{ name: 'dirt', count: 3 }, { name: 'cobblestone', count: 4 }, { name: 'stick', count: 9 }] } }
+  assert.strictEqual(placeableCount(bot), 7)
 })

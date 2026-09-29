@@ -36,7 +36,13 @@ const PICKUP_REACH_UP = 1.5
 const CANOPY = /_(leaves|log|wood)$/
 const DAMAGE_LOG_MAX = 10
 const HAZARD_CAUSE = { lava: 'lava', flowing_lava: 'lava', fire: 'fire', soul_fire: 'fire', magma_block: 'magma', cactus: 'cactus', sweet_berry_bush: 'berry_bush' }
-const NON_INTERRUPTIBLE = new Set(['flee', 'eat'])
+const NON_INTERRUPTIBLE = new Set(['flee', 'eat', 'shelter'])
+const PLACEABLE = ['cobblestone', 'cobbled_deepslate', 'dirt', 'stone', 'deepslate', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
+const SHELTER_MIN = 6
+const SHELTER_WAIT_MS = 30000
+const SAFE_RANGE = 8
+const SAFE_HEALTH = 16
+const SAFE_FOOD = 18
 
 class Fail extends Error {
   constructor(reason, detail) { super(reason); this.reason = reason; this.detail = detail }
@@ -746,6 +752,64 @@ async function flee(bot) {
   if (!await poll(bot, () => !nearestHostile(bot), 20000)) throw new Fail('timeout')
 }
 
+const placeableCount = (bot) => PLACEABLE.reduce((n, name) => n + countItem(bot, name), 0)
+
+// Regeneration needs food >= 18, so a hungry bot gains nothing by waiting for health.
+const safeToLeave = (bot) => !nearestHostile(bot, SAFE_RANGE) && (bot.health >= SAFE_HEALTH || bot.food < SAFE_FOOD)
+
+// A missed placement (entity in the way, lag) just leaves the cell open for the next pass.
+async function seal(bot, spot) {
+  if (isSolid(bot.blockAt(spot))) return true
+  if (!canHold(bot, spot)) return false
+  try {
+    return await tryPlace(bot, spot, PLACEABLE.find(n => findItem(bot, n)))
+  } catch {
+    return false
+  }
+}
+
+// The roof has nothing to lean on until one block stands next to it at head height + 1.
+async function sealRoof(bot, feet) {
+  const roof = feet.offset(0, 2, 0)
+  if (await seal(bot, roof)) return
+  for (const [dx, dz] of DIRS) if (await seal(bot, feet.offset(dx, 2, dz))) return seal(bot, roof)
+}
+
+const shelterCells = (feet) => [0, 1].flatMap(dy => DIRS.map(([dx, dz]) => feet.offset(dx, dy, dz)))
+const sealed = (bot, feet) => [...shelterCells(feet), feet.offset(0, 2, 0)].every(c => isSolid(bot.blockAt(c)))
+
+// Feet-level walls first: every head-level cell then has a wall block below it to lean on.
+async function wall(bot, feet) {
+  for (let pass = 0; pass < 2 && !sealed(bot, feet); pass++) {
+    for (const cell of shelterCells(feet)) {
+      checkCancelled(bot)
+      await seal(bot, cell)
+    }
+    await sealRoof(bot, feet)
+    bot.refusedSpots?.clear()
+  }
+}
+
+async function openSide(bot, feet, dir) {
+  for (const d of [0, 1, 2, 3].map(i => (dir + i) % 4)) {
+    const cells = tunnelCells(feet, DIRS[d])
+    if (cells.some(c => nearLava(bot, c) || !bot.blockAt(c)?.diggable)) continue
+    for (const c of cells) await breakBlock(bot, bot.blockAt(c))
+    return
+  }
+  throw new Fail('no_exit')
+}
+
+// Walls the bot into a 1x1x2 cell, waits out the danger, then digs out toward dir (any side if that one is unsafe).
+async function shelter(bot, dir = 0) {
+  if (placeableCount(bot) < SHELTER_MIN) return flee(bot)
+  const feet = bot.entity.position.floored()
+  await wall(bot, feet)
+  if (!sealed(bot, feet)) throw new Fail('not_sealed')
+  await poll(bot, () => safeToLeave(bot), SHELTER_WAIT_MS)
+  await openSide(bot, feet, dir)
+}
+
 async function deposit(bot, { x, y, z }, items = ['diamond']) {
   const chestBlock = bot.blockAt(bot.entity.position.clone().set(x, y, z)) // plain {x,y,z} → Vec3
   if (chestBlock?.name !== 'chest') throw new Fail('no_chest')
@@ -799,7 +863,7 @@ async function returnHome(bot, home) {
 
 const SKILLS = {
   explore, approach, mine, dig_down: digDown, go_up: goUp, craft, smelt,
-  equip, eat, flee, deposit, toss, return_home: returnHome,
+  equip, eat, flee, shelter, deposit, toss, return_home: returnHome,
 }
 
 // ---- skill log: one JSON line per call, read by the Phase 3 recorder ----
@@ -827,4 +891,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, placeableCount, safeToLeave, SHELTER_MIN }
