@@ -181,9 +181,11 @@ Descope rule: if week 5 ends with failures, ship `mine`/`dig_down`/`deposit` fir
 `craft_chain`/`smelt` to a one-week buffer before Phase 2.
 
 ### Phase 2 — Scripted baseline = usable bot (weeks 6–8)
-- [ ] 2.1 Pre-generate 600 spawn slots with Chunky (256-block radius **per slot**, not one bounding
+- [x] 2.1 Pre-generate 600 spawn slots with Chunky (256-block radius **per slot**, not one bounding
       box); save pristine snapshot. Check free disk ≥ 2× the pre-generated world size
-      (estimate: ~5–10 GB per copy — measure after generation)
+      (estimate: ~5–10 GB per copy — measure after generation). **Measured: 14 GB per copy**, 310 GB free.
+      Slots in `bot/slots.json` (seed 20260928, land only, 1024-block grid); `node bot/pregen.js`,
+      `node bot/eval.js snapshot`. Fresh spawn (restore + start) ≈ 40 s.
 - [ ] 2.2 Fixed-plan planner: tech tree → iron pickaxe → dig to y≈-58 → branch-mine → deposit → repeat.
       Planner parameters (branch y, spacing, return thresholds) get small random jitter per run
       so recorded data covers more states.
@@ -196,10 +198,10 @@ Descope rule: if week 5 ends with failures, ship `mine`/`dig_down`/`deposit` fir
       run the held-out slots 0–99 once for the gate
 
 **Tests**
-- [ ] `test_planner_order` — never attempts a craft whose inputs it can't have
-- [ ] `test_restock` — pickaxe broken mid-run → crafts a new one and continues
-- [ ] `test_death_recovery` — killed → respawns, rebuilds tools, resumes objective
-- [ ] `test_snapshot_restore` — after stop/restore/restart, a bot queries sample blocks at a slot
+- [x] `test_planner_order` — never attempts a craft whose inputs it can't have
+- [x] `test_restock` — pickaxe broken mid-run → crafts a new one and continues
+- [x] `test_death_recovery` — killed → respawns, rebuilds tools, resumes objective
+- [x] `test_snapshot_restore` — after stop/restore/restart, a bot queries sample blocks at a slot
       through the running server and they match the pristine snapshot
 
 **Gate:** ≥ 50% success on the 100 held-out runs (slots 0–99). This caps the ML phases — fix skills until it passes.
