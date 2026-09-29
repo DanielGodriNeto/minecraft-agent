@@ -339,3 +339,10 @@ test('planner: a dig_down that failed for lack of a tool crafts the best pickaxe
   assert.notStrictEqual(upgraded({ ...table, cobblestone: 3 }, { lastDigReason: 'blocked' }).key, 'upgrade')
   assert.notStrictEqual(upgraded({ ...table, cobblestone: 3 }, { digFails: 0 }).key, 'upgrade')
 })
+
+test('planner: after repeated branch hazards it climbs a few blocks before mining on', () => {
+  const deep = { inv: { iron_pickaxe: 1 }, y: DEFAULT_PARAMS.branchY }
+  const memory = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, hazardUp: true }
+  assert.deepStrictEqual(nextAction(state({ ...deep, memory })), { skill: 'go_up', args: [DEFAULT_PARAMS.branchY + 4], key: 'hazard_up' })
+  assert.strictEqual(nextAction(state({ ...deep, memory: { ...memory, hazardUp: false } })).skill, 'explore')
+})

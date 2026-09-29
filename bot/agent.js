@@ -12,6 +12,7 @@ const MAX_DROWN_REACTIONS = 3
 const IDLE_EXEMPT = new Set(['shelter', 'eat', 'fight'])
 const LOST_BLOCKS = 256
 const MAX_SHELTERS = 2
+const MAX_HAZARDS = 2
 const SHELTER_PAUSE = 5
 const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock is not usable
 
@@ -108,10 +109,26 @@ function trackDigging(memory, action, result) {
   memory.lastDigReason = result.reason
 }
 
+// A branch tunnel that met water or lava is abandoned: head another way from scratch, and after two in a row climb first.
+function failBranchLeg(memory, result) {
+  if (result.reason !== 'hazard') {
+    memory.leg++
+    return
+  }
+  memory.baseDir = (memory.baseDir + 1) % 4
+  memory.leg = 0
+  memory.hazards = (memory.hazards ?? 0) + 1
+  if (memory.hazards < MAX_HAZARDS) return
+  memory.hazards = 0
+  memory.hazardUp = true
+}
+
 function remember(run, action, result) {
   trackShelter(run.memory, action)
   trackDigging(run.memory, action, result)
   if (action.key === 'night_dig') run.memory.nightDigs = (run.memory.nightDigs ?? 0) + 1
+  if (action.skill === 'explore' && result.reason !== 'hazard') run.memory.hazards = 0
+  if (action.key === 'hazard_up') run.memory.hazardUp = false
   run.memory.drownings = result.reason === 'drowning' ? (run.memory.drownings ?? 0) + 1 : 0
   if (result.ok) return
   if (action.optional) {
@@ -121,7 +138,7 @@ function remember(run, action, result) {
   }
   if (action.skill !== 'explore' || action.relocate) return
   const { mode } = action.args[0]
-  if (mode === 'branch') run.memory.leg++
+  if (mode === 'branch') failBranchLeg(run.memory, result)
   else {
     run.memory.surfaceDir = (run.memory.surfaceDir + 1) % 4
     run.memory.surfaceLeg++
@@ -162,9 +179,21 @@ function createStuckTracker() {
   }
 }
 
+// A successful toss is neither progress nor a reset: it is skipped, and what it threw away is added back to the
+// inventory signature so the change does not look like progress on the next decision.
 function stuckTracker(bot) {
   const track = createStuckTracker()
-  return (result) => track(result, { pos: bot.entity.position.clone(), inv: JSON.stringify(inventoryCounts(bot)) })
+  const tossed = {}
+  return (result, action, before) => {
+    const now = inventoryCounts(bot)
+    if (action.skill === 'toss' && result.ok) {
+      for (const [name, n] of Object.entries(before)) tossed[name] = (tossed[name] ?? 0) + Math.max(0, n - (now[name] ?? 0))
+      return false
+    }
+    for (const [name, n] of Object.entries(tossed)) now[name] = (now[name] ?? 0) + n
+    const inv = JSON.stringify(Object.fromEntries(Object.entries(now).sort()))
+    return track(result, { pos: bot.entity.position.clone(), inv })
+  }
 }
 
 // home: storage chest position. Resolves with why the run ended.
@@ -194,7 +223,8 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       }
       const action = nextAction(observe(bot, run))
       if (!action) return finish(run, 'done')
-      const diamondsBefore = inventoryCounts(bot).diamond ?? 0
+      const invBefore = inventoryCounts(bot)
+      const diamondsBefore = invBefore.diamond ?? 0
       const yBefore = bot.entity?.position.y
       const result = { ...await runSkill(bot, action.skill, ...action.args), descended: bot.entity?.position.y < yBefore - 1 }
       run.decisions++
@@ -203,7 +233,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       remember(run, action, result)
       resetTrail(bot, home)
       run.recentlyAttacked = result.reason === 'attacked'
-      if (!run.recentlyAttacked && !IDLE_EXEMPT.has(action.skill) && isStuck(result)) return finish(run, 'stuck')
+      if (!run.recentlyAttacked && !IDLE_EXEMPT.has(action.skill) && isStuck(result, action, invBefore)) return finish(run, 'stuck')
     }
   } finally {
     bot.off('death', onDeath)
@@ -224,4 +254,4 @@ function stopObjective(bot) {
   return true
 }
 
-module.exports = { runObjective, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, isLost }
+module.exports = { runObjective, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, isLost }

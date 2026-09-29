@@ -37,6 +37,7 @@ const KEEP_STONE = 16
 const RETURN_BEFORE_MS = 8 * 60000
 const PICKAXES = ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe']
 const SWORDS = ['stone_sword', 'iron_sword', 'diamond_sword', 'netherite_sword']
+const HAZARD_CLIMB = 4
 const IRON_TIER = 2 // index in PICKAXES
 const LOW_PICK = 20
 const SURFACE_STICKS = 8 // enough for the spare and iron pickaxes so nothing needs a trip back up
@@ -111,6 +112,7 @@ function gather(s, item) {
   }
   if (source.find === 'dig') return descend(s, s.y - 3, source.blocks)
   const y = source.y ?? s.params.branchY
+  if (s.memory.hazardUp) return { ...act('go_up', s.y + HAZARD_CLIMB), key: 'hazard_up' }
   if (s.y > y + 2) return descend(s, y, source.blocks)
   return act('explore', { target: source.blocks, mode: 'branch', ...branchLeg(s) })
 }

@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
-const { createStuckTracker, pickLeft, remember, isLost } = require('../bot/agent.js')
+const { createStuckTracker, stuckTracker, pickLeft, remember, isLost } = require('../bot/agent.js')
 
 const ok = { ok: true }
 const fail = { ok: false, reason: 'timeout' }
@@ -134,4 +134,38 @@ test('remember: no_tool counts as a stuck dig, and a finished upgrade craft clea
   assert.deepStrictEqual([run.memory.digFails, run.memory.lastDigReason], [1, 'no_tool'])
   remember(run, { skill: 'craft', args: ['stone_pickaxe', 1], key: 'upgrade' }, { ok: true })
   assert.strictEqual(run.memory.digFails, 0)
+})
+
+test('remember: a branch hazard turns the heading and restarts the serpentine, two in a row also arm a climb', () => {
+  const run = { memory: { leg: 5, baseDir: 3, surfaceDir: 0, surfaceLeg: 0, optionalFails: {} } }
+  const explore = { skill: 'explore', args: [{ mode: 'branch' }] }
+  remember(run, explore, { ok: false, reason: 'hazard' })
+  assert.deepStrictEqual([run.memory.baseDir, run.memory.leg, run.memory.hazardUp], [0, 0, undefined])
+  remember(run, explore, { ok: false, reason: 'hazard' })
+  assert.deepStrictEqual([run.memory.baseDir, run.memory.hazardUp, run.memory.hazards], [1, true, 0])
+  remember(run, { skill: 'go_up', args: [-54], key: 'hazard_up' }, { ok: true })
+  assert.strictEqual(run.memory.hazardUp, false)
+})
+
+test('remember: a hazard streak is broken by any other explore result; other failures still advance the leg', () => {
+  const run = { memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: {} } }
+  const explore = { skill: 'explore', args: [{ mode: 'branch' }] }
+  remember(run, explore, { ok: false, reason: 'hazard' })
+  remember(run, explore, { ok: false, reason: 'not_found' })
+  assert.deepStrictEqual([run.memory.leg, run.memory.hazards], [1, 0])
+  remember(run, explore, { ok: false, reason: 'hazard' })
+  assert.notStrictEqual(run.memory.hazardUp, true)
+})
+
+test('stuck: a successful toss neither resets the failure count nor looks like progress', () => {
+  let items = [{ name: 'dirt', count: 10 }]
+  const bot = { entity: { position: { clone: () => ({ x: 0, y: 70, z: 0 }) } }, inventory: { items: () => items } }
+  const track = stuckTracker(bot)
+  const before = { dirt: 10 }
+  const failed = { skill: 'mine' }
+  assert.strictEqual(track({ ok: false }, failed, before), false)
+  assert.strictEqual(track({ ok: false }, failed, before), false)
+  items = []
+  assert.strictEqual(track({ ok: true }, { skill: 'toss' }, before), false)
+  assert.strictEqual(track({ ok: false }, failed, {}), true)
 })
