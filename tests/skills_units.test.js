@@ -1,7 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
-const { cheapestPickaxe, stairRefusal } = require('../bot/skills.js')
+const { cheapestPickaxe, stairRefusal, arrived } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -37,4 +37,13 @@ test('stairRefusal: reports why a step is refused', () => {
   assert.strictEqual(stairRefusal(world({ '1,10,0': 'bedrock' }), p, east), 'undiggable')
   assert.strictEqual(stairRefusal(world({ '2,10,0': 'lava' }), p, east), 'lava')
   assert.strictEqual(stairRefusal(world({ '1,8,0': 'lava' }), p, east), 'lava')
+})
+
+test('arrived: needs ground, the right level and to be near the cell centre', () => {
+  const bot = (x, y, z, onGround = true) => ({ entity: { position: { x, y, z }, onGround } })
+  const cell = new Vec3(5, 10, 5)
+  assert.strictEqual(arrived(bot(5.5, 10, 5.6), cell), true)
+  assert.strictEqual(arrived(bot(5.5, 10, 5.6, false), cell), false)
+  assert.strictEqual(arrived(bot(5.5, 11, 5.5), cell), false)
+  assert.strictEqual(arrived(bot(5.0, 10, 5.5), cell), false)
 })

@@ -18,6 +18,9 @@ const FUELS = ['coal', 'charcoal', ...WOODS.map(w => `${w}_planks`), ...WOODS.ma
 const PATCH_BLOCKS = ['cobblestone', 'cobbled_deepslate', 'dirt']
 const PLACE_MS = 5000
 const TUNNEL_OUT = 3
+const STEP_TICKS = 40
+const STEP_RANGE = 2.5
+const ARRIVE_DIST = 0.3
 const MAX_TUNNEL_OUTS = 2
 const HOSTILE_RANGE = 16
 const ATTACK_RANGE = 6
@@ -256,9 +259,34 @@ async function patchFloor(bot, landing) {
   if (!isSolid(bot.blockAt(spot))) throw new Fail('no_floor')
 }
 
+// Standing on the ground in the feet cell, near its centre.
+function arrived(bot, feet) {
+  const p = bot.entity.position
+  return bot.entity.onGround && Math.floor(p.y) === feet.y && Math.hypot(p.x - feet.x - 0.5, p.z - feet.z - 0.5) < ARRIVE_DIST
+}
+
+// Walks into an adjacent, already cleared cell by holding forward (pathfinder needs ~1 s to plan each step).
+async function stepTo(bot, feet) {
+  const center = feet.offset(0.5, 0, 0.5)
+  bot.setControlState('sneak', false)
+  for (let tick = 0; tick < STEP_TICKS && !arrived(bot, feet); tick++) {
+    await bot.lookAt(center, true)
+    bot.setControlState('jump', feet.y > Math.floor(bot.entity.position.y))
+    bot.setControlState('forward', true)
+    await bot.waitForTicks(1)
+  }
+  bot.clearControlStates()
+  return arrived(bot, feet)
+}
+
+async function moveTo(bot, feet) {
+  if (bot.entity.position.distanceTo(feet.offset(0.5, 0, 0.5)) <= STEP_RANGE && await stepTo(bot, feet)) return
+  await goto(bot, new goals.GoalBlock(feet.x, feet.y, feet.z), 10000)
+}
+
 async function tunnelStep(bot, cells, feet) {
   for (const c of cells) await breakBlock(bot, bot.blockAt(c))
-  await goto(bot, new goals.GoalBlock(feet.x, feet.y, feet.z), 10000)
+  await moveTo(bot, feet)
 }
 
 // ---- skills ----
@@ -526,4 +554,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal }
+module.exports = { runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived }
