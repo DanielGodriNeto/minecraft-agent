@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
-const { createStuckTracker, pickLeft } = require('../bot/agent.js')
+const { createStuckTracker, pickLeft, remember } = require('../bot/agent.js')
 
 const ok = { ok: true }
 const fail = { ok: false, reason: 'timeout' }
@@ -45,4 +45,14 @@ test('pickLeft: wear of the cheapest pickaxe that can dig stone, 0 without one',
   assert.strictEqual(pickLeft(bot(all[0], all[1])), 50)
   assert.strictEqual(pickLeft(bot(all[0])), 240)
   assert.strictEqual(pickLeft(bot({ name: 'stick', type: 9 })), 0)
+})
+
+test('remember: failed optional crafts are counted per item, successes and required steps are not', () => {
+  const run = { memory: { optionalFails: {} } }
+  const spare = { skill: 'craft', args: ['stone_pickaxe', 1], optional: true }
+  remember(run, spare, { ok: false })
+  remember(run, spare, { ok: false })
+  remember(run, spare, { ok: true })
+  remember(run, { skill: 'craft', args: ['iron_pickaxe', 1] }, { ok: false })
+  assert.deepStrictEqual(run.memory.optionalFails, { stone_pickaxe: 2 })
 })
