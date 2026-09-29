@@ -10,6 +10,7 @@ const HOP_MS = 12000
 const SKILL_CAP_MS = 180000
 const OPEN = new Set(['air', 'cave_air', 'void_air', 'water'])
 const LAVA = new Set(['lava', 'flowing_lava'])
+const WET = new Set(['water', 'flowing_water', 'bubble_column'])
 const FACES = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]]
 const SMELTS = { iron_ingot: 'raw_iron', gold_ingot: 'raw_gold', copper_ingot: 'raw_copper' }
@@ -195,6 +196,8 @@ const countItem = (bot, name) => bot.inventory.items().filter(i => i.name === na
 const findItem = (bot, name) => bot.inventory.items().find(i => i.name === name)
 const isLava = (block) => block !== null && LAVA.has(block.name)
 const nearLava = (bot, pos) => isLava(bot.blockAt(pos)) || FACES.some(f => isLava(at(bot, pos, ...f)))
+const isWet = (block) => block !== null && WET.has(block.name)
+const nearWater = (bot, pos) => isWet(bot.blockAt(pos)) || FACES.some(f => isWet(at(bot, pos, ...f)))
 const isSolid = (block) => block !== null && block.boundingBox === 'block'
 
 function blockId(bot, name) {
@@ -363,16 +366,17 @@ function stairBlocks(p, [dx, dz]) {
   return [p.offset(dx, 1, dz), p.offset(dx, 0, dz), p.offset(dx, -1, dz)]
 }
 
-// Why a staircase step toward dir cannot be taken: 'lava', 'undiggable', 'no_floor', or null when it can.
+// Why a staircase step toward dir cannot be taken: 'lava', 'water', 'undiggable', 'no_floor', or null when it can.
 function stairRefusal(bot, p, dir) {
   const cells = stairBlocks(p, dir)
   if (cells.some(c => nearLava(bot, c))) return 'lava'
+  if (cells.some(c => nearWater(bot, c))) return 'water'
   if (cells.some(c => !(OPEN.has(bot.blockAt(c)?.name) || bot.blockAt(c)?.diggable))) return 'undiggable'
   return isSolid(at(bot, cells[2], 0, -1, 0)) ? null : 'no_floor'
 }
 
 const tunnelCells = (p, [dx, dz]) => [p.offset(dx, 1, dz), p.offset(dx, 0, dz)]
-const tunnelSafe = (bot, cells) => !cells.some(c => nearLava(bot, c)) && isSolid(at(bot, cells[1], 0, -1, 0))
+const tunnelSafe = (bot, cells) => !cells.some(c => nearLava(bot, c) || nearWater(bot, c)) && isSolid(at(bot, cells[1], 0, -1, 0))
 
 // Solid neighbours of the hole under a landing cell that a block can be placed against, minus faces that failed before.
 function patchFaces(bot, spot) {
@@ -992,4 +996,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, placeableCount, safeToLeave, SHELTER_MIN, nearestHostile, bestWeapon, nearestAnimal }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, placeableCount, safeToLeave, SHELTER_MIN, nearestHostile, bestWeapon, nearestAnimal }

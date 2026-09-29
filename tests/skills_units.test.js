@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -34,7 +34,11 @@ test('stairRefusal: reports why a step is refused', () => {
   const east = [1, 0]
   assert.strictEqual(stairRefusal(world(), p, east), null)
   assert.strictEqual(stairRefusal(world({ '1,8,0': 'air' }), p, east), 'no_floor')
-  assert.strictEqual(stairRefusal(world({ '1,8,0': 'water' }), p, east), 'no_floor')
+  assert.strictEqual(stairRefusal(world({ '1,8,0': 'water' }), p, east), 'water')
+  assert.strictEqual(stairRefusal(world({ '1,11,0': 'water' }), p, east), 'water')
+  assert.strictEqual(stairRefusal(world({ '2,9,0': 'water' }), p, east), 'water')
+  assert.strictEqual(stairRefusal(world({ '1,10,1': 'water' }), p, east), 'water')
+  assert.strictEqual(stairRefusal(world({ '2,10,0': 'lava', '1,9,0': 'water' }), p, east), 'lava')
   assert.strictEqual(stairRefusal(world({ '1,10,0': 'bedrock' }), p, east), 'undiggable')
   assert.strictEqual(stairRefusal(world({ '2,10,0': 'lava' }), p, east), 'lava')
   assert.strictEqual(stairRefusal(world({ '1,8,0': 'lava' }), p, east), 'lava')
@@ -414,4 +418,15 @@ test('go_up: fails not_reached when no block can be placed', async () => {
     const { bot } = pillarBot(options)
     assert.strictEqual((await run(bot, () => SKILLS.go_up(bot, 13), false)).reason, 'not_reached')
   }
+})
+
+test('tunnelSafe: refuses cells in or next to water or lava, and cells without a floor', () => {
+  const cells = [new Vec3(1, 11, 0), new Vec3(1, 10, 0)]
+  assert.strictEqual(tunnelSafe(world(), cells), true)
+  assert.strictEqual(tunnelSafe(world({ '1,10,0': 'water' }), cells), false)
+  assert.strictEqual(tunnelSafe(world({ '2,11,0': 'water' }), cells), false)
+  assert.strictEqual(tunnelSafe(world({ '1,12,0': 'water' }), cells), false)
+  assert.strictEqual(tunnelSafe(world({ '1,9,0': 'water' }), cells), false)
+  assert.strictEqual(tunnelSafe(world({ '1,10,1': 'lava' }), cells), false)
+  assert.strictEqual(tunnelSafe(world({ '1,9,0': 'air' }), cells), false)
 })
