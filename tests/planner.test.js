@@ -29,6 +29,7 @@ function craftable(s, item) {
     case 'wooden_pickaxe': return table && planks >= 3 && sticks >= 2
     case 'stone_pickaxe': return table && sum(s.inv, STONES) >= 3 && sticks >= 2
     case 'iron_pickaxe': return table && (s.inv.iron_ingot ?? 0) >= 3 && sticks >= 2
+    case 'stone_sword': return table && sum(s.inv, STONES) >= 2 && sticks >= 1
     case 'furnace': return table && sum(s.inv, STONES) >= 8
     default: return false
   }
@@ -137,7 +138,7 @@ test('planner: surface search grows with each failed leg and is capped', () => {
 })
 
 test('planner: iron-geared bot crafts spare sticks and a stone pickaxe before descending', () => {
-  const geared = { iron_pickaxe: 1, oak_planks: 8, cobblestone: 5, crafting_table: 1 }
+  const geared = { iron_pickaxe: 1, stone_sword: 1, oak_planks: 8, cobblestone: 5, crafting_table: 1 }
   assert.deepStrictEqual(nextAction(state({ inv: geared, y: 16 })), { skill: 'craft', args: ['stick', 4], optional: true })
   assert.deepStrictEqual(nextAction(state({ inv: { ...geared, stick: 6 }, y: 16 })), { skill: 'craft', args: ['stone_pickaxe', 1], optional: true })
   assert.deepStrictEqual(nextAction(state({ inv: { ...geared, oak_planks: 0, oak_log: 1 }, y: 16 })), { skill: 'craft', args: ['oak_planks', 4], optional: true })
@@ -147,11 +148,11 @@ test('planner: spares are skipped when the materials are not carried', () => {
   const dig = { skill: 'dig_down', args: [DEFAULT_PARAMS.branchY] }
   assert.deepStrictEqual(nextAction(state({ inv: { iron_pickaxe: 1 }, y: 16 })), dig)
   assert.deepStrictEqual(nextAction(state({ inv: { iron_pickaxe: 1, cobblestone: 5, oak_planks: 1 }, y: 16 })), dig)
-  const done = { iron_pickaxe: 1, stone_pickaxe: 1, stick: 4, oak_planks: 8, cobblestone: 5 }
+  const done = { iron_pickaxe: 1, stone_pickaxe: 1, stone_sword: 1, stick: 4, oak_planks: 8, cobblestone: 5 }
   assert.deepStrictEqual(nextAction(state({ inv: done, y: 16, pickLeft: 100 })), dig)
 })
 
-const stoneStage = { stone_pickaxe: 1, oak_planks: 8, cobblestone: 5, crafting_table: 1, stick: 8 }
+const stoneStage = { stone_pickaxe: 1, stone_sword: 1, oak_planks: 8, cobblestone: 5, crafting_table: 1, stick: 8 }
 
 test('planner: a lone stone pickaxe gets a spare before the iron stage, once sticks are stocked', () => {
   assert.deepStrictEqual(nextAction(state({ inv: stoneStage, pickLeft: 100 })), { skill: 'craft', args: ['stone_pickaxe', 1], optional: true })
@@ -165,7 +166,7 @@ test('planner: stone is counted as the biggest single stone type', () => {
 })
 
 test('planner: a worn in-use pickaxe asks for one more spare, but only up to three pickaxes', () => {
-  const two = { iron_pickaxe: 1, stone_pickaxe: 1, oak_planks: 8, cobblestone: 5, crafting_table: 1, stick: 2 }
+  const two = { iron_pickaxe: 1, stone_pickaxe: 1, stone_sword: 1, oak_planks: 8, cobblestone: 5, crafting_table: 1, stick: 2 }
   assert.deepStrictEqual(nextAction(state({ inv: two, y: 16, pickLeft: 10 })), { skill: 'craft', args: ['stone_pickaxe', 1], optional: true })
   assert.strictEqual(nextAction(state({ inv: two, y: 16, pickLeft: 100 })).skill, 'dig_down')
   assert.strictEqual(nextAction(state({ inv: { ...two, wooden_pickaxe: 1 }, y: 16, pickLeft: 10 })).skill, 'dig_down')
@@ -243,7 +244,7 @@ test('planner: after repeated shelters it fights a close hostile, flees when wea
   assert.strictEqual(nextAction(state({ ...hurt, hostileClose: true })).skill, 'fight')
   assert.strictEqual(nextAction(state({ ...hurt, hostileClose: true, health: 7 })).skill, 'flee')
   assert.ok(!['shelter', 'flee', 'fight'].includes(nextAction(state(hurt)).skill))
-  assert.strictEqual(nextAction(state({ ...hurt, memory: { ...memory, noShelter: 0 }, hostileClose: true })).skill, 'shelter')
+  assert.strictEqual(nextAction(state({ ...hurt, memory: { ...memory, noShelter: 0 }, hostileClose: true, health: 7 })).skill, 'shelter')
 })
 
 test('planner: after two failed dig_downs the bot relocates before digging again, on the surface and underground', () => {
@@ -254,4 +255,25 @@ test('planner: after two failed dig_downs the bot relocates before digging again
   assert.deepStrictEqual([hop.skill, hop.relocate, hop.args[0].mode, hop.args[0].dir, hop.args[0].maxBlocks], ['explore', true, 'surface', 3, 8])
   const branch = nextAction(state({ inv: geared, y: 0, memory: memory(2) }))
   assert.deepStrictEqual([branch.skill, branch.relocate, branch.args[0].mode, branch.args[0].dir, branch.args[0].maxBlocks], ['explore', true, 'branch', 2, 8])
+})
+
+test('planner: a hostile within fighting range is fought before sheltering or fleeing', () => {
+  const close = { hostileNear: true, hostileClose: true, canShelter: true }
+  assert.strictEqual(nextAction(state(close)).skill, 'fight')
+  assert.strictEqual(nextAction(state({ ...close, recentlyAttacked: true })).skill, 'fight')
+  assert.strictEqual(nextAction(state({ ...close, health: 8 })).skill, 'fight')
+  assert.strictEqual(nextAction(state({ ...close, health: 7 })).skill, 'shelter')
+  assert.strictEqual(nextAction(state({ hostileNear: true, hostileClose: true, health: 7 })).skill, 'flee')
+  assert.strictEqual(nextAction(state({ ...close, hostileClose: false, recentlyAttacked: true })).skill, 'shelter')
+})
+
+test('planner: a stone sword follows the stone pickaxe when stone and a stick are at hand', () => {
+  const armed = { stone_pickaxe: 1, wooden_pickaxe: 1, stick: 8, crafting_table: 1 }
+  assert.deepStrictEqual(nextAction(state({ inv: { ...armed, cobblestone: 2 } })), { skill: 'craft', args: ['stone_sword', 1], optional: true })
+  assert.strictEqual(nextAction(state({ inv: { ...armed, cobblestone: 1 }, visible: { stone: true } })).skill, 'mine')
+  assert.notStrictEqual(nextAction(state({ inv: { ...armed, cobblestone: 1 } })).args[0], 'stone_sword')
+  assert.notStrictEqual(nextAction(state({ inv: { ...armed, cobblestone: 2, stone_sword: 1 } })).args[0], 'stone_sword')
+  assert.notStrictEqual(nextAction(state({ inv: { ...armed, cobblestone: 2, iron_sword: 1 } })).args[0], 'stone_sword')
+  const failed = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: { stone_sword: 2 } }
+  assert.notStrictEqual(nextAction(state({ inv: { ...armed, cobblestone: 2 }, memory: failed })).args[0], 'stone_sword')
 })

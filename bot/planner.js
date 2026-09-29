@@ -13,6 +13,7 @@ const RECIPES = {
   crafting_table: { out: 1, in: { planks: 4 } },
   wooden_pickaxe: { out: 1, in: { planks: 3, stick: 2 }, table: true },
   stone_pickaxe: { out: 1, in: { stone: 3, stick: 2 }, table: true },
+  stone_sword: { out: 1, in: { stone: 2, stick: 1 }, table: true },
   iron_pickaxe: { out: 1, in: { iron_ingot: 3, stick: 2 }, table: true },
   furnace: { out: 1, in: { stone: 8 }, table: true },
 }
@@ -35,6 +36,7 @@ const STONE_JUNK = ['cobblestone', 'cobbled_deepslate']
 const KEEP_STONE = 16
 const RETURN_BEFORE_MS = 8 * 60000
 const PICKAXES = ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe']
+const SWORDS = ['stone_sword', 'iron_sword', 'diamond_sword', 'netherite_sword']
 const LOW_PICK = 20
 const SURFACE_STICKS = 8 // enough for the spare and iron pickaxes so nothing needs a trip back up
 const SURFACE_SLACK = 8
@@ -164,6 +166,15 @@ function spareStep(s) {
   return { ...step, optional: true }
 }
 
+// A sword right after the stone pickaxe, from stone in hand or in view; never worth a dig or a trip for wood.
+function swordStep(s) {
+  if (SWORDS.some(name => has(s, name)) || (s.inv.stick ?? 0) < 1) return null
+  const stoneAtHand = count(s, 'stone') >= 2 || s.visible.stone
+  const tableOk = s.tableNear || has(s, 'crafting_table') || count(s, 'planks') >= 4
+  if (!stoneAtHand || !tableOk || (s.memory.optionalFails?.stone_sword ?? 0) >= MAX_SPARE_FAILS) return null
+  return { ...obtain(s, 'stone_sword', 1), optional: true }
+}
+
 // Before the first descent: wood for sticks is fetched here, not underground.
 function stickStock(s) {
   return atSurface(s) && (s.inv.stick ?? 0) < SURFACE_STICKS ? obtain(s, 'stick', SURFACE_STICKS) : null
@@ -184,9 +195,11 @@ function standGround(s) {
   return s.health >= FIGHT_HEALTH ? act('fight') : act('flee')
 }
 
+// A hostile in reach gets fought first: sealing in or running with it adjacent only gives it free hits.
 function dangerStep(s) {
   if (s.drowning) return act('go_up', s.y + DROWN_RISE)
   if (!s.hostileNear) return null
+  if (s.hostileClose && s.health >= FIGHT_HEALTH) return act('fight')
   const threatened = s.recentlyAttacked || s.health < s.params.fleeHealth
     || (s.isNight && s.y >= s.surfaceY - 2 && !surfaceWork(s))
   if (!threatened) return null
@@ -224,9 +237,9 @@ function nextAction(s) {
       return obtain(s, count(s, 'stone') >= 3 ? 'stone_pickaxe' : 'wooden_pickaxe', 1)
     }
     if (!has(s, 'stone_pickaxe')) return obtain(s, 'stone_pickaxe', 1)
-    return spareStep(s) ?? stickStock(s) ?? obtain(s, 'iron_pickaxe', 1)
+    return swordStep(s) ?? spareStep(s) ?? stickStock(s) ?? obtain(s, 'iron_pickaxe', 1)
   }
-  return spareStep(s) ?? gather(s, 'diamond')
+  return swordStep(s) ?? spareStep(s) ?? gather(s, 'diamond')
 }
 
 module.exports = { nextAction, DEFAULT_PARAMS, SOURCES, GROUPS }
