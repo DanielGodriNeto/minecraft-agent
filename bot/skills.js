@@ -1133,9 +1133,18 @@ async function shelter(bot, dir = 0, until = 'threat') {
   if (nearestHostile(bot)) throw new Fail('hostile_waiting')
 }
 
+// The stored home is gone or unreachable: a carried chest placed here becomes the new home.
+async function adoptChest(bot) {
+  const { x, y, z } = (await placeFromInventory(bot, 'chest')).position
+  if (bot.objectiveRun) bot.objectiveRun.home = { x, y, z }
+}
+
 async function deposit(bot, { x, y, z }, items = ['diamond']) {
   const chestBlock = bot.blockAt(bot.entity.position.clone().set(x, y, z)) // plain {x,y,z} → Vec3
-  if (chestBlock?.name !== 'chest') throw new Fail('no_chest')
+  if (chestBlock?.name !== 'chest') {
+    if (!findItem(bot, 'chest')) throw new Fail('no_chest')
+    return adoptChest(bot) // the next decision deposits into it
+  }
   await reach(bot, chestBlock)
   const chest = await opened(bot.openContainer(chestBlock))
   let full = false
@@ -1186,11 +1195,21 @@ async function freeHead(bot) {
   } catch {}
 }
 
+const MAX_HOME_FAILS = 2
+
 async function returnHome(bot, home) {
   const nearHome = (p) => Math.hypot(p.x - home.x, p.z - home.z) <= HOME_RANGE && p.y >= home.y - HOME_SLACK
   await followTrail(bot, nearHome)
   const ms = nearHome(bot.entity.position) ? HOME_MS : FAR_HOME_MS
-  await goto(bot, new goals.GoalNear(home.x, home.y, home.z, 3), ms)
+  try {
+    await goto(bot, new goals.GoalNear(home.x, home.y, home.z, 3), ms)
+    bot.homeFails = 0
+  } catch (e) {
+    bot.homeFails = (bot.homeFails ?? 0) + 1
+    if (bot.homeFails < MAX_HOME_FAILS || !findItem(bot, 'chest')) throw e
+    bot.homeFails = 0
+    await adoptChest(bot)
+  }
 }
 
 const SKILLS = {

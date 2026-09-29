@@ -238,7 +238,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
       remember(run, action, result)
-      resetTrail(bot, home)
+      resetTrail(bot, run.home)
       run.recentlyAttacked = result.reason === 'attacked'
       if (!run.recentlyAttacked && !IDLE_EXEMPT.has(action.skill) && isStuck(result, action, invBefore)) return finish(run, 'stuck')
     }

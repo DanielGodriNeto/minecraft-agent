@@ -749,3 +749,33 @@ test('retrieveStation: a break that fails leaves station_unreachable', async () 
   stuck.bot.dig = async () => { throw new Error('nope') }
   await assert.rejects(retrieveStation(stuck.bot, stuck.table, 'crafting_table'), (e) => e.reason === 'station_unreachable')
 })
+
+test('deposit: with no chest at home but one carried, it is placed and becomes the new home; without one it fails no_chest', async () => {
+  const { bot, placed } = shelterBot()
+  const items = bot.inventory.items
+  bot.inventory.items = () => [...items(), { name: 'chest', count: 1, type: 2 }]
+  bot.objectiveRun = { home: { x: 50, y: 10, z: 50 } }
+  const result = await run(bot, () => SKILLS.deposit(bot, { x: 50, y: 10, z: 50 }), false)
+  assert.strictEqual(result.ok, true)
+  assert.strictEqual(placed.size, 1)
+  const [x, y, z] = [...placed.keys()][0].split(',').map(Number)
+  assert.deepStrictEqual(bot.objectiveRun.home, { x, y, z })
+  const bare = shelterBot().bot
+  assert.strictEqual((await run(bare, () => SKILLS.deposit(bare, { x: 50, y: 10, z: 50 }), false)).reason, 'no_chest')
+})
+
+test('return_home: the second failed trip with a chest in the pack places it as the new home', async () => {
+  const { bot, placed } = shelterBot()
+  const items = bot.inventory.items
+  bot.inventory.items = () => [...items(), { name: 'chest', count: 1, type: 2 }]
+  bot.objectiveRun = { home: { x: 50, y: 10, z: 50 } }
+  bot.trail = []
+  bot.pathfinder.goto = async () => { throw new Error('No path') }
+  const home = { x: 50, y: 10, z: 50 }
+  const first = await run(bot, () => SKILLS.return_home(bot, home), false)
+  assert.strictEqual(first.ok, false)
+  assert.strictEqual(placed.size, 0)
+  const second = await run(bot, () => SKILLS.return_home(bot, home), false)
+  assert.strictEqual(second.ok, true)
+  assert.strictEqual(placed.size, 1)
+})
