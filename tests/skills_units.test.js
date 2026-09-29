@@ -313,11 +313,13 @@ test('shelter: seals a 1x1x2 cell in open ground with a roof, then digs out towa
   assert.strictEqual(placed.has('0,12,0'), true)
 })
 
-test('shelter: waits while a hostile is within 8 blocks, and gives up at the wait cap', async () => {
+test('shelter: waits while a hostile is within the planner danger range of 16 blocks', async () => {
   const zombie = { type: 'hostile', name: 'zombie', position: new Vec3(3.5, 10, 0.5) }
   const { bot } = shelterBot({ hostile: zombie })
   assert.strictEqual(safeToLeave(bot), false)
   zombie.position = new Vec3(12.5, 10, 0.5)
+  assert.strictEqual(safeToLeave(bot), false)
+  zombie.position = new Vec3(20.5, 10, 0.5)
   assert.strictEqual(safeToLeave(bot), true)
   bot.health = 8
   assert.strictEqual(safeToLeave(bot), false)
@@ -512,4 +514,59 @@ test('pickUpDrop: a drop that cannot be fetched fails once and is skipped afterw
   const pos = new Vec3(0, 10, 0)
   await assert.rejects(run(bot, () => pickUpDrop(bot, pos), false).then(r => { if (!r.ok) throw new Error(r.reason) }), { message: 'pickup_failed' })
   assert.strictEqual((await run(bot, () => pickUpDrop(bot, pos), false)).ok, true)
+})
+
+test('shelter: digs out but reports hostile_waiting when a hostile is still in range on the way out', async () => {
+  const zombie = { type: 'hostile', name: 'zombie', position: new Vec3(3.5, 10, 0.5) }
+  const { bot, dug } = shelterBot({ hostile: zombie })
+  let calls = 0
+  const nearest = bot.nearestEntity
+  bot.nearestEntity = (match) => (++calls === 1 ? null : nearest(match))
+  const result = await run(bot, () => SKILLS.shelter(bot, 1), false)
+  assert.strictEqual(result.reason, 'hostile_waiting')
+  assert.strictEqual(dug.size, 2)
+})
+
+function fightBot({ hits = 2, mobAt = 2, weapon = 'iron_sword' } = {}) {
+  const mob = { id: 7, name: 'zombie', type: 'hostile', height: 1.9, position: new Vec3(mobAt, 10, 0) }
+  const bot = Object.assign(new EventEmitter(), {
+    entity: { position: new Vec3(0, 10, 0) },
+    entities: { 7: mob },
+    inventory: { items: () => [{ name: weapon, type: 1 }, { name: 'diamond_pickaxe', type: 2 }] },
+    equipped: null,
+    equip: async (item) => { bot.equipped = item.name },
+    lookAt: async () => {},
+    attacks: 0,
+    attack() { if (++bot.attacks >= hits) delete bot.entities[7] },
+    pathfinder: { setGoal() {} },
+    clearControlStates() {},
+    stopDigging() {},
+    waitForTicks: () => new Promise(r => setTimeout(r, 1)),
+    nearestEntity: (match) => [mob].find(match) ?? null,
+  })
+  return { bot, mob }
+}
+
+test('fight: equips the best weapon and attacks the close hostile until it is dead', async () => {
+  const { bot } = fightBot()
+  const result = await run(bot, () => SKILLS.fight(bot), false)
+  assert.strictEqual(result.ok, true)
+  assert.strictEqual(bot.equipped, 'iron_sword')
+  assert.strictEqual(bot.attacks, 2)
+})
+
+test('fight: no_target without a hostile within 4 blocks, ends ok once the mob leaves range, not_killed at the limit', async () => {
+  const far = fightBot({ mobAt: 6 }).bot
+  assert.strictEqual((await run(far, () => SKILLS.fight(far), false)).reason, 'no_target')
+  const { bot, mob } = fightBot({ hits: 99 })
+  bot.attack = () => { mob.position = new Vec3(9, 10, 0) }
+  assert.strictEqual((await run(bot, () => SKILLS.fight(bot), false)).ok, true)
+  const stubborn = fightBot({ hits: 999 })
+  assert.strictEqual((await run(stubborn.bot, () => SKILLS.fight(stubborn.bot, 40), false)).reason, 'not_killed')
+})
+
+test('fight: cancellation stops the loop', async () => {
+  const { bot } = fightBot({ hits: 999 })
+  bot.attack = () => { bot.skillCancel.cancelled = true; bot.skillCancel.reason = 'timeout' }
+  assert.strictEqual((await run(bot, () => SKILLS.fight(bot), false)).reason, 'timeout')
 })

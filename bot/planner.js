@@ -44,6 +44,7 @@ const EAT_AT = 17 // natural regeneration needs food >= 18
 const WEAK_HEALTH = 12
 const FULL_FOOD = 20
 const DROWN_RISE = 4
+const FIGHT_HEALTH = 8
 
 // Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
 const BIGGEST_STACK = new Set(['planks', 'stone'])
@@ -167,12 +168,19 @@ function takeCover(s) {
 // Surface work is the tech tree before the iron pickaxe, or a trip home.
 const surfaceWork = (s) => !has(s, 'iron_pickaxe') || shouldReturn(s)
 
+// Sheltering did not get rid of the hostile: fight one that is close and keep working otherwise.
+function standGround(s) {
+  if (!s.hostileClose) return null
+  return s.health >= FIGHT_HEALTH ? act('fight') : act('flee')
+}
+
 function dangerStep(s) {
   if (s.drowning) return act('go_up', s.y + DROWN_RISE)
   if (!s.hostileNear) return null
-  if (s.recentlyAttacked || s.health < s.params.fleeHealth) return takeCover(s)
-  if (s.isNight && s.y >= s.surfaceY - 2 && !surfaceWork(s)) return takeCover(s)
-  return null
+  const threatened = s.recentlyAttacked || s.health < s.params.fleeHealth
+    || (s.isNight && s.y >= s.surfaceY - 2 && !surfaceWork(s))
+  if (!threatened) return null
+  return s.memory.noShelter > 0 ? standGround(s) : takeCover(s)
 }
 
 // Eat when hungry, or when weak on the surface (before a descent) and not full; hunt when there is nothing to eat.

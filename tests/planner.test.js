@@ -236,3 +236,12 @@ test('planner: after a drowning abort it climbs a few blocks toward the surface 
   assert.deepStrictEqual(nextAction(state({ drowning: true, y: 30 })), { skill: 'go_up', args: [34] })
   assert.notStrictEqual(nextAction(state({ y: 70 })).skill, 'go_up')
 })
+
+test('planner: after repeated shelters it fights a close hostile, flees when weak, and otherwise keeps working', () => {
+  const memory = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, noShelter: 3 }
+  const hurt = { hostileNear: true, recentlyAttacked: true, canShelter: true, memory }
+  assert.strictEqual(nextAction(state({ ...hurt, hostileClose: true })).skill, 'fight')
+  assert.strictEqual(nextAction(state({ ...hurt, hostileClose: true, health: 7 })).skill, 'flee')
+  assert.ok(!['shelter', 'flee', 'fight'].includes(nextAction(state(hurt)).skill))
+  assert.strictEqual(nextAction(state({ ...hurt, memory: { ...memory, noShelter: 0 }, hostileClose: true })).skill, 'shelter')
+})

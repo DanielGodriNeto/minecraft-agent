@@ -77,6 +77,7 @@ Training, evaluation and real use are the **same code path** — no sim-to-real 
 | `equip` / `eat` | item | done |
 | `flee` | — | no hostile within 16 blocks |
 | `shelter` | last direction | walled into a 1x1x2 cell (≥ 6 placeable blocks, else `flee`), waited out the danger, dug out |
+| `fight` | — | nearest hostile within 4 blocks killed or out of range (15 s cap); used when sheltering keeps failing |
 | `hunt` | — | nearest food animal within 24 blocks killed and its drops picked up |
 | `deposit` | storage chest | target items moved into chest |
 | `return_home` | — | within 3 blocks of storage |

@@ -1,5 +1,5 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
-const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, SHELTER_MIN } = require('./skills.js')
+const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
 const { nextAction, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
 
 const STUCK_FAILURES = 3
@@ -9,6 +9,8 @@ const STUCK_IDLE = 5
 const IDLE_MOVE = 1
 const NEAR = 16
 const LOST_BLOCKS = 256
+const MAX_SHELTERS = 2
+const SHELTER_PAUSE = 5
 const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock is not usable
 
 // Small per-run jitter so recorded runs cover more states (plan 2.2).
@@ -52,6 +54,7 @@ function observe(bot, run) {
     surfaceY: run.home.y,
     isNight: bot.time.timeOfDay >= 13000 && bot.time.timeOfDay < 23000,
     hostileNear: nearestHostile(bot) !== null,
+    hostileClose: nearestHostile(bot, FIGHT_RANGE) !== null,
     canShelter: placeableCount(bot) >= SHELTER_MIN,
     animalNear: nearestAnimal(bot) !== null,
     visible,
@@ -71,7 +74,20 @@ function observe(bot, run) {
   }
 }
 
+// Sheltering again and again next to a hostile that never leaves achieves nothing: after a few in a row the planner fights instead.
+function trackShelter(memory, action) {
+  if (memory.noShelter > 0) memory.noShelter--
+  if (action.skill !== 'shelter') {
+    memory.shelters = 0
+    return
+  }
+  if (++memory.shelters < MAX_SHELTERS) return
+  memory.noShelter = SHELTER_PAUSE
+  memory.shelters = 0
+}
+
 function remember(run, action, result) {
+  trackShelter(run.memory, action)
   if (result.ok) return
   if (action.optional) {
     const fails = run.memory.optionalFails
@@ -130,7 +146,7 @@ function stuckTracker(bot) {
 async function runObjective(bot, { objective, home, params = jitterParams(), deadline = Infinity, maxDeaths = 3, rand = Math.random }) {
   const run = {
     objective, home, params, deadline, deposited: 0, recentlyAttacked: false, drowning: false, deaths: 0, decisions: 0, stopped: false,
-    memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), surfaceLeg: 0, optionalFails: {} },
+    memory: { leg: 0, baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), surfaceLeg: 0, optionalFails: {}, shelters: 0, noShelter: 0 },
   }
   bot.objectiveRun = run
   const onDeath = () => {

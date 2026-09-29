@@ -80,3 +80,18 @@ test('remember: a failed hunt is counted under its skill name', () => {
   remember(run, { skill: 'hunt', args: [], optional: true }, { ok: false })
   assert.deepStrictEqual(run.memory.optionalFails, { hunt: 1 })
 })
+
+test('remember: two shelters in a row pause sheltering for five decisions; another skill resets the count', () => {
+  const run = { memory: { optionalFails: {}, shelters: 0, noShelter: 0 } }
+  const step = (skill) => remember(run, { skill, args: [] }, { ok: false })
+  step('shelter')
+  step('go_up')
+  step('shelter')
+  assert.strictEqual(run.memory.noShelter, 0)
+  step('shelter')
+  assert.strictEqual(run.memory.noShelter, 5)
+  step('fight')
+  assert.strictEqual(run.memory.noShelter, 4)
+  for (let i = 0; i < 4; i++) step('mine')
+  assert.strictEqual(run.memory.noShelter, 0)
+})

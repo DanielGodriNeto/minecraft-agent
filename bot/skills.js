@@ -43,7 +43,7 @@ const OXYGEN_ABORT = 10
 const SUFFOCATION_ABORT = 3
 const ABORTS = new Set(['attacked', 'drowning', 'suffocating'])
 const HAZARD_CAUSE = { lava: 'lava', flowing_lava: 'lava', fire: 'fire', soul_fire: 'fire', magma_block: 'magma', cactus: 'cactus', sweet_berry_bush: 'berry_bush' }
-const NON_INTERRUPTIBLE = new Set(['flee', 'eat', 'shelter'])
+const NON_INTERRUPTIBLE = new Set(['flee', 'eat', 'shelter', 'fight'])
 const PLACEABLE = ['cobblestone', 'cobbled_deepslate', 'dirt', 'stone', 'deepslate', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
 const FOOD_ANIMALS = new Set(['cow', 'pig', 'sheep', 'chicken', 'rabbit'])
 const ANIMAL_RANGE = 24
@@ -54,7 +54,8 @@ const WEAPONS = ['netherite_sword', 'diamond_sword', 'iron_sword', 'stone_sword'
   'netherite_axe', 'diamond_axe', 'iron_axe', 'stone_axe', 'golden_axe', 'wooden_axe', 'wooden_pickaxe', 'stone_pickaxe']
 const SHELTER_MIN = 6
 const SHELTER_WAIT_MS = 30000
-const SAFE_RANGE = 8
+const FIGHT_RANGE = 4
+const FIGHT_MS = 15000
 const SAFE_HEALTH = 16
 const SAFE_FOOD = 18
 
@@ -899,11 +900,31 @@ async function strike(bot, animal, chasing) {
   return false
 }
 
+async function arm(bot) {
+  const weapon = bestWeapon(bot.inventory.items())
+  await guard(weapon ? bot.equip(weapon, 'hand') : bot.unequip('hand'))
+}
+
+// Kills the nearest hostile that came within reach; ends when it is dead, out of range, or after ms.
+async function fight(bot, ms = FIGHT_MS) {
+  const mob = nearestHostile(bot, FIGHT_RANGE)
+  if (!mob) throw new Fail('no_target')
+  await arm(bot)
+  const end = Date.now() + ms
+  let chasing = false
+  const engaged = () => bot.entities[mob.id] && mob.position.distanceTo(bot.entity.position) <= FIGHT_RANGE
+  while (engaged() && Date.now() < end) {
+    checkCancelled(bot)
+    chasing = await strike(bot, mob, chasing)
+  }
+  stopPathing(bot)
+  if (engaged()) throw new Fail('not_killed')
+}
+
 async function hunt(bot, ms = HUNT_MS) {
   const animal = nearestAnimal(bot)
   if (!animal) throw new Fail('no_animal')
-  const weapon = bestWeapon(bot.inventory.items())
-  await guard(weapon ? bot.equip(weapon, 'hand') : bot.unequip('hand'))
+  await arm(bot)
   const end = Date.now() + ms
   let last = animal.position.clone()
   let chasing = false
@@ -919,8 +940,8 @@ async function hunt(bot, ms = HUNT_MS) {
 
 const placeableCount = (bot) => PLACEABLE.reduce((n, name) => n + countItem(bot, name), 0)
 
-// Regeneration needs food >= 18, so a hungry bot gains nothing by waiting for health.
-const safeToLeave = (bot) => !nearestHostile(bot, SAFE_RANGE) && (bot.health >= SAFE_HEALTH || bot.food < SAFE_FOOD)
+// Same range as the planner's danger check. Regeneration needs food >= 18, so a hungry bot gains nothing by waiting for health.
+const safeToLeave = (bot) => !nearestHostile(bot) && (bot.health >= SAFE_HEALTH || bot.food < SAFE_FOOD)
 
 // A missed placement (entity in the way, lag) just leaves the cell open for the next pass.
 async function seal(bot, spot) {
@@ -973,6 +994,7 @@ async function shelter(bot, dir = 0) {
   if (!sealed(bot, feet)) throw new Fail('not_sealed')
   await poll(bot, () => safeToLeave(bot), SHELTER_WAIT_MS)
   await openSide(bot, feet, dir)
+  if (nearestHostile(bot)) throw new Fail('hostile_waiting')
 }
 
 async function deposit(bot, { x, y, z }, items = ['diamond']) {
@@ -1037,7 +1059,7 @@ async function returnHome(bot, home) {
 
 const SKILLS = {
   explore, approach, mine, dig_down: digDown, go_up: goUp, craft, smelt,
-  equip, eat, flee, shelter, hunt, deposit, toss, return_home: returnHome,
+  equip, eat, flee, shelter, fight, hunt, deposit, toss, return_home: returnHome,
 }
 
 // ---- skill log: one JSON line per call, read by the Phase 3 recorder ----
@@ -1066,4 +1088,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SHELTER_MIN, nearestHostile, bestWeapon, nearestAnimal }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, floored, placeableCount, safeToLeave, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal }
