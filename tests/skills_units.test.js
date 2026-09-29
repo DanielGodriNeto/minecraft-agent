@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing } = require('../bot/skills.js')
+const { run, checkCancelled, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -87,6 +87,7 @@ function fakeBot(hostileAt = 10) {
     pathfinder: { setGoal() {} },
     clearControlStates() {},
     stopDigging() {},
+    blockAt: () => null,
     nearestEntity: (match) => [{ type: 'hostile', position: new Vec3(hostileAt, 10, 0) }].find(match) ?? null,
   })
 }
@@ -179,4 +180,31 @@ test('facing: true within about 10 degrees of the target direction, wrapping aro
   assert.strictEqual(facing(bot(Math.PI - 0.1), south), true)
   assert.strictEqual(facing(bot(Math.PI - 0.3), south), false)
   assert.strictEqual(facing(bot(0), south), false)
+})
+
+test('run: every health drop is recorded with its cause, capped at the last ten', async () => {
+  const bot = fakeBot()
+  const result = await run(bot, async () => {
+    for (let hp = 19; hp >= 5; hp--) { bot.health = hp; bot.emit('health') }
+  }, false)
+  assert.strictEqual(result.damage.length, 10)
+  assert.deepStrictEqual(result.damage.at(-1), { hp: 5, cause: 'undefined@10.0' })
+  assert.strictEqual((await run(fakeBot(), async () => {}, false)).damage, undefined)
+})
+
+test('damageCause: hostile in range first, then hazard blocks, drowning, unknown', () => {
+  const at = (names, extra = {}) => ({
+    entity: { position: new Vec3(0.5, 10, 0.5) },
+    nearestEntity: () => null,
+    blockAt: (p) => (names[`${p.x},${p.y},${p.z}`] ? { name: names[`${p.x},${p.y},${p.z}`] } : { name: 'air' }),
+    ...extra,
+  })
+  const zombie = { name: 'zombie', type: 'hostile', position: new Vec3(3.5, 10, 0.5) }
+  assert.strictEqual(damageCause(at({}, { nearestEntity: () => zombie })), 'zombie@3.0')
+  assert.strictEqual(damageCause(at({ '0,10,0': 'lava' })), 'lava')
+  assert.strictEqual(damageCause(at({ '0,11,0': 'fire' })), 'fire')
+  assert.strictEqual(damageCause(at({ '0,9,0': 'magma_block' })), 'magma')
+  assert.strictEqual(damageCause(at({ '0,11,0': 'water' }, { oxygenLevel: 12 })), 'drowning')
+  assert.strictEqual(damageCause(at({ '0,11,0': 'water' }, { oxygenLevel: 20 })), 'unknown')
+  assert.strictEqual(damageCause(at({})), 'unknown')
 })

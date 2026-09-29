@@ -34,6 +34,9 @@ const CANCEL_GRACE_MS = 2000
 const TRAIL_STALE = 8
 const PICKUP_REACH_UP = 1.5
 const CANOPY = /_(leaves|log|wood)$/
+const DAMAGE_LOG_MAX = 10
+const HAZARD_CAUSE = { lava: 'lava', flowing_lava: 'lava', fire: 'fire', soul_fire: 'fire', magma_block: 'magma', cactus: 'cactus', sweet_berry_bush: 'berry_bush' }
+const NON_INTERRUPTIBLE = new Set(['flee', 'eat'])
 
 class Fail extends Error {
   constructor(reason, detail) { super(reason); this.reason = reason; this.detail = detail }
@@ -93,11 +96,26 @@ async function settle(pending, ms) {
   clearTimeout(timer)
 }
 
+// Best guess at what just hurt the bot: a hostile in range, a hazard block at feet/head/below, drowning, else unknown.
+function damageCause(bot) {
+  const p = bot.entity.position
+  const mob = nearestHostile(bot)
+  if (mob) return `${mob.name}@${mob.position.distanceTo(p).toFixed(1)}`
+  const feet = p.floored()
+  const head = feet.offset(0, 1, 0)
+  for (const cell of [feet, head, feet.offset(0, -1, 0)]) {
+    const cause = HAZARD_CAUSE[bot.blockAt(cell)?.name]
+    if (cause) return cause
+  }
+  return bot.blockAt(head)?.name === 'water' && (bot.oxygenLevel ?? 20) < 20 ? 'drowning' : 'unknown'
+}
+
 // A skill is aborted when a hostile hurts the bot, so the planner can react (flee) instead of
-// finishing a 30 s walk while being hit. flee/eat are not interruptible.
+// finishing a 30 s walk while being hit. flee/eat/shelter are not interruptible.
 async function run(bot, skill, interruptible) {
   let ticks = 0
   let lastHealth = bot.health
+  const damage = []
   const cancel = bot.skillCancel = { cancelled: false, reason: null }
   const abort = (reason) => {
     cancel.cancelled = true
@@ -109,7 +127,10 @@ async function run(bot, skill, interruptible) {
   const onHealth = () => {
     const hurt = bot.health < lastHealth
     lastHealth = bot.health
-    if (!interruptible || cancel.cancelled || !hurt || !nearestHostile(bot)) return
+    if (!hurt) return
+    damage.push({ hp: bot.health, cause: damageCause(bot) })
+    if (damage.length > DAMAGE_LOG_MAX) damage.shift()
+    if (!interruptible || cancel.cancelled || !nearestHostile(bot)) return
     abort('attacked')
   }
   bot.on('physicsTick', tick)
@@ -117,11 +138,12 @@ async function run(bot, skill, interruptible) {
   const pending = Promise.resolve().then(skill)
   try {
     await withTimeout(pending, SKILL_CAP_MS, () => abort('timeout'))
-    return { ok: true, reason: null, ticks }
+    return { ok: true, reason: null, ticks, ...(damage.length && { damage }) }
   } catch (e) {
-    if (cancel.reason === 'attacked') return { ok: false, reason: 'attacked', ticks }
-    if (e instanceof Fail) return { ok: false, reason: e.reason, ...(e.detail && { detail: e.detail }), ticks }
-    return { ok: false, reason: 'error', detail: e.message, ticks }
+    const failed = { ok: false, ticks, ...(damage.length && { damage }) }
+    if (cancel.reason === 'attacked') return { ...failed, reason: 'attacked' }
+    if (e instanceof Fail) return { ...failed, reason: e.reason, ...(e.detail && { detail: e.detail }) }
+    return { ...failed, reason: 'error', detail: e.message }
   } finally {
     cancel.cancelled = true
     if (cancel.reason) await settle(pending, CANCEL_GRACE_MS)
@@ -752,9 +774,9 @@ function logSkill(bot, entry) {
 // Every skill resolves to { ok, reason, ticks } and never throws.
 async function runSkill(bot, name, ...args) {
   const before = snapshot(bot)
-  const result = await run(bot, () => SKILLS[name](bot, ...args), !['flee', 'eat'].includes(name))
-  logSkill(bot, { t: Date.now(), bot: bot.username, run: bot.runTag ?? null, skill: name, args: args.map(logArg), result, before, after: snapshot(bot) })
+  const { damage, ...result } = await run(bot, () => SKILLS[name](bot, ...args), !NON_INTERRUPTIBLE.has(name))
+  logSkill(bot, { t: Date.now(), bot: bot.username, run: bot.runTag ?? null, skill: name, args: args.map(logArg), result, ...(damage && { damage }), before, after: snapshot(bot) })
   return result
 }
 
-module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing }
+module.exports = { run, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause }
