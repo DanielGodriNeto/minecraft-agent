@@ -809,11 +809,21 @@ function swimAssist(bot) {
   }
 }
 
+// A crumb that cannot be retraced is dropped so the scaffold and pillar fallbacks still get their turn.
+async function followTrailSafely(bot, done) {
+  try {
+    await followTrail(bot, done)
+  } catch {
+    checkCancelled(bot)
+    bot.trail?.pop()
+  }
+}
+
 async function goUp(bot, targetY) {
   const high = (p) => Math.floor(p.y) >= targetY
   const stopSwimming = swimAssist(bot)
   try {
-    await followTrail(bot, high)
+    await followTrailSafely(bot, high)
     if (!high(bot.entity.position)) await goto(bot, new goals.GoalY(targetY), GO_UP_PATH_MS, true).catch(() => {})
     if (!high(bot.entity.position)) await pillarUp(bot, targetY)
   } finally {

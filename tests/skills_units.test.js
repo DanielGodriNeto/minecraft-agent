@@ -455,6 +455,14 @@ test('go_up: fails not_reached when no block can be placed', async () => {
   }
 })
 
+test('go_up: an untraceable crumb is dropped and the pillar fallback still runs', async () => {
+  const { bot } = pillarBot()
+  bot.trail = [new Vec3(50, 50, 50)]
+  const result = await run(bot, () => SKILLS.go_up(bot, 13), false, true)
+  assert.strictEqual(result.ok, true)
+  assert.deepStrictEqual(bot.trail, [])
+})
+
 test('run: escape skills are not aborted by low oxygen or drowning damage', async () => {
   const bot = fakeBot(50)
   bot.blockAt = () => ({ name: 'water' })
