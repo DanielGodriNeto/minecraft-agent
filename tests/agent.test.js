@@ -288,3 +288,29 @@ test('remember: food rest steps are counted so the planner can cap them', () => 
   remember(run, { skill: 'shelter', args: [0, 'rest'], foodRest: true, optional: true, key: 'rest' }, { ok: true })
   assert.strictEqual(run.memory.foodRests, 2)
 })
+
+test('death and a successful deposit both clear the unreachable set', () => {
+  const bot = { unreachable: new Set(['a']), clearControlStates() {}, pathfinder: { setGoal() {} } }
+  const run = { deaths: 0, memory: { restock: { planks: 1 } } }
+  const { handleDeath, startNewTrip } = require('../bot/agent.js')
+  handleDeath(bot, run)
+  assert.strictEqual(bot.unreachable.size, 0)
+  assert.strictEqual(run.deaths, 1)
+  bot.unreachable.add('b')
+  startNewTrip(bot, run)
+  assert.strictEqual(bot.unreachable.size, 0)
+  assert.deepStrictEqual(run.memory.restock, {})
+})
+
+test('switches: every ARM key overrides the param the code reads, and 0 disables like false', () => {
+  const path = require('node:path')
+  const { parseArm } = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))('./eval.js')
+  const { jitterParams } = require('../bot/agent.js')
+  const { normalizeParams } = require('../bot/planner.js')
+  const keys = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve']
+  for (const k of keys) {
+    assert.strictEqual(DEFAULT_PARAMS[k], true, k)
+    assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=0`) })[k], false, k)
+    assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=1`) })[k], true, k)
+  }
+})

@@ -1,6 +1,6 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
-const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
-const { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES } = require('./planner.js')
+const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, clearUnreachable, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
+const { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
 
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
@@ -29,6 +29,20 @@ const tripMemory = () => ({ restock: {}, nightDigs: 0, optionalFails: {} })
 
 const resetLife = (memory) => ({ ...memory, ...lifeMemory() })
 const resetTrip = (memory) => Object.assign(memory, tripMemory())
+
+function handleDeath(bot, run) {
+  run.deaths++
+  run.memory = resetLife(run.memory)
+  bot.trail = [] // respawn is at home
+  clearUnreachable(bot)
+  stopPathing(bot) // a dead bot must not keep chasing its old goal
+}
+
+// A new trip gets fresh restock, night-dig and optional-failure budgets, and forgets blocks marked unreachable.
+function startNewTrip(bot, run) {
+  resetTrip(run.memory)
+  clearUnreachable(bot)
+}
 
 // Small per-run jitter so recorded runs cover more states (plan 2.2).
 function jitterParams(rand = Math.random) {
@@ -238,17 +252,12 @@ function stuckTracker(bot) {
 // home: storage chest position. Resolves with why the run ended.
 async function runObjective(bot, { objective, home, params = jitterParams(), deadline = Infinity, maxDeaths = 3, rand = Math.random }) {
   const run = {
-    objective, home, surfaceY: home.y, params, deadline, deposited: 0, recentlyAttacked: false, deaths: 0, decisions: 0, stopped: false,
+    objective, home, surfaceY: home.y, params: normalizeParams(params), deadline, deposited: 0, recentlyAttacked: false, deaths: 0, decisions: 0, stopped: false,
     memory: { ...lifeMemory(), baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), relocations: 0 },
   }
   bot.objectiveRun = run
   bot.runDeadline = deadline
-  const onDeath = () => {
-    run.deaths++
-    run.memory = resetLife(run.memory)
-    bot.trail = [] // respawn is at home
-    stopPathing(bot) // a dead bot must not keep chasing its old goal
-  }
+  const onDeath = () => handleDeath(bot, run)
   const onSpawn = () => {
     if (run.deaths > 0 && isLost(bot.entity.position, home)) run.lost = true
   }
@@ -274,7 +283,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       const result = { ...await runSkill(bot, action.skill, ...action.args), descended: bot.entity?.position.y < yBefore - 1 }
       run.decisions++
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
-      if (action.skill === 'deposit' && result.ok) resetTrip(run.memory) // a new trip gets fresh restock, night-dig and optional-failure budgets
+      if (action.skill === 'deposit' && result.ok) startNewTrip(bot, run)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
       remember(run, action, result)
       resetTrail(bot, run.home)
@@ -301,4 +310,4 @@ function stopObjective(bot) {
   return true
 }
 
-module.exports = { runObjective, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, isLost, resetLife, resetTrip }
+module.exports = { runObjective, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, isLost, resetLife, resetTrip, handleDeath, startNewTrip }
