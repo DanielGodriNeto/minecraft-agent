@@ -9,7 +9,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { createBot } = require('./bot.js')
-const { runObjective, stopObjective, jitterParams } = require('./agent.js')
+const agent = require('./agent.js')
+const { stopObjective, jitterParams } = agent
 const { summarize, isInvalid, mulberry32 } = require('./metrics.js')
 const os = require('node:os')
 const { execSync } = require('node:child_process')
@@ -160,16 +161,19 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
   })
   let result
   try {
-    if (home instanceof Error) throw home
-    const running = runObjective(bot, {
-      objective: { item: 'diamond', count: 'max' }, home, params: { ...jitterParams(rand), ...parseArm(armText) },
-      deadline: start + minutes * 60000, rand,
-    })
-    running.catch(() => {}) // a run abandoned on disconnect may still reject later
-    result = await Promise.race([running, disconnected])
-    if (result.reason === 'disconnected') stopObjective(bot)
+    if (home instanceof Error) {
+      result = partial(bot, 'harness', home.message) // placement failed: the bot never ran
+    } else {
+      const running = agent.runObjective(bot, {
+        objective: { item: 'diamond', count: 'max' }, home, params: { ...jitterParams(rand), ...parseArm(armText) },
+        deadline: start + minutes * 60000, rand,
+      })
+      running.catch(() => {}) // a run abandoned on disconnect may still reject later
+      result = await Promise.race([running, disconnected])
+      if (result.reason === 'disconnected') stopObjective(bot)
+    }
   } catch (e) {
-    result = partial(bot, 'error', e.message)
+    result = partial(bot, 'error', e.message) // the bot's own code threw: a failed run, not a harness fault
   }
   const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, ...(isInvalid(result) && { invalid: true }), minutes: (Date.now() - start) / 60000, difficulty, commit: commitHash(), env: switchesInEffect(), ...(armText && { arm: armText }), ...(instance.total > 1 && { instance: instance.index + 1 }) }
   fs.appendFileSync(RESULTS, JSON.stringify(run) + '\n')
@@ -240,5 +244,5 @@ async function main([first, last, bots = '10', minutes = '60', instances = '1'])
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })

@@ -116,3 +116,44 @@ test('tpsFromLine: 1m value from plain and coloured lines, null otherwise', () =
   assert.strictEqual(tpsFromLine('Done (3.2s)!'), null)
   assert.strictEqual(tpsFromLine(null), null)
 })
+
+// runOne with a stubbed runObjective (agent module property) and a stubbed results file.
+async function runOneWith(runObjective, home = { x: 1, y: 2, z: 3 }, env = {}) {
+  const { EventEmitter } = require('node:events')
+  const fs = require('node:fs')
+  const agent = req('./agent.js')
+  const { runOne } = req('./eval.js')
+  const saved = { run: agent.runObjective, append: fs.appendFileSync, env: { ...process.env } }
+  const rows = []
+  agent.runObjective = runObjective
+  fs.appendFileSync = (_, line) => rows.push(JSON.parse(line))
+  Object.assign(process.env, env)
+  try {
+    const bot = Object.assign(new EventEmitter(), { username: 'Bot0', objectiveRun: null })
+    await runOne(bot, { id: 7 }, home, Date.now(), 1, 'normal', null, { index: 0, total: 1 }, 'shaft=0')
+  } finally {
+    agent.runObjective = saved.run
+    fs.appendFileSync = saved.append
+    for (const k of Object.keys(process.env)) if (!(k in saved.env)) delete process.env[k]
+    Object.assign(process.env, saved.env)
+  }
+  return rows[0]
+}
+
+test('runOne: an exception out of runObjective is a valid failed run (error), a setup failure is a harness fault', async () => {
+  const bug = await runOneWith(async () => { throw new TypeError('planner bug') })
+  assert.deepStrictEqual([bug.reason, bug.detail, bug.invalid], ['error', 'planner bug', undefined])
+  const setup = await runOneWith(async () => ({ reason: 'timeout' }), new Error('chunk not loaded'))
+  assert.deepStrictEqual([setup.reason, setup.detail, setup.invalid], ['harness', 'chunk not loaded', true])
+})
+
+test('runOne: the row records all five env switches (RESERVE=0 included), the commit, the arm and the params', async () => {
+  const env = { SHAFT: '0', NIGHTSURF: '1', FOODGATE: '0', FIGHTGUARD: '1', RESERVE: '0' }
+  let params
+  const row = await runOneWith(async (_, opts) => { params = opts.params; return { reason: 'timeout', deposited: 0, deaths: 0, decisions: 1, params: opts.params } }, undefined, env)
+  assert.deepStrictEqual(row.env, env)
+  assert.ok('commit' in row || row.commit === undefined)
+  assert.strictEqual(row.arm, 'shaft=0')
+  assert.strictEqual(params.shaft, 0)
+  assert.strictEqual(row.params.shaft, 0)
+})

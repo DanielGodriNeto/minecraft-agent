@@ -28,7 +28,7 @@ test('test_metrics_empty', () => {
 })
 
 test('test_metrics_invalid_runs_are_excluded_and_counted', () => {
-  const m = summarize([run(1), run(0), run(0, { reason: 'error', invalid: true, minutes: 1 }), run(0, { reason: 'disconnected', invalid: true, minutes: 2 })])
+  const m = summarize([run(1), run(0), run(0, { reason: 'harness', invalid: true, minutes: 1 }), run(0, { reason: 'disconnected', invalid: true, minutes: 2 })])
   assert.strictEqual(m.runs, 2)
   assert.strictEqual(m.invalidRuns, 2)
   assert.strictEqual(m.successRate, 0.5)
@@ -37,6 +37,6 @@ test('test_metrics_invalid_runs_are_excluded_and_counted', () => {
 })
 
 test('test_metrics_isInvalid_only_harness_reasons', () => {
-  for (const reason of ['error', 'disconnected']) assert.strictEqual(isInvalid({ reason }), true)
-  for (const reason of ['stuck', 'deaths', 'lost', 'timeout']) assert.strictEqual(isInvalid({ reason }), false)
+  for (const reason of ['harness', 'disconnected']) assert.strictEqual(isInvalid({ reason }), true)
+  for (const reason of ['error', 'stuck', 'deaths', 'lost', 'timeout']) assert.strictEqual(isInvalid({ reason }), false) // error = bot bug: counts as a failed run
 })

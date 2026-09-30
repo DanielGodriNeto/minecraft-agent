@@ -19,8 +19,9 @@ function bootstrapCI(values, rand = mulberry32(1)) {
   return [means[Math.floor(0.025 * BOOTSTRAP_SAMPLES)], means[Math.floor(0.975 * BOOTSTRAP_SAMPLES)]]
 }
 
-// A run that ended by error or disconnect says nothing about the bot: stuck, deaths, lost and timeout do.
-const isInvalid = (r) => r.reason === 'error' || r.reason === 'disconnected'
+// A run the harness broke (setup failure, disconnect) says nothing about the bot: stuck, deaths, lost, timeout and
+// error (an exception out of the bot's own code) do, so bot bugs stay in the success rate.
+const isInvalid = (r) => r.reason === 'harness' || r.reason === 'disconnected'
 
 // runs: [{ deposited, deaths, reason, minutes, invalid? }]; invalid rows are counted apart, not in any rate.
 function summarize(all) {
