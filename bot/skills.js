@@ -20,6 +20,7 @@ const PATCH_BLOCKS = ['cobblestone', 'cobbled_deepslate', 'dirt']
 const GUARD_MS = 5000
 const GO_UP_PATH_MS = 60000
 const PILLAR_LIFT = 1
+const FALL_SEEN = 0.5
 const PILLAR_FAILS = 3
 const TUNNEL_OUT = 3
 const STEP_TICKS = 40
@@ -740,9 +741,12 @@ function onCanopy(bot, p) {
   return !nearLava(bot, floor.position) && !nearLava(bot, floor.position.offset(0, -1, 0))
 }
 
-// Breaks the block under the bot and waits to land.
+// Breaks the block under the bot and waits to land. The bot is still on the ground right after the break,
+// so it must first be seen falling before onGround means anything.
 async function dropThrough(bot, floor) {
+  const startY = bot.entity.position.y
   await breakBlock(bot, floor)
+  await poll(bot, () => bot.entity.position.y < startY - FALL_SEEN, 1500)
   await poll(bot, () => bot.entity.onGround, 1500)
 }
 

@@ -810,12 +810,14 @@ test('return_home: cancellations do not count as unreachable', async () => {
 
 // Bot on a stone column: stone up to y=19 (overrides by "x,y,z"), air above. Digging the floor drops the bot to the next solid cell.
 // With stairOnly the first dig throws, so a fallback to the staircase shows up as digs[0] being off the column.
-function shaftBot({ overrides = {}, stone = 16, shaft, hostile = false, stopOnDig = false } = {}) {
+function shaftBot({ overrides = {}, stone = 16, shaft, hostile = false, stopOnDig = false, fallLag = 0 } = {}) {
   const broken = new Set()
   const key = (p) => `${p.x},${p.y},${p.z}`
   const nameAt = (p) => broken.has(key(p)) ? 'air' : (overrides[key(p)] ?? (p.y <= 19 ? 'stone' : 'air'))
   const pos = { x: 0.5, y: 20, z: 0.5, floored() { return new Vec3(0, Math.floor(this.y), 0) }, distanceTo: () => 99, clone() { return this } }
   const digs = []
+  let fall = () => {}
+  let lag = fallLag
   const bot = Object.assign(new EventEmitter(), {
     digs, trail: [], health: 20, heldItem: null,
     entity: { position: pos, onGround: true, yaw: 0 },
@@ -833,11 +835,12 @@ function shaftBot({ overrides = {}, stone = 16, shaft, hostile = false, stopOnDi
       digs.push(key(b.position))
       if (stopOnDig) throw new Fail('stop')
       broken.add(key(b.position))
-      while (nameAt(new Vec3(0, Math.floor(pos.y) - 1, 0)) === 'air' && pos.y > 0) pos.y -= 1
+      fall = () => { while (nameAt(new Vec3(0, Math.floor(pos.y) - 1, 0)) === 'air' && pos.y > 0) pos.y -= 1 }
+      if (!fallLag) fall()
     },
     stopDigging() {},
     clearControlStates() {},
-    waitForTicks: async () => {},
+    waitForTicks: async () => { if (fallLag && lag-- <= 0) { lag = fallLag; fall(); fall = () => {} } },
   })
   return bot
 }
@@ -878,4 +881,12 @@ test('go_up: a purely vertical shaft trail is climbed by pillaring, one crumb pe
   assert.strictEqual(result.ok, true, result.detail)
   assert.strictEqual(Math.floor(bot.entity.position.y), 13)
   assert.deepStrictEqual(bot.trail, [])
+})
+
+test('dig_down: the shaft step waits for the bot to fall after the break instead of reading the height while it is still on the ground', async () => {
+  const bot = shaftBot({ fallLag: 3 })
+  const result = await run(bot, () => SKILLS.dig_down(bot, 19), false)
+  assert.strictEqual(result.ok, true, result.detail)
+  assert.strictEqual(result.shaftSteps, 1)
+  assert.ok(!result.stairSteps)
 })
