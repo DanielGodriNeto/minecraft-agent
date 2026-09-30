@@ -494,3 +494,10 @@ test('foodGate: hurt, hungry and without food, it climbs to the surface and rest
   const spent = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, foodRests: 4 }
   assert.notStrictEqual(gate({ ...hurt, canShelter: true, memory: spent }).foodRest, true)
 })
+
+test('reserve: the switch off skips the restock', () => {
+  const p = { ...DEFAULT_PARAMS, reserve: false, foodGate: false }
+  const s = { inv: { iron_pickaxe: 1 }, pickLeft: 100, foodCount: 0, ...nearby }
+  assert.strictEqual(nextAction(state({ ...s })).restock, 'planks')
+  assert.strictEqual(nextAction(state({ ...s, params: p })).restock, undefined)
+})

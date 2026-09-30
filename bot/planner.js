@@ -30,9 +30,17 @@ const SURFACE_BLOCKS = 64
 const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: process.env.SHAFT !== '0', nightSurf: process.env.NIGHTSURF !== '0', foodGate: process.env.FOODGATE !== '0' }
-// A/B arms, each switched off with its env var: shaft = dig_down as a 1x1 shaft (SHAFT=0 stairs only); nightSurf = the iron pickaxe
-// does not exempt the bot from digging in / sheltering at night (NIGHTSURF=0); foodGate = no descent without food, rest hurt and hungry (FOODGATE=0).
+const on = (name) => process.env[name] !== '0'
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE') }
+// A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
+//   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
+//   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
+//   FOODGATE   foodGate    no descent without food, rest when hurt and hungry
+//   FIGHTGUARD fightGuard  fight health guard (skills.js)
+//   RESERVE    reserve     reserve kit restock before a descent
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve']
+// ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
+const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])) })
 
 const PURE_JUNK = ['dirt', 'gravel', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
 const STONE_JUNK = ['cobblestone', 'cobbled_deepslate']
@@ -288,7 +296,7 @@ const restockOpen = (s, item) => {
 // With the iron pickaxe and a calm surface, top the reserve up from what is in view, most valuable first:
 // wood (it makes the chest, table and sticks), the chest, stone, food. Anything out of reach is skipped, never searched for.
 function reserveStep(s) {
-  if (!has(s, 'iron_pickaxe') || !atSurface(s) || s.hostileNear || s.isNight || s.msLeft < RETURN_BEFORE_MS) return null
+  if (!s.params.reserve || !has(s, 'iron_pickaxe') || !atSurface(s) || s.hostileNear || s.isNight || s.msLeft < RETURN_BEFORE_MS) return null
   const wood = count(s, 'planks') + 4 * count(s, 'log')
   const steps = [
     ['planks', wood < RESERVE.planks && s.visible.log, () => mineAct('log')],
@@ -365,4 +373,4 @@ function nextAction(s) {
   return swordStep(s) ?? spareStep(s) ?? gather(s, 'diamond')
 }
 
-module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE }
+module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams }
