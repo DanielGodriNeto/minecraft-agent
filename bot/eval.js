@@ -177,6 +177,15 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
   return run
 }
 
+// 1m TPS from the console's `tps` reply, colour codes and the '*' cap marker stripped; null when unreadable.
+const tpsFromLine = (line) => {
+  const value = /TPS from last[^:]*:\s*(\d+(?:\.\d+)?)/.exec(line?.replace(/\u001b\[[\d;]*m|\u00a7.|\*/g, '') ?? '')?.[1]
+  return value === undefined ? null : Number(value)
+}
+const sampleTps = async (server) => {
+  try { return tpsFromLine(await server.command('tps', /TPS from last/, 5000)) } catch { return null }
+}
+
 // opts.log: file receiving one line per run (null = none); opts.onStart(server): called once the runs begin,
 // returns a stop function that is called when they end.
 // opts.instance: { index, total } picks the server dir and port (default: the single server/ on 25565).
@@ -189,7 +198,8 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, in
     if (!process.env.SKILL_LOG) bot.skillLogPath = skillLogPath(instance, `Bot${i}`) ?? bot.skillLogPath
     return bot
   })
-  let stopWatching
+  let stopWatching, midTimer, midTps = null
+  const tps = []
   try {
     await Promise.all(bots.map(b => withDeadline(once(b, 'spawn'), SPAWN_MS, `${b.username} spawn`)))
     await server.command('time set 0')
@@ -197,9 +207,14 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, in
     for (const [i, slot] of slots.entries()) homes.push(await retry(() => placeAtSlot(server, bots[i], slot), 2, 5000).catch(e => e))
     const start = Date.now()
     stopWatching = onStart?.(server)
+    tps.push(await sampleTps(server))
+    midTimer = setTimeout(() => sampleTps(server).then(t => { midTps = t }), minutes * 30000)
     return await Promise.all(slots.map((slot, i) => runOne(bots[i], slot, homes[i], start, minutes, difficulty, log, instance, arm)))
   } finally {
     stopWatching?.()
+    clearTimeout(midTimer)
+    tps.push(midTps, await sampleTps(server))
+    console.log(`${instance.total > 1 ? `[i${instance.index + 1}] ` : ''}${JSON.stringify({ batch: slots.map(s => s.id), arm, tps })}`)
     bots.forEach(b => b.end())
     await server.stop()
   }
@@ -225,5 +240,5 @@ async function main([first, last, bots = '10', minutes = '60', instances = '1'])
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })

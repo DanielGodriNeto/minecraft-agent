@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const path = require('node:path')
 const req = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))
-const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, retry, skillLogPath, parseArm, assignArms } = req('./eval.js')
+const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, retry, skillLogPath, parseArm, assignArms, tpsFromLine } = req('./eval.js')
 const { instanceSpec, maxInstances, assertDiskSpace, withPort } = req('./server.js')
 
 const solid = (name) => ({ name, boundingBox: 'block' })
@@ -108,4 +108,11 @@ test('assignArms: every batch runs once per arm and arms are rotated so no arm o
   assert.deepStrictEqual(shares, [[{ batch: 'b0', arm: 'A' }, { batch: 'b1', arm: 'B' }], [{ batch: 'b0', arm: 'B' }, { batch: 'b1', arm: 'A' }]])
   assert.deepStrictEqual(assignArms(['b0', 'b1', 'b2'], [''], 2).map(s => s.map(t => t.batch)), distribute(['b0', 'b1', 'b2'], 2))
   assert.strictEqual(assignArms(['b0'], ['A', 'B'], 1)[0].length, 2)
+})
+
+test('tpsFromLine: 1m value from plain and coloured lines, null otherwise', () => {
+  assert.strictEqual(tpsFromLine('[12:00:00 INFO]: TPS from last 1m, 5m, 15m: 19.8, 20.0, 20.0'), 19.8)
+  assert.strictEqual(tpsFromLine('[12:00:00 INFO]: \u00a76TPS from last 1m, 5m, 15m: \u00a7a*20.0\u00a76, \u00a7a20.0'), 20)
+  assert.strictEqual(tpsFromLine('Done (3.2s)!'), null)
+  assert.strictEqual(tpsFromLine(null), null)
 })
