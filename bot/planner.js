@@ -65,6 +65,8 @@ const NIGHT_BAND = 12 // shallower than this and underground at night counts as 
 const NIGHT_WAIT_MIN_MS = 15 * 60000 // closer to the deadline than this, a diamond trip home does not wait for dawn
 const REST_BELOW = 8
 const RELOCATE_BLOCKS = 8
+const MIN_FOOD_TO_DESCEND = 4
+const MAX_FOOD_RESTS = 4 // per life: go_up and rest steps together
 const MAX_HOPS = 3 // relocation hops in a row without descending before a fresh column is chosen
 const FRESH_COLUMN_BLOCKS = 30
 
@@ -141,6 +143,8 @@ function pickaxeUpgrade(s) {
 
 // Digging down keeps failing here: move to a fresh spot (a surface hop, or a short branch leg underground) before retrying.
 function descend(s, y, target) {
+  const provision = foodGate(s)
+  if (provision) return provision
   const { digFails = 0, relocations = 0, hopsSinceDescent = 0 } = s.memory
   if (hopsSinceDescent >= MAX_HOPS) return freshColumn(s, target, relocations)
   if (digFails < MAX_DIG_FAILS) return act('dig_down', y)
@@ -154,6 +158,22 @@ function freshColumn(s, target, relocations) {
   if (!atSurface(s)) return { ...act('go_up', s.surfaceY), key: 'fresh_up' }
   const dir = (s.memory.surfaceDir + relocations) % DIRS
   return { ...act('explore', { target, mode: 'surface', dir, maxBlocks: FRESH_COLUMN_BLOCKS }), relocate: true, key: 'fresh_column' }
+}
+
+// No descent on an empty larder while an animal is still in reach; both hunt caps (MAX_HUNT_FAILS, the restock budget) end it.
+function foodGate(s) {
+  if (!s.params.foodGate || !atSurface(s) || (s.foodCount ?? 0) >= MIN_FOOD_TO_DESCEND || !s.animalNear || (s.isNight && s.params.nightSurf)) return null
+  if ((s.memory.optionalFails?.hunt ?? 0) >= MAX_HUNT_FAILS || !restockOpen(s, 'food')) return null
+  return { ...act('hunt'), optional: true, restock: 'food' }
+}
+
+// Hurt and hungry with nothing to eat, regeneration is out of reach and every fight is lost: leave the depths and sit it out at the surface.
+function hungryRest(s) {
+  const spent = (s.memory.foodRests ?? 0) >= MAX_FOOD_RESTS
+  if (!s.params.foodGate || spent || s.health >= REST_BELOW || s.food > EAT_AT || s.hasFood) return null
+  if (!atSurface(s)) return { ...act('go_up', s.surfaceY), foodRest: true }
+  const rest = holdUp(s, 'rest')
+  return rest && { ...rest, foodRest: true }
 }
 
 // Each failed surface search lengthens the next one so the bot spirals outward instead of pacing the same ground.
@@ -274,7 +294,7 @@ function reserveStep(s) {
     ['planks', wood < RESERVE.planks && s.visible.log, () => mineAct('log')],
     ['chest', !has(s, 'chest') && wood >= RECIPES.chest.in.planks, () => obtain(s, 'chest', 1)],
     ['stone', count(s, 'stone') < RESERVE.stone && s.visible.stone, () => mineAct('stone')],
-    ['food', (s.foodCount ?? 0) < RESERVE.food && s.animalNear, () => ({ ...act('hunt'), optional: true })],
+    ['food', (s.foodCount ?? 0) < RESERVE.food && s.animalNear && waitFails(s, 'hunt') < MAX_HUNT_FAILS, () => ({ ...act('hunt'), optional: true })],
   ]
   const [item, , build] = steps.find(([key, needed]) => needed && restockOpen(s, key)) ?? []
   return item ? { ...build(), restock: item } : null
@@ -318,7 +338,7 @@ function nextAction(s) {
   if (food) return food
   const upgrade = s.memory.digFails > 0 && s.memory.lastDigReason === 'no_tool' ? pickaxeUpgrade(s) : null
   if (upgrade) return upgrade
-  const waiting = restStep(s) ?? nightStep(s)
+  const waiting = restStep(s) ?? nightStep(s) ?? hungryRest(s)
   if (waiting) return waiting
   const junk = junkAction(s)
   if (junk) return junk

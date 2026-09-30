@@ -281,3 +281,10 @@ test('hops: descending resets the hop count, a fresh-column hop resets it too', 
   remember(run, { ...hop, key: 'fresh_column' }, { ok: true })
   assert.strictEqual(run.memory.hopsSinceDescent, 0)
 })
+
+test('remember: food rest steps are counted so the planner can cap them', () => {
+  const run = { memory: { optionalFails: {} } }
+  remember(run, { skill: 'go_up', args: [70], foodRest: true }, { ok: true })
+  remember(run, { skill: 'shelter', args: [0, 'rest'], foodRest: true, optional: true, key: 'rest' }, { ok: true })
+  assert.strictEqual(run.memory.foodRests, 2)
+})

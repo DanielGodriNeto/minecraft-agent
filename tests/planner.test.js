@@ -460,3 +460,37 @@ test('DEFAULT_PARAMS carries the night and food arms and jitterParams leaves the
     assert.strictEqual(jitterParams(() => 0.99)[key], DEFAULT_PARAMS[key])
   }
 })
+
+const geared = { stone_pickaxe: 1, stick: 8, cobblestone: 32 } // no iron yet: the reserve step is out of play, so only the gate can hunt
+const gate = (over, on = true) => nextAction(state({ inv: geared, msLeft: 3600000, params: { ...DEFAULT_PARAMS, foodGate: on }, ...over }))
+
+test('foodGate: no descent with fewer than four food items while an animal can still be hunted', () => {
+  const hunt = gate({ foodCount: 3, animalNear: true })
+  assert.deepStrictEqual([hunt.skill, hunt.restock], ['hunt', 'food'])
+  assert.strictEqual(gate({ foodCount: 4, animalNear: true }).skill, 'dig_down')
+  assert.strictEqual(gate({ foodCount: 3, animalNear: true }, false).skill, 'dig_down')
+  assert.strictEqual(gate({ foodCount: 0, animalNear: false }).skill, 'dig_down') // nothing to hunt: go anyway
+  assert.strictEqual(gate({ foodCount: 3, animalNear: true, isNight: true }).skill, 'dig_down')
+})
+
+test('foodGate: the hunt gives up after MAX_HUNT_FAILS or two restock failures instead of looping', () => {
+  const base = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0 }
+  const huntFailed = { ...base, optionalFails: { hunt: 4 } }
+  assert.strictEqual(gate({ foodCount: 0, animalNear: true, memory: huntFailed }).skill, 'dig_down')
+  const restockFailed = { ...base, restock: { food: { steps: 2, fails: 2 } } }
+  assert.strictEqual(gate({ foodCount: 0, animalNear: true, memory: restockFailed }).skill, 'dig_down')
+})
+
+test('foodGate: hurt, hungry and without food, it climbs to the surface and rests there, a bounded number of times', () => {
+  const hurt = { health: 6, food: 12, hasFood: false, foodCount: 0 }
+  const up = gate({ ...hurt, y: 40, canShelter: true })
+  assert.deepStrictEqual([up.skill, up.args[0], up.foodRest], ['go_up', 70, true])
+  const rest = gate({ ...hurt, canShelter: true })
+  assert.deepStrictEqual([rest.skill, rest.args[1], rest.foodRest], ['shelter', 'rest', true])
+  assert.notStrictEqual(gate({ ...hurt, hasFood: true, foodCount: 1, canShelter: true }).foodRest, true)
+  assert.notStrictEqual(gate({ ...hurt, food: 18, canShelter: true }).foodRest, true)
+  assert.notStrictEqual(gate({ ...hurt, health: 8, canShelter: true }).foodRest, true)
+  assert.notStrictEqual(gate({ ...hurt, canShelter: true }, false).foodRest, true)
+  const spent = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, foodRests: 4 }
+  assert.notStrictEqual(gate({ ...hurt, canShelter: true, memory: spent }).foodRest, true)
+})

@@ -161,6 +161,7 @@ function remember(run, action, result) {
   if (action.restock) trackRestock(run.memory, action, result)
   trackShelter(run.memory, action)
   trackDigging(run.memory, action, result)
+  if (action.foodRest) run.memory.foodRests = (run.memory.foodRests ?? 0) + 1
   if (action.key === 'night_dig') run.memory.nightDigs = (run.memory.nightDigs ?? 0) + 1
   if (action.skill === 'explore' && !LEG_BLOCKED.has(result.reason)) run.memory.hazards = 0
   if (action.key === 'hazard_up') {
