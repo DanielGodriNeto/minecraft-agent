@@ -301,8 +301,8 @@ test('planner: at night on the surface it digs a short shaft, by hand without a 
   assert.notStrictEqual(shaft({ isNight: false, inv: {} }).skill, 'dig_down')
 })
 
-test('planner: the night shaft is skipped with an iron pickaxe, diamonds, failed digs or too many earlier shafts', () => {
-  assert.strictEqual(shaft({ inv: { iron_pickaxe: 1 } }).key, undefined)
+test('planner: the night shaft is skipped with the iron pickaxe when nightSurf is off, with diamonds, failed digs or too many earlier shafts', () => {
+  assert.strictEqual(shaft({ inv: { iron_pickaxe: 1 }, params: { ...DEFAULT_PARAMS, nightSurf: false } }).key, undefined)
   assert.strictEqual(shaft({ inv: { diamond: 1, stone_pickaxe: 1 }, distHome: 200 }).key, undefined)
   const memory = (extra) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, ...extra })
   assert.notStrictEqual(shaft({ inv: {}, memory: memory({ digFails: 2 }) }).key, 'night_dig')
@@ -428,4 +428,35 @@ test('DEFAULT_PARAMS carries the shaft arm and jitterParams leaves it alone', ()
   const { jitterParams } = require('../bot/agent.js')
   assert.strictEqual(typeof DEFAULT_PARAMS.shaft, 'boolean')
   assert.strictEqual(jitterParams(() => 0.99).shaft, DEFAULT_PARAMS.shaft)
+})
+
+const ironNight = { isNight: true, canShelter: true, msLeft: 3600000, inv: { iron_pickaxe: 1, stone_pickaxe: 1, stick: 8 } }
+const nightSurf = (over, on = true) => nextAction(state({ ...ironNight, ...over, params: { ...DEFAULT_PARAMS, nightSurf: on } }))
+
+test('nightSurf: with the iron pickaxe at night the surface bot digs in instead of crossing open ground', () => {
+  assert.strictEqual(nightSurf({}).key, 'night_dig')
+  assert.notStrictEqual(nightSurf({}, false).key, 'night_dig')
+})
+
+test('nightSurf: a hop needed at the surface at night waits for dawn sealed in; a late deadline or no blocks skips the wait', () => {
+  const stuck = { memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, digFails: 1 } }
+  assert.deepStrictEqual([nightSurf(stuck).skill, nightSurf(stuck).args[1]], ['shelter', 'dawn'])
+  assert.strictEqual(nightSurf({ ...stuck, msLeft: 10 * 60000 }).relocate, true)
+  assert.strictEqual(nightSurf({ ...stuck, canShelter: false }).relocate, true)
+  assert.strictEqual(nightSurf(stuck, false).relocate, true)
+})
+
+test('nightSurf: underground with the iron pickaxe the bot keeps descending, and does not hunt on the surface at night', () => {
+  assert.strictEqual(nightSurf({ y: 62 }).skill, 'dig_down')
+  const hungry = { food: 10, animalNear: true }
+  assert.notStrictEqual(nightSurf(hungry).skill, 'hunt')
+  assert.strictEqual(nightSurf(hungry, false).skill, 'hunt')
+})
+
+test('DEFAULT_PARAMS carries the night and food arms and jitterParams leaves them alone', () => {
+  const { jitterParams } = require('../bot/agent.js')
+  for (const key of ['nightSurf', 'foodGate']) {
+    assert.strictEqual(typeof DEFAULT_PARAMS[key], 'boolean')
+    assert.strictEqual(jitterParams(() => 0.99)[key], DEFAULT_PARAMS[key])
+  }
 })

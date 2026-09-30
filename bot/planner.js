@@ -30,7 +30,9 @@ const SURFACE_BLOCKS = 64
 const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: process.env.SHAFT !== '0' } // shaft: dig_down as a 1x1 shaft (A/B arm, SHAFT=0 for stairs only)
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: process.env.SHAFT !== '0', nightSurf: process.env.NIGHTSURF !== '0', foodGate: process.env.FOODGATE !== '0' }
+// A/B arms, each switched off with its env var: shaft = dig_down as a 1x1 shaft (SHAFT=0 stairs only); nightSurf = the iron pickaxe
+// does not exempt the bot from digging in / sheltering at night (NIGHTSURF=0); foodGate = no descent without food, rest hurt and hungry (FOODGATE=0).
 
 const PURE_JUNK = ['dirt', 'gravel', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
 const STONE_JUNK = ['cobblestone', 'cobbled_deepslate']
@@ -236,13 +238,17 @@ function restStep(s) {
 }
 
 // The night belongs underground: from the surface dig a short shaft (by hand if there is no pickaxe), then wait for dawn.
+// With the iron pickaxe (nightSurf) the bot already descends, so underground it only digs in; a stuck column at the surface waits for dawn instead of hopping across open ground.
 function nightStep(s) {
-  if (!s.isNight || has(s, 'diamond') || has(s, 'iron_pickaxe')) return null
+  const geared = has(s, 'iron_pickaxe')
+  if (!s.isNight || has(s, 'diamond') || (geared && !s.params.nightSurf)) return null
   if (!underground(s)) {
-    if ((s.memory.digFails ?? 0) >= MAX_DIG_FAILS || (s.memory.nightDigs ?? 0) >= MAX_NIGHT_DIGS) return null
+    if ((s.memory.digFails ?? 0) >= MAX_DIG_FAILS || (s.memory.nightDigs ?? 0) >= MAX_NIGHT_DIGS) {
+      return geared && s.msLeft >= NIGHT_WAIT_MIN_MS ? holdUp(s, 'dawn') : null
+    }
     return { ...act('dig_down', s.surfaceY - (pickaxeCount(s) > 0 ? NIGHT_DEPTH : HAND_DEPTH)), key: 'night_dig' }
   }
-  return s.y >= s.surfaceY - NIGHT_BAND ? holdUp(s, 'dawn') : null
+  return !geared && s.y >= s.surfaceY - NIGHT_BAND ? holdUp(s, 'dawn') : null
 }
 
 // Walled in when there are blocks for it, otherwise run. The exit side follows the direction the bot was heading.
@@ -300,6 +306,7 @@ function foodStep(s) {
   if (s.food > EAT_AT && !weak) return null
   if (s.hasFood) return act('eat')
   if (!s.animalNear || !atSurface(s) || (s.memory.optionalFails?.hunt ?? 0) >= MAX_HUNT_FAILS) return null
+  if (s.isNight && s.params.nightSurf) return null // chasing an animal across open ground at night
   return { ...act('hunt'), optional: true }
 }
 
