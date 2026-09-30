@@ -314,14 +314,14 @@ test('handleDeath: memory goes back to a fresh life, only the per-run keys survi
   const bot = { unreachable: new Set(), clearControlStates() {}, pathfinder: { setGoal() {} } }
   const dirty = {
     leg: 3, surfaceLeg: 4, shelters: 1, noShelter: 3, drownings: 2, digFails: 1, lastDigReason: 'blocked', hazards: 1, hazardUp: true,
-    relocFailed: true, homeFails: 2, hopsSinceDescent: 2, burnUps: 2, restock: { food: { steps: 1, fails: 1 } }, nightDigs: 6, optionalFails: { hunt: 4 }, fightFails: 3,
+    relocFailed: true, homeFails: 2, hopsSinceDescent: 2, burnUps: 2, crowdFlees: 2, restock: { food: { steps: 1, fails: 1 } }, nightDigs: 6, optionalFails: { hunt: 4 }, fightFails: 3,
     baseDir: 2, surfaceDir: 1, relocations: 5,
   }
   const run = { deaths: 0, memory: dirty }
   handleDeath(bot, run)
   assert.deepStrictEqual(run.memory, {
     leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
-    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
+    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
     baseDir: 2, surfaceDir: 1, relocations: 5,
   })
 })
@@ -350,4 +350,11 @@ test('switches: every ARM key overrides the param the code reads, and 0 disables
     assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=0`) })[k], false, k)
     assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=1`) })[k], true, k)
   }
+})
+
+test('remember: a crowd_flee is counted per life', () => {
+  const run = { memory: { optionalFails: {} } }
+  remember(run, { skill: 'flee', args: [], key: 'crowd_flee' }, { ok: true })
+  assert.strictEqual(run.memory.crowdFlees, 1)
+  assert.strictEqual(resetLife(run.memory).crowdFlees, 0)
 })

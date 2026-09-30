@@ -518,3 +518,13 @@ test('planner: after a burning abort underground it climbs (bounded per life); a
   assert.notStrictEqual(nextAction(state({ ...burnt, memory: memory(2) })).key, 'burn_up')
   assert.notStrictEqual(nextAction(state({ ...burnt, y: 70, memory: memory(0) })).key, 'burn_up')
 })
+
+test('crowdFlee: two or more hostiles in reach and too few blocks to seal in -> flee, capped per life; blocks, a lone mob or the switch off keep the old behaviour', () => {
+  const crowd = { hostileNear: true, hostileClose: true, hostileCount: 3, canShelter: false, health: 20, isNight: true }
+  const fled = nextAction(state(crowd))
+  assert.deepStrictEqual([fled.skill, fled.key], ['flee', 'crowd_flee'])
+  assert.strictEqual(nextAction(state({ ...crowd, canShelter: true })).skill, 'fight')
+  assert.strictEqual(nextAction(state({ ...crowd, hostileCount: 1 })).skill, 'fight')
+  assert.strictEqual(nextAction(state({ ...crowd, params: { ...DEFAULT_PARAMS, crowdFlee: false } })).skill, 'fight')
+  assert.strictEqual(nextAction(state({ ...crowd, memory: { ...state().memory, crowdFlees: 3 } })).skill, 'fight')
+})

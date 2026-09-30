@@ -31,14 +31,15 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE') }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE') }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
 //   FOODGATE   foodGate    no descent without food, rest when hurt and hungry
 //   FIGHTGUARD fightGuard  fight health guard (skills.js)
 //   RESERVE    reserve     reserve kit restock before a descent
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve']
+//   CROWDFLEE  crowdFlee   two or more hostiles in reach and too few blocks to seal in: flee instead of fight
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])) })
 
@@ -65,6 +66,7 @@ const FULL_FOOD = 20
 const DROWN_RISE = 4
 const FIGHT_HEALTH = 8 // keep equal to FIGHT_MIN_HEALTH in skills.js (fight gives up below it); tests/planner.test.js asserts it
 const MAX_FIGHT_FAILS = 4 // consecutive failed fights per trip; then the mob counts as unreachable (behind a wall) and is ignored
+const MAX_CROWD_FLEES = 3 // per life: flights from a crowd of hostiles when there is nothing to seal in with
 const MAX_BURN_UPS = 2 // per life: climbs after a burning abort
 const BURN_RISE = 4
 const MAX_DIG_FAILS = 1 // the relocation hop must come before the stuck tracker's third failure
@@ -312,11 +314,15 @@ function standGround(s) {
   return s.health >= FIGHT_HEALTH ? act('fight') : act('flee')
 }
 
+// A crowd in reach and no blocks to seal in with: a fight is lost once health drops below FIGHT_HEALTH, so run before it starts.
+const crowdedOut = (s) => s.params.crowdFlee && s.hostileClose && (s.hostileCount ?? 0) >= 2 && !s.canShelter && (s.memory.crowdFlees ?? 0) < MAX_CROWD_FLEES
+
 // A hostile in reach gets fought first: sealing in or running with it adjacent only gives it free hits.
 function dangerStep(s) {
   if (s.drowning) return act('go_up', s.y + DROWN_RISE)
   if (s.recentlyBurned && underground(s) && (s.memory.burnUps ?? 0) < MAX_BURN_UPS) return { ...act('go_up', s.y + BURN_RISE), key: 'burn_up' }
   if (!s.hostileNear || s.enclosed) return null
+  if (crowdedOut(s)) return { ...act('flee'), key: 'crowd_flee' }
   if (s.hostileClose && s.health >= FIGHT_HEALTH && canFight(s)) return act('fight')
   const threatened = s.recentlyAttacked || s.health < s.params.fleeHealth
     || (s.isNight && s.y >= s.surfaceY - 2 && !surfaceWork(s))

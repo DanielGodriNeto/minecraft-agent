@@ -20,11 +20,11 @@ const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock i
 //   per-run:  baseDir, surfaceDir, relocations   (directions keep rotating so a new life does not retry the failed one)
 //   per-trip: restock, nightDigs, optionalFails, fightFails  (also reset by a successful deposit)
 //   per-life: leg, surfaceLeg, shelters, noShelter, drownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
-//             homeFails, hopsSinceDescent, burnUps   (the respawn is at home: nothing of the old position applies)
+//             homeFails, hopsSinceDescent, burnUps, crowdFlees   (the respawn is at home: nothing of the old position applies)
 //   hopsSinceDescent deliberately survives a deposit: it counts hops since the last real descent, and any descent zeroes it.
 const lifeMemory = () => ({
   leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
-  relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, ...tripMemory(),
+  relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, ...tripMemory(),
 })
 const tripMemory = () => ({ restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0 })
 
@@ -72,6 +72,9 @@ function pickLeft(bot) {
   return pick ? pick.maxDurability - pick.durabilityUsed : 0
 }
 
+const CROWD_RANGE = 8
+const countHostiles = (bot) => Object.values(bot.entities).filter(e => e.type === 'hostile' && e.position.distanceTo(bot.entity.position) <= CROWD_RANGE).length
+
 function observe(bot, run) {
   const pos = bot.entity.position
   const near = (name, maxDistance = NEAR) => bot.findBlock({ matching: bot.registry.blocksByName[name].id, maxDistance }) !== null
@@ -88,6 +91,7 @@ function observe(bot, run) {
     isNight: isNight(bot),
     enclosed: sealed(bot, pos.floored()),
     hostileNear: nearestHostile(bot) !== null,
+    hostileCount: countHostiles(bot),
     hostileClose: nearestHostile(bot, FIGHT_RANGE) !== null,
     canShelter: placeableCount(bot) >= SHELTER_MIN,
     animalNear: nearestAnimal(bot) !== null,
@@ -178,6 +182,7 @@ function remember(run, action, result) {
   trackShelter(run.memory, action)
   trackDigging(run.memory, action, result)
   if (action.skill === 'fight') run.memory.fightFails = result.ok ? 0 : (run.memory.fightFails ?? 0) + 1
+  if (action.key === 'crowd_flee') run.memory.crowdFlees = (run.memory.crowdFlees ?? 0) + 1
   if (action.key === 'burn_up') run.memory.burnUps = (run.memory.burnUps ?? 0) + 1
   if (action.key === 'night_dig') run.memory.nightDigs = (run.memory.nightDigs ?? 0) + 1
   if (action.skill === 'explore' && !LEG_BLOCKED.has(result.reason)) run.memory.hazards = 0
