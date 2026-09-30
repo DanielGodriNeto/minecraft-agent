@@ -528,3 +528,42 @@ test('crowdFlee: two or more hostiles in reach and too few blocks to seal in -> 
   assert.strictEqual(nextAction(state({ ...crowd, params: { ...DEFAULT_PARAMS, crowdFlee: false } })).skill, 'fight')
   assert.strictEqual(nextAction(state({ ...crowd, memory: { ...state().memory, crowdFlees: 3 } })).skill, 'fight')
 })
+
+test('nightAscent: a deep bot carrying a diamond keeps mining while its predicted surface arrival falls in the dangerous window', () => {
+  const { ASCENT_MARGIN_MS, MAX_ASCENT_DELAY_MS } = require('../bot/planner.js')
+  const deep = { y: 20, surfaceY: 70, inv: { iron_pickaxe: 1, diamond: 1 }, msLeft: 40 * 60000, canShelter: false, distHome: 100 }
+  const at = (timeOfDay, over = {}) => nextAction(state({ ...deep, timeOfDay, isNight: timeOfDay >= 13000 && timeOfDay < 23000, ...over }))
+  assert.notStrictEqual(at(10000).skill, 'go_up') // 2700 ticks up: arrives at 12700, dark
+  assert.notStrictEqual(at(20000).skill, 'go_up') // arrives 22700, dark
+  assert.strictEqual(at(8000).skill, 'go_up') // arrives 10700, day
+  assert.strictEqual(at(21000).skill, 'go_up') // arrives 23700, day
+  assert.strictEqual(at(10000, { params: { ...DEFAULT_PARAMS, nightAscent: false } }).skill, 'go_up')
+  assert.strictEqual(at(10000, { y: 60 }).skill, 'go_up') // shallow: not deep enough to bother
+  assert.strictEqual(at(10000, { msLeft: 135000 + ASCENT_MARGIN_MS - 1 }).skill, 'go_up')
+  assert.strictEqual(at(10000, { memory: { ...state().memory, ascentDelayMs: MAX_ASCENT_DELAY_MS } }).skill, 'go_up')
+  for (const bad of [{ health: 8 }, { food: 4, hasFood: false }, { hostileNear: true }, { recentlyAttacked: true }, { freeSlots: 1 }]) {
+    assert.ok(!['dig_down', 'explore'].includes(at(10000, bad).skill), JSON.stringify(bad))
+  }
+})
+
+test('branchRelocate: after 12 not_found diamond branch explores one 40-block hop sideways, capped at 2 per life', () => {
+  const { remember } = require('../bot/agent.js')
+  const { SOURCES } = require('../bot/planner.js')
+  const memory = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: {}, restock: {} }
+  const run = { memory }
+  const deep = () => state({ y: -58, inv: { iron_pickaxe: 1 }, memory })
+  const hops = []
+  for (let i = 0; i < 80; i++) {
+    const action = nextAction(deep())
+    assert.strictEqual(action.skill, 'explore')
+    if (action.key === 'branch_relocate') hops.push(i)
+    remember(run, action, { ok: false, reason: 'not_found' })
+  }
+  assert.deepStrictEqual(hops, [12, 25]) // 12 misses, the hop, 12 more, the hop, then never again
+  const hop = nextAction(state({ y: -58, inv: { iron_pickaxe: 1 }, memory: { ...memory, branchMisses: 12, branchRelocs: 0 } }))
+  assert.deepStrictEqual([hop.args[0].mode, hop.args[0].dir, hop.args[0].maxBlocks, hop.args[0].target], ['branch', 1, 40, SOURCES.diamond.blocks])
+  const off = { ...deep(), params: { ...DEFAULT_PARAMS, branchRelocate: false }, memory: { ...memory, branchMisses: 12, branchRelocs: 0 } }
+  assert.notStrictEqual(nextAction(off).key, 'branch_relocate')
+  remember(run, { skill: 'explore', args: [{ mode: 'branch', target: SOURCES.diamond.blocks }] }, { ok: true })
+  assert.strictEqual(memory.branchMisses, 0) // a find resets the count
+})

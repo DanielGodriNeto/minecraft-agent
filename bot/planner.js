@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE') }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE') }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -39,7 +39,9 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   FIGHTGUARD fightGuard  fight health guard (skills.js)
 //   RESERVE    reserve     reserve kit restock before a descent
 //   CROWDFLEE  crowdFlee   two or more hostiles in reach and too few blocks to seal in: flee instead of fight
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee']
+//   NIGHTASCENT    nightAscent    a deep bot with a diamond keeps mining while its predicted surface arrival is in the dark
+//   BRANCHRELOCATE branchRelocate after many empty branch legs at depth, hop 40 blocks sideways to fresh ground
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])) })
 
@@ -81,6 +83,17 @@ const RELOCATE_BLOCKS = 8
 const MIN_FOOD_TO_DESCEND = 4
 const MAX_HOPS = 3 // relocation hops in a row without descending before a fresh column is chosen
 const FRESH_COLUMN_BLOCKS = 30
+// All guesses, to be A/B tested. Hostiles are dangerous roughly from dusk to dawn (a day is 24000 ticks).
+const DANGER_FROM = 12500
+const DANGER_UNTIL = 23500
+const ASCENT_DEEP = 20 // shallower than this the climb is short enough not to plan around
+const ASCENT_MS_PER_BLOCK = 1500 // guess: measured go_up is 0.5-2 s/block, slower in practice
+const ASCENT_SLACK_MS = 60000
+const ASCENT_MARGIN_MS = 12 * 60000 // never linger with less than climb + this left
+const MAX_ASCENT_DELAY_MS = 20 * 60000 // per life, so lingering can never become a stuck loop
+const BRANCH_MISSES = 12 // consecutive not_found diamond branch explores before one relocation
+const BRANCH_HOP_BLOCKS = 40
+const MAX_BRANCH_RELOCS = 2 // per life
 
 // Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
 const BIGGEST_STACK = new Set(['planks', 'stone'])
@@ -137,6 +150,7 @@ function gather(s, item) {
   const y = source.y ?? s.params.branchY
   if (s.memory.hazardUp) return { ...act('go_up', s.y + HAZARD_CLIMB), key: 'hazard_up' }
   if (s.y > y + 2) return descend(s, y, source.blocks)
+  if (item === 'diamond' && branchStale(s)) return { ...act('explore', { target: source.blocks, mode: 'branch', dir: (s.memory.baseDir + 1) % DIRS, maxBlocks: BRANCH_HOP_BLOCKS }), key: 'branch_relocate' }
   return act('explore', { target: source.blocks, mode: 'branch', ...branchLeg(s) })
 }
 
@@ -182,6 +196,8 @@ function foodGate(s) {
 // Each failed surface search lengthens the next one so the bot spirals outward instead of pacing the same ground.
 const surfaceReach = ({ surfaceLeg }) => Math.min(SURFACE_BLOCKS + SURFACE_GROWTH * surfaceLeg, SURFACE_CAP)
 
+const branchStale = (s) => s.params.branchRelocate && (s.memory.branchMisses ?? 0) >= BRANCH_MISSES && (s.memory.branchRelocs ?? 0) < MAX_BRANCH_RELOCS
+
 // Serpentine branch mine: long leg, short step sideways, long leg back, ...
 function branchLeg(s) {
   const { leg, baseDir } = s.memory
@@ -194,9 +210,22 @@ function objectiveDone(s) {
   return s.objective.count !== 'max' && s.deposited >= s.objective.count
 }
 
+const ascentMs = (s) => (s.surfaceY - s.y) * ASCENT_MS_PER_BLOCK + ASCENT_SLACK_MS
+const timeOfDayAt = (s, ms) => (s.timeOfDay + ms / 50) % 24000 // 20 ticks per second
+
+// Deep, healthy and fed with a diamond in the pack: climbing now would reach the surface in the dark, so mine on until it would not.
+function lingerUnderground(s) {
+  if (!s.params.nightAscent || s.timeOfDay === undefined || !has(s, 'iron_pickaxe')) return false
+  if (s.surfaceY - s.y < ASCENT_DEEP || s.msLeft < ascentMs(s) + ASCENT_MARGIN_MS) return false
+  if ((s.memory.ascentDelayMs ?? 0) >= MAX_ASCENT_DELAY_MS) return false
+  if (s.hostileNear || s.recentlyAttacked || s.health < WEAK_HEALTH || (s.food <= 6 && !s.hasFood) || s.freeSlots <= 1) return false
+  const arrival = timeOfDayAt(s, ascentMs(s))
+  return arrival >= DANGER_FROM && arrival < DANGER_UNTIL
+}
+
 function shouldReturn(s) {
   const carried = count(s, 'diamond')
-  if (carried === 0) return false
+  if (carried === 0 || lingerUnderground(s)) return false
   if (s.deposited === 0 || s.msLeft < RETURN_BEFORE_MS) return true // secure the first diamond; bank before time runs out
   const target = s.objective.count === 'max' ? Infinity : s.objective.count - s.deposited
   return carried >= Math.min(target, s.params.returnAt)
@@ -375,4 +404,4 @@ function nextAction(s) {
   return swordStep(s) ?? spareStep(s) ?? gather(s, 'diamond')
 }
 
-module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS }
+module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS, lingerUnderground, ASCENT_MARGIN_MS, MAX_ASCENT_DELAY_MS }

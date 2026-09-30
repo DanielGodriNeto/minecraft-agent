@@ -314,14 +314,14 @@ test('handleDeath: memory goes back to a fresh life, only the per-run keys survi
   const bot = { unreachable: new Set(), clearControlStates() {}, pathfinder: { setGoal() {} } }
   const dirty = {
     leg: 3, surfaceLeg: 4, shelters: 1, noShelter: 3, drownings: 2, digFails: 1, lastDigReason: 'blocked', hazards: 1, hazardUp: true,
-    relocFailed: true, homeFails: 2, hopsSinceDescent: 2, burnUps: 2, crowdFlees: 2, relocHazards: 2, restock: { food: { steps: 1, fails: 1 } }, nightDigs: 6, optionalFails: { hunt: 4 }, fightFails: 3,
+    relocFailed: true, homeFails: 2, hopsSinceDescent: 2, burnUps: 2, crowdFlees: 2, relocHazards: 2, ascentDelayMs: 9, branchMisses: 5, branchRelocs: 1, restock: { food: { steps: 1, fails: 1 } }, nightDigs: 6, optionalFails: { hunt: 4 }, fightFails: 3,
     baseDir: 2, surfaceDir: 1, relocations: 5,
   }
   const run = { deaths: 0, memory: dirty }
   handleDeath(bot, run)
   assert.deepStrictEqual(run.memory, {
     leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
-    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
+    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
     baseDir: 2, surfaceDir: 1, relocations: 5,
   })
 })
@@ -344,7 +344,7 @@ test('switches: every ARM key overrides the param the code reads, and 0 disables
   const { parseArm } = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))('./eval.js')
   const { jitterParams } = require('../bot/agent.js')
   const { normalizeParams } = require('../bot/planner.js')
-  const keys = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve']
+  const keys = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate']
   for (const k of keys) {
     assert.strictEqual(DEFAULT_PARAMS[k], true, k)
     assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=0`) })[k], false, k)

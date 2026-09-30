@@ -1,6 +1,6 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
 const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, clearUnreachable, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
-const { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
+const { nextAction, lingerUnderground, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
 
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
@@ -21,11 +21,11 @@ const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock i
 //   per-run:  baseDir, surfaceDir, relocations   (directions keep rotating so a new life does not retry the failed one)
 //   per-trip: restock, nightDigs, optionalFails, fightFails  (also reset by a successful deposit)
 //   per-life: leg, surfaceLeg, shelters, noShelter, drownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
-//             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards   (the respawn is at home: nothing of the old position applies)
+//             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs   (the respawn is at home: nothing of the old position applies)
 //   hopsSinceDescent deliberately survives a deposit: it counts hops since the last real descent, and any descent zeroes it.
 const lifeMemory = () => ({
   leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
-  relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ...tripMemory(),
+  relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0, ...tripMemory(),
 })
 const tripMemory = () => ({ restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0 })
 
@@ -90,6 +90,7 @@ function observe(bot, run) {
     y: Math.floor(pos.y),
     surfaceY: run.surfaceY,
     isNight: isNight(bot),
+    timeOfDay: bot.time.timeOfDay,
     enclosed: sealed(bot, pos.floored()),
     hostileNear: nearestHostile(bot) !== null,
     hostileCount: countHostiles(bot),
@@ -199,6 +200,15 @@ function remember(run, action, result) {
     run.memory.digFails = MAX_DIG_FAILS // the next descent starts with a hop, not in the pocket that just flooded
   }
   run.memory.drownings = result.reason === 'drowning' ? (run.memory.drownings ?? 0) + 1 : 0
+  if (action.key === 'branch_relocate') {
+    run.memory.branchRelocs = (run.memory.branchRelocs ?? 0) + 1
+    run.memory.branchMisses = 0
+    run.memory.leg = 0 // serpentine restarts from the new ground
+    return
+  }
+  if (action.skill === 'explore' && action.args[0].mode === 'branch' && action.args[0].target === SOURCES.diamond.blocks) {
+    run.memory.branchMisses = result.reason === 'not_found' ? (run.memory.branchMisses ?? 0) + 1 : 0
+  }
   if (result.ok) return
   if (action.optional) {
     const fails = run.memory.optionalFails
@@ -299,7 +309,9 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
         if (isLost(bot.entity.position, home)) return finish(run, 'lost')
         continue
       }
-      const action = nextAction(observe(bot, run))
+      const state = observe(bot, run)
+      const action = nextAction(state)
+      const startedAt = Date.now()
       if (!action) return finish(run, 'done')
       const deathsBefore = run.deaths
       const invBefore = inventoryCounts(bot)
@@ -311,6 +323,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       if (action.skill === 'deposit' && result.ok) startNewTrip(bot, run)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
       afterSkill(run, action, result, deathsBefore)
+      if (lingerUnderground(state)) run.memory.ascentDelayMs = (run.memory.ascentDelayMs ?? 0) + Date.now() - startedAt
       resetTrail(bot, run.home)
       if (!run.recentlyAttacked && !run.recentlyBurned && !IDLE_EXEMPT.has(action.skill) && !relocHazardExempt(run.memory, action, result) && isStuck(result, action, invBefore)) return finish(run, 'stuck')
     }
