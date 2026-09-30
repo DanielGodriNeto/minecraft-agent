@@ -481,18 +481,10 @@ test('foodGate: the hunt gives up after MAX_HUNT_FAILS or two restock failures i
   assert.strictEqual(gate({ foodCount: 0, animalNear: true, memory: restockFailed }).skill, 'dig_down')
 })
 
-test('foodGate: hurt, hungry and without food, it climbs to the surface and rests there, a bounded number of times', () => {
-  const hurt = { health: 6, food: 12, hasFood: false, foodCount: 0 }
-  const up = gate({ ...hurt, y: 40, canShelter: true })
-  assert.deepStrictEqual([up.skill, up.args[0], up.foodRest], ['go_up', 70, true])
-  const rest = gate({ ...hurt, canShelter: true })
-  assert.deepStrictEqual([rest.skill, rest.args[1], rest.foodRest], ['shelter', 'rest', true])
-  assert.notStrictEqual(gate({ ...hurt, hasFood: true, foodCount: 1, canShelter: true }).foodRest, true)
-  assert.notStrictEqual(gate({ ...hurt, food: 18, canShelter: true }).foodRest, true)
-  assert.notStrictEqual(gate({ ...hurt, health: 8, canShelter: true }).foodRest, true)
-  assert.notStrictEqual(gate({ ...hurt, canShelter: true }, false).foodRest, true)
-  const spent = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, foodRests: 4 }
-  assert.notStrictEqual(gate({ ...hurt, canShelter: true, memory: spent }).foodRest, true)
+test('foodGate: hurt and hungry without food does not climb or rest (regeneration needs food >= 18)', () => {
+  const hurt = { health: 6, food: 12, hasFood: false, foodCount: 0, canShelter: true }
+  assert.notStrictEqual(gate({ ...hurt, y: 40 }).skill, 'go_up')
+  assert.notStrictEqual(gate(hurt).args?.[1], 'rest')
 })
 
 test('reserve: the switch off skips the restock', () => {
@@ -500,4 +492,29 @@ test('reserve: the switch off skips the restock', () => {
   const s = { inv: { iron_pickaxe: 1 }, pickLeft: 100, foodCount: 0, ...nearby }
   assert.strictEqual(nextAction(state({ ...s })).restock, 'planks')
   assert.strictEqual(nextAction(state({ ...s, params: p })).restock, undefined)
+})
+
+test('planner: FIGHT_HEALTH matches the skill-side FIGHT_MIN_HEALTH', () => {
+  assert.strictEqual(require('../bot/planner.js').FIGHT_HEALTH, require('../bot/skills.js').FIGHT_MIN_HEALTH)
+})
+
+test('planner: after MAX_FIGHT_FAILS failed fights in a row the mob counts as unreachable and is not fought again', () => {
+  const { MAX_FIGHT_FAILS } = require('../bot/planner.js')
+  const near = { hostileNear: true, hostileClose: true }
+  const memory = (fightFails) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, fightFails })
+  assert.strictEqual(nextAction(state({ ...near, memory: memory(MAX_FIGHT_FAILS - 1) })).skill, 'fight')
+  assert.notStrictEqual(nextAction(state({ ...near, memory: memory(MAX_FIGHT_FAILS) })).skill, 'fight')
+  const threatened = state({ ...near, recentlyAttacked: true, canShelter: true, memory: memory(MAX_FIGHT_FAILS) })
+  assert.strictEqual(nextAction(threatened).skill, 'shelter')
+  const standing = state({ ...near, recentlyAttacked: true, canShelter: true, memory: { ...memory(MAX_FIGHT_FAILS), noShelter: 3 } })
+  assert.notStrictEqual(nextAction(standing).skill, 'fight')
+})
+
+test('planner: after a burning abort underground it climbs (bounded per life); at the surface or once spent it does not', () => {
+  const memory = (burnUps) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, burnUps })
+  const burnt = { recentlyBurned: true, y: 30, inv: { iron_pickaxe: 1 } }
+  const up = nextAction(state({ ...burnt, memory: memory(0) }))
+  assert.deepStrictEqual([up.skill, up.args[0], up.key], ['go_up', 34, 'burn_up'])
+  assert.notStrictEqual(nextAction(state({ ...burnt, memory: memory(2) })).key, 'burn_up')
+  assert.notStrictEqual(nextAction(state({ ...burnt, y: 70, memory: memory(0) })).key, 'burn_up')
 })

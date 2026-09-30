@@ -63,7 +63,10 @@ const EAT_AT = 17 // natural regeneration needs food >= 18
 const WEAK_HEALTH = 12
 const FULL_FOOD = 20
 const DROWN_RISE = 4
-const FIGHT_HEALTH = 8
+const FIGHT_HEALTH = 8 // keep equal to FIGHT_MIN_HEALTH in skills.js (fight gives up below it); tests/planner.test.js asserts it
+const MAX_FIGHT_FAILS = 4 // consecutive failed fights per trip; then the mob counts as unreachable (behind a wall) and is ignored
+const MAX_BURN_UPS = 2 // per life: climbs after a burning abort
+const BURN_RISE = 4
 const MAX_DIG_FAILS = 1 // the relocation hop must come before the stuck tracker's third failure
 const MAX_WAIT_FAILS = 4
 const MAX_NIGHT_DIGS = 6
@@ -74,7 +77,6 @@ const NIGHT_WAIT_MIN_MS = 15 * 60000 // closer to the deadline than this, a diam
 const REST_BELOW = 8
 const RELOCATE_BLOCKS = 8
 const MIN_FOOD_TO_DESCEND = 4
-const MAX_FOOD_RESTS = 4 // per life: go_up and rest steps together
 const MAX_HOPS = 3 // relocation hops in a row without descending before a fresh column is chosen
 const FRESH_COLUMN_BLOCKS = 30
 
@@ -173,15 +175,6 @@ function foodGate(s) {
   if (!s.params.foodGate || !atSurface(s) || (s.foodCount ?? 0) >= MIN_FOOD_TO_DESCEND || !s.animalNear || (s.isNight && s.params.nightSurf)) return null
   if ((s.memory.optionalFails?.hunt ?? 0) >= MAX_HUNT_FAILS || !restockOpen(s, 'food')) return null
   return { ...act('hunt'), optional: true, restock: 'food' }
-}
-
-// Hurt and hungry with nothing to eat, regeneration is out of reach and every fight is lost: leave the depths and sit it out at the surface.
-function hungryRest(s) {
-  const spent = (s.memory.foodRests ?? 0) >= MAX_FOOD_RESTS
-  if (!s.params.foodGate || spent || s.health >= REST_BELOW || s.food > EAT_AT || s.hasFood) return null
-  if (!atSurface(s)) return { ...act('go_up', s.surfaceY), foodRest: true }
-  const rest = holdUp(s, 'rest')
-  return rest && { ...rest, foodRest: true }
 }
 
 // Each failed surface search lengthens the next one so the bot spirals outward instead of pacing the same ground.
@@ -312,16 +305,19 @@ function reserveStep(s) {
 const surfaceWork = (s) => !has(s, 'iron_pickaxe') || shouldReturn(s)
 
 // Sheltering did not get rid of the hostile: fight one that is close and keep working otherwise.
+const canFight = (s) => (s.memory.fightFails ?? 0) < MAX_FIGHT_FAILS
+
 function standGround(s) {
-  if (!s.hostileClose) return null
+  if (!s.hostileClose || !canFight(s)) return null
   return s.health >= FIGHT_HEALTH ? act('fight') : act('flee')
 }
 
 // A hostile in reach gets fought first: sealing in or running with it adjacent only gives it free hits.
 function dangerStep(s) {
   if (s.drowning) return act('go_up', s.y + DROWN_RISE)
+  if (s.recentlyBurned && underground(s) && (s.memory.burnUps ?? 0) < MAX_BURN_UPS) return { ...act('go_up', s.y + BURN_RISE), key: 'burn_up' }
   if (!s.hostileNear || s.enclosed) return null
-  if (s.hostileClose && s.health >= FIGHT_HEALTH) return act('fight')
+  if (s.hostileClose && s.health >= FIGHT_HEALTH && canFight(s)) return act('fight')
   const threatened = s.recentlyAttacked || s.health < s.params.fleeHealth
     || (s.isNight && s.y >= s.surfaceY - 2 && !surfaceWork(s))
   if (!threatened) return null
@@ -346,7 +342,7 @@ function nextAction(s) {
   if (food) return food
   const upgrade = s.memory.digFails > 0 && s.memory.lastDigReason === 'no_tool' ? pickaxeUpgrade(s) : null
   if (upgrade) return upgrade
-  const waiting = restStep(s) ?? nightStep(s) ?? hungryRest(s)
+  const waiting = restStep(s) ?? nightStep(s)
   if (waiting) return waiting
   const junk = junkAction(s)
   if (junk) return junk
@@ -373,4 +369,4 @@ function nextAction(s) {
   return swordStep(s) ?? spareStep(s) ?? gather(s, 'diamond')
 }
 
-module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams }
+module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS }
