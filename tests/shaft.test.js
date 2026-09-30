@@ -90,7 +90,7 @@ for (const hazard of ['lava', 'water']) {
     console.log(`REFUSE ${hazard} res=${JSON.stringify(res)} y=${h.bot.entity.position.y}`)
     assert.strictEqual(minHealth, 20)
     assert.strictEqual(h.blockName(cell), hazard)
-    assert.ok(!res.shaftSteps || res.shaftSteps < 3, `shaftSteps ${res.shaftSteps}`)
+    assert.ok(res.stairSteps > 0, `sidestep expected: ${JSON.stringify(res)}`) // shaft resumes only after leaving the hazard column
   })
 }
 
