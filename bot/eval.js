@@ -4,6 +4,7 @@
 //                                                 run slots first..last in batches, e.g. 100 199 10 60;
 //                                                 instances > 1 runs that many Paper servers in parallel
 //                                                 (server/run-<n>/, port 25565+n, ~14 GB world copy each)
+// A/B: ARM=shaft=0,reserve=0 overrides run params; ARMS="shaft=1;shaft=0" runs every batch once per arm, rotated across instances.
 // Results: logs/eval.jsonl (one line per run); summary printed at the end.
 const fs = require('node:fs')
 const path = require('node:path')
@@ -11,6 +12,7 @@ const { createBot } = require('./bot.js')
 const { runObjective, stopObjective, jitterParams } = require('./agent.js')
 const { summarize, isInvalid, mulberry32 } = require('./metrics.js')
 const os = require('node:os')
+const { execSync } = require('node:child_process')
 const { startServer, snapshot, restore, checkDiskFor, instanceSpec, maxInstances } = require('./server.js')
 
 const SLOTS = JSON.parse(fs.readFileSync(path.join(__dirname, 'slots.json'), 'utf8'))
@@ -109,6 +111,26 @@ function distribute(batches, workers) {
   return shares
 }
 
+// "shaft=0,reserve=0" -> { shaft: 0, reserve: 0 }: numbers and booleans are parsed, the rest stays a string.
+function parseArm(text = '') {
+  const parse = (v) => (v === 'true' ? true : v === 'false' ? false : v !== '' && !Number.isNaN(Number(v)) ? Number(v) : v)
+  const pairs = text.split(',').map(p => p.trim().split('=')).filter(([k, v]) => k && v !== undefined)
+  return Object.fromEntries(pairs.map(([k, v]) => [k, parse(v)]))
+}
+
+// Every batch once per arm. Batch b, arm a goes to worker (b + a) % workers, so each arm visits every server.
+function assignArms(batches, arms, workers) {
+  const shares = Array.from({ length: workers }, () => [])
+  batches.forEach((batch, b) => arms.forEach((arm, a) => shares[(b + a) % workers].push({ batch, arm })))
+  return shares
+}
+
+const commitHash = () => {
+  try { return execSync('git rev-parse --short HEAD', { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() } catch { return undefined }
+}
+const SWITCHES = ['SHAFT', 'NIGHTSURF', 'FOODGATE', 'FIGHTGUARD']
+const switchesInEffect = () => Object.fromEntries(SWITCHES.filter(k => process.env[k] !== undefined).map(k => [k, process.env[k]]))
+
 function chunk(items, size) {
   const out = []
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
@@ -127,8 +149,9 @@ function parseInstances(arg, totalMemGb = os.totalmem() / 2 ** 30) {
 // interleave, so they get skills-i<n>-Bot<i>.jsonl. bot.username is not set until login, so the name is passed in.
 const skillLogPath = ({ index, total }, name) => total > 1 ? path.join(__dirname, '..', 'logs', `skills-i${index + 1}-${name}.jsonl`) : undefined
 
-async function runOne(bot, slot, home, start, minutes, difficulty, log, instance) {
+async function runOne(bot, slot, home, start, minutes, difficulty, log, instance, arm = '') {
   const rand = mulberry32(slot.id)
+  const armText = [process.env.ARM, arm].filter(Boolean).join(',')
   bot.runTag = `slot${slot.id}-${start}`
   const disconnected = new Promise(resolve => {
     const done = () => resolve(partial(bot, 'disconnected'))
@@ -139,7 +162,7 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
   try {
     if (home instanceof Error) throw home
     const running = runObjective(bot, {
-      objective: { item: 'diamond', count: 'max' }, home, params: jitterParams(rand),
+      objective: { item: 'diamond', count: 'max' }, home, params: { ...jitterParams(rand), ...parseArm(armText) },
       deadline: start + minutes * 60000, rand,
     })
     running.catch(() => {}) // a run abandoned on disconnect may still reject later
@@ -148,7 +171,7 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
   } catch (e) {
     result = partial(bot, 'error', e.message)
   }
-  const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, ...(isInvalid(result) && { invalid: true }), minutes: (Date.now() - start) / 60000, difficulty, ...(instance.total > 1 && { instance: instance.index + 1 }) }
+  const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, ...(isInvalid(result) && { invalid: true }), minutes: (Date.now() - start) / 60000, difficulty, commit: commitHash(), env: switchesInEffect(), ...(armText && { arm: armText }), ...(instance.total > 1 && { instance: instance.index + 1 }) }
   fs.appendFileSync(RESULTS, JSON.stringify(run) + '\n')
   console.log(`${instance.total > 1 ? `[i${instance.index + 1}] ` : ''}${JSON.stringify(run)}`)
   return run
@@ -157,7 +180,7 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
 // opts.log: file receiving one line per run (null = none); opts.onStart(server): called once the runs begin,
 // returns a stop function that is called when they end.
 // opts.instance: { index, total } picks the server dir and port (default: the single server/ on 25565).
-async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, instance = { index: 0, total: 1 } } = {}) {
+async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, instance = { index: 0, total: 1 }, arm } = {}) {
   const { dir, port } = instanceSpec(instance.index, instance.total)
   restore(dir)
   const server = await startServer('diamonds', { dir, port })
@@ -174,7 +197,7 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, in
     for (const [i, slot] of slots.entries()) homes.push(await retry(() => placeAtSlot(server, bots[i], slot), 2, 5000).catch(e => e))
     const start = Date.now()
     stopWatching = onStart?.(server)
-    return await Promise.all(slots.map((slot, i) => runOne(bots[i], slot, homes[i], start, minutes, difficulty, log, instance)))
+    return await Promise.all(slots.map((slot, i) => runOne(bots[i], slot, homes[i], start, minutes, difficulty, log, instance, arm)))
   } finally {
     stopWatching?.()
     bots.forEach(b => b.end())
@@ -184,7 +207,7 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, in
 
 async function runShare(share, index, total, minutes, difficulty) {
   const runs = []
-  for (const batch of share) runs.push(...await runBatch(batch, minutes, difficulty, { instance: { index, total } }))
+  for (const { batch, arm } of share) runs.push(...await runBatch(batch, minutes, difficulty, { instance: { index, total }, arm }))
   return runs
 }
 
@@ -193,12 +216,14 @@ async function main([first, last, bots = '10', minutes = '60', instances = '1'])
   if (Number(bots) > MAX_BOTS) throw new Error(`at most ${MAX_BOTS} bots (only Bot0..Bot${MAX_BOTS - 1} are whitelisted)`)
   const difficulty = readDifficulty()
   const slots = SLOTS.filter(s => s.id >= Number(first) && s.id <= Number(last))
-  const shares = distribute(chunk(slots, Number(bots)), Math.min(parseInstances(instances), Math.ceil(slots.length / Number(bots))))
+  const arms = process.env.ARMS ? process.env.ARMS.split(';').map(a => a.trim()) : ['']
+  const batches = chunk(slots, Number(bots))
+  const shares = assignArms(batches, arms, Math.min(parseInstances(instances), batches.length * arms.length))
   checkDiskFor(shares.map((_, i) => instanceSpec(i, shares.length)))
   fs.mkdirSync(path.dirname(RESULTS), { recursive: true })
   const runs = (await Promise.all(shares.map((share, i) => runShare(share, i, shares.length, Number(minutes), difficulty)))).flat()
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })

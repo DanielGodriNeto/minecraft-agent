@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const path = require('node:path')
 const req = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))
-const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, retry, skillLogPath } = req('./eval.js')
+const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, retry, skillLogPath, parseArm, assignArms } = req('./eval.js')
 const { instanceSpec, maxInstances, assertDiskSpace, withPort } = req('./server.js')
 
 const solid = (name) => ({ name, boundingBox: 'block' })
@@ -93,4 +93,19 @@ test('skillLogPath: parallel instances get skills-i<n>-Bot<k>.jsonl, a single on
   assert.strictEqual(path.basename(skillLogPath({ index: 0, total: 2 }, 'Bot3')), 'skills-i1-Bot3.jsonl')
   assert.strictEqual(path.basename(skillLogPath({ index: 1, total: 2 }, 'Bot0')), 'skills-i2-Bot0.jsonl')
   assert.strictEqual(skillLogPath({ index: 0, total: 1 }, 'Bot3'), undefined)
+})
+
+test('parseArm: key=value list to an object, numbers and booleans parsed, empty and junk ignored', () => {
+  assert.deepStrictEqual(parseArm('shaft=0,reserve=0'), { shaft: 0, reserve: 0 })
+  assert.deepStrictEqual(parseArm(' spacing=2.5, cheat=true ,x=false,name=abc'), { spacing: 2.5, cheat: true, x: false, name: 'abc' })
+  assert.deepStrictEqual(parseArm(''), {})
+  assert.deepStrictEqual(parseArm(undefined), {})
+  assert.deepStrictEqual(parseArm('novalue,=1,a=1'), { a: 1 })
+})
+
+test('assignArms: every batch runs once per arm and arms are rotated so no arm owns a server', () => {
+  const shares = assignArms(['b0', 'b1'], ['A', 'B'], 2)
+  assert.deepStrictEqual(shares, [[{ batch: 'b0', arm: 'A' }, { batch: 'b1', arm: 'B' }], [{ batch: 'b0', arm: 'B' }, { batch: 'b1', arm: 'A' }]])
+  assert.deepStrictEqual(assignArms(['b0', 'b1', 'b2'], [''], 2).map(s => s.map(t => t.batch)), distribute(['b0', 'b1', 'b2'], 2))
+  assert.strictEqual(assignArms(['b0'], ['A', 'B'], 1)[0].length, 2)
 })
