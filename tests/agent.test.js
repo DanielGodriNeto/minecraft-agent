@@ -1,5 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
+const { nextAction, DEFAULT_PARAMS } = require('../bot/planner.js')
 const { createStuckTracker, stuckTracker, pickLeft, remember, isLost, resetLife, resetTrip } = require('../bot/agent.js')
 
 const ok = { ok: true }
@@ -230,4 +231,53 @@ test('resetTrip: a deposit refills the night-dig, optional-failure and restock b
   const memory = { nightDigs: 6, optionalFails: { hunt: 4 }, restock: { food: { steps: 3, fails: 1 } }, digFails: 1, relocations: 2 }
   resetTrip(memory)
   assert.deepStrictEqual(memory, { nightDigs: 0, optionalFails: {}, restock: {}, digFails: 1, relocations: 2 })
+})
+
+// Planner + remember against a world where digging down here always fails but every hop succeeds,
+// until a fresh column (the 30-block hop from the surface) is reached.
+function simulateStuckColumn(startY, steps) {
+  let y = startY
+  let freshReached = false
+  const run = { memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: {}, hopsSinceDescent: 0 } }
+  const log = []
+  for (let i = 0; i < steps; i++) {
+    const action = nextAction({
+      inv: { iron_pickaxe: 1, stone_pickaxe: 1, stick: 8, cobblestone: 32 }, health: 20, food: 20, hasFood: true, foodCount: 6, y, surfaceY: 70, isNight: false,
+      hostileNear: false, canShelter: true, animalNear: false, visible: {}, tableNear: false, furnaceNear: false, freeSlots: 30, pickLeft: 100,
+      home: { x: 0, y: 70, z: 0 }, distHome: 0, objective: { item: 'diamond', count: 'max' }, deposited: 0, msLeft: 3600000,
+      params: DEFAULT_PARAMS, memory: run.memory,
+    })
+    log.push(action.key ?? action.skill)
+    let result = { ok: true }
+    if (action.skill === 'go_up') y = 70
+    else if (action.key === 'fresh_column') freshReached = true
+    else if (action.skill === 'dig_down') {
+      result = freshReached ? { ok: true, descended: true } : { ok: false, reason: 'blocked' }
+      if (freshReached) y -= 10
+    } else if (action.relocate) result = { ok: true }
+    remember(run, action, result)
+    if (y < startY && freshReached) return { log, y }
+  }
+  return { log, y }
+}
+
+test('hops: dig-fail then hop-success cannot repeat forever, three hops without descent trigger a fresh column 30+ blocks away', () => {
+  for (const startY of [70, 30]) {
+    const { log, y } = simulateStuckColumn(startY, 20)
+    assert.ok(log.includes('fresh_column'), `${startY}: ${log.join(',')}`)
+    assert.ok(y < startY, `${startY}: never descended, ${log.join(',')}`)
+  }
+  assert.ok(simulateStuckColumn(30, 20).log.includes('fresh_up'))
+})
+
+test('hops: descending resets the hop count, a fresh-column hop resets it too', () => {
+  const run = { memory: { optionalFails: {}, hopsSinceDescent: 2 } }
+  remember(run, { skill: 'dig_down', args: [-58] }, { ok: true, descended: true })
+  assert.strictEqual(run.memory.hopsSinceDescent, 0)
+  const hop = { skill: 'explore', args: [{ mode: 'surface' }], relocate: true }
+  remember(run, hop, { ok: true })
+  remember(run, hop, { ok: false, reason: 'not_found' })
+  assert.strictEqual(run.memory.hopsSinceDescent, 2)
+  remember(run, { ...hop, key: 'fresh_column' }, { ok: true })
+  assert.strictEqual(run.memory.hopsSinceDescent, 0)
 })

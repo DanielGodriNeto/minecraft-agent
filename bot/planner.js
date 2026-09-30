@@ -63,6 +63,8 @@ const NIGHT_BAND = 12 // shallower than this and underground at night counts as 
 const NIGHT_WAIT_MIN_MS = 15 * 60000 // closer to the deadline than this, a diamond trip home does not wait for dawn
 const REST_BELOW = 8
 const RELOCATE_BLOCKS = 8
+const MAX_HOPS = 3 // relocation hops in a row without descending before a fresh column is chosen
+const FRESH_COLUMN_BLOCKS = 30
 
 // Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
 const BIGGEST_STACK = new Set(['planks', 'stone'])
@@ -137,11 +139,19 @@ function pickaxeUpgrade(s) {
 
 // Digging down keeps failing here: move to a fresh spot (a surface hop, or a short branch leg underground) before retrying.
 function descend(s, y, target) {
-  const { digFails = 0, relocations = 0 } = s.memory
+  const { digFails = 0, relocations = 0, hopsSinceDescent = 0 } = s.memory
+  if (hopsSinceDescent >= MAX_HOPS) return freshColumn(s, target, relocations)
   if (digFails < MAX_DIG_FAILS) return act('dig_down', y)
   if (s.memory.relocFailed && !atSurface(s)) return { ...act('go_up', s.surfaceY), key: 'reloc_up' } // the hop found no way out: hop again from the surface
   if (atSurface(s)) return { ...act('explore', { target, mode: 'surface', dir: (s.memory.surfaceDir + relocations) % DIRS, maxBlocks: RELOCATE_BLOCKS }), relocate: true }
   return { ...act('explore', { target, mode: 'branch', dir: (s.memory.baseDir + 1 + relocations) % DIRS, maxBlocks: RELOCATE_BLOCKS }), relocate: true }
+}
+
+// Hops keep landing in columns that cannot be dug: climb out and start over far from here.
+function freshColumn(s, target, relocations) {
+  if (!atSurface(s)) return { ...act('go_up', s.surfaceY), key: 'fresh_up' }
+  const dir = (s.memory.surfaceDir + relocations) % DIRS
+  return { ...act('explore', { target, mode: 'surface', dir, maxBlocks: FRESH_COLUMN_BLOCKS }), relocate: true, key: 'fresh_column' }
 }
 
 // Each failed surface search lengthens the next one so the bot spirals outward instead of pacing the same ground.

@@ -107,9 +107,10 @@ function trackShelter(memory, action) {
 
 const DIG_STUCK = new Set(['blocked', 'timeout', 'no_tool'])
 
-// Consecutive dig_down failures without any descent; a successful relocation hop (or a dig success) starts the count over.
+// Consecutive dig_down failures without any descent (hopsSinceDescent counts hops since the last real descent); a successful relocation hop (or a dig success) starts the count over.
 // A failed hop still turns the direction and makes the planner climb before hopping again.
 function trackDigging(memory, action, result) {
+  if (result.descended) memory.hopsSinceDescent = 0
   if (action.key === 'upgrade' && result.ok) {
     memory.digFails = 0
     return
@@ -122,7 +123,9 @@ function trackDigging(memory, action, result) {
     memory.relocations = (memory.relocations ?? 0) + 1
     const hopped = result.ok || result.reason === 'not_found' // a surface hop never finds ore, but it did move the bot
     memory.relocFailed = !hopped
-    if (hopped) memory.digFails = 0
+    if (!hopped) return
+    memory.digFails = 0
+    memory.hopsSinceDescent = action.key === 'fresh_column' ? 0 : (memory.hopsSinceDescent ?? 0) + 1
     return
   }
   if (action.skill !== 'dig_down') return
