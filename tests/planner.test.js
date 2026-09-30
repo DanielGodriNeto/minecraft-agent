@@ -423,3 +423,9 @@ test('reserve: tossing never cuts stone below the reserve, and a deposit only ca
   assert.notStrictEqual(nextAction(state({ inv: { cobblestone: RESERVE.stone }, freeSlots: 1 })).skill, 'toss')
   assert.deepStrictEqual(nextAction(state({ inv: { diamond: 1, chest: 1, cobblestone: 64 }, distHome: 1 })), { skill: 'deposit', args: [{ x: 0, y: 70, z: 0 }] })
 })
+
+test('DEFAULT_PARAMS carries the shaft arm and jitterParams leaves it alone', () => {
+  const { jitterParams } = require('../bot/agent.js')
+  assert.strictEqual(typeof DEFAULT_PARAMS.shaft, 'boolean')
+  assert.strictEqual(jitterParams(() => 0.99).shaft, DEFAULT_PARAMS.shaft)
+})

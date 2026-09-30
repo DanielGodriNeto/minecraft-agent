@@ -30,7 +30,7 @@ const SURFACE_BLOCKS = 64
 const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14 }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: process.env.SHAFT !== '0' } // shaft: dig_down as a 1x1 shaft (A/B arm, SHAFT=0 for stairs only)
 
 const PURE_JUNK = ['dirt', 'gravel', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']
 const STONE_JUNK = ['cobblestone', 'cobbled_deepslate']
