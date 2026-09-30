@@ -371,8 +371,12 @@ async function pickUpDrop(bot, pos) {
   if (!bot.entities[drop.id] || goalY() === null) return
   const start = bot.entity.position.clone()
   try {
+    const gone = () => !bot.entities[drop.id]
     await goto(bot, new goals.GoalNear(drop.position.x, goalY(), drop.position.z, 1), 10000)
-    if (!await poll(bot, () => !bot.entities[drop.id], 3000)) throw new Fail('pickup_failed')
+    if (!await poll(bot, gone, 1000)) { // one block away is sometimes just out of pickup range: step onto it
+      await goto(bot, new goals.GoalNear(drop.position.x, goalY(), drop.position.z, 0), 5000)
+      if (!await poll(bot, gone, 2000)) throw new Fail('pickup_failed')
+    }
   } catch (e) {
     skipped.add(drop.id)
     if (!pickupStalled(bot, start, e)) return

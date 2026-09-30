@@ -986,3 +986,20 @@ test('dig_down: the shaft step waits for the bot to fall after the break instead
   assert.strictEqual(result.shaftSteps, 1)
   assert.ok(!result.stairSteps)
 })
+
+test('pickUpDrop: a drop still on the ground after the first approach is walked onto before giving up', async () => {
+  const drop = { id: 9, name: 'item', position: new Vec3(2.6, 10, 0.5) }
+  const ranges = []
+  const bot = Object.assign(new EventEmitter(), {
+    entity: { position: new Vec3(0.5, 10, 0.5) },
+    entities: { 9: drop },
+    nearestEntity: (match) => [drop].find(match) ?? null,
+    waitForTicks: () => new Promise(r => setTimeout(r, 1)),
+    pathfinder: { goto: async (goal) => { ranges.push(goal.rangeSq); if (goal.rangeSq === 0) delete bot.entities[9] }, setGoal() {} },
+    clearControlStates() {},
+    stopDigging() {},
+  })
+  const result = await run(bot, () => pickUpDrop(bot, new Vec3(2, 10, 0)), false)
+  assert.strictEqual(result.ok, true, result.detail)
+  assert.deepStrictEqual(ranges, [1, 0])
+})
