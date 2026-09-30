@@ -216,7 +216,7 @@ const timeOfDayAt = (s, ms) => (s.timeOfDay + ms / 50) % 24000 // 20 ticks per s
 
 // Deep, healthy and fed with a diamond in the pack: climbing now would reach the surface in the dark, so mine on until it would not.
 function lingerUnderground(s) {
-  if (!s.params.nightAscent || s.timeOfDay === undefined || !has(s, 'iron_pickaxe')) return false
+  if (!s.params.nightAscent || s.timeOfDay === undefined || !has(s, 'iron_pickaxe') || count(s, 'diamond') === 0) return false
   if (s.surfaceY - s.y < ASCENT_DEEP || s.msLeft < ascentMs(s) + ASCENT_MARGIN_MS) return false
   if ((s.memory.ascentDelayMs ?? 0) >= MAX_ASCENT_DELAY_MS) return false
   if (s.hostileNear || s.recentlyAttacked || s.health < WEAK_HEALTH || (s.food <= 6 && !s.hasFood) || s.freeSlots <= 1) return false
@@ -225,8 +225,17 @@ function lingerUnderground(s) {
 }
 
 function shouldReturn(s) {
+  return wantsReturn(s) && !lingerUnderground(s)
+}
+
+// True when the bot is delaying a return it would otherwise make, i.e. the linger really held it underground.
+function lingerHeldReturn(s) {
+  return lingerUnderground(s) && wantsReturn(s)
+}
+
+function wantsReturn(s) {
   const carried = count(s, 'diamond')
-  if (carried === 0 || lingerUnderground(s)) return false
+  if (carried === 0) return false
   if (s.deposited === 0 || s.msLeft < RETURN_BEFORE_MS) return true // secure the first diamond; bank before time runs out
   const target = s.objective.count === 'max' ? Infinity : s.objective.count - s.deposited
   return carried >= Math.min(target, s.params.returnAt)
@@ -405,4 +414,4 @@ function nextAction(s) {
   return swordStep(s) ?? spareStep(s) ?? gather(s, 'diamond')
 }
 
-module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS, lingerUnderground, ASCENT_MARGIN_MS, MAX_ASCENT_DELAY_MS }
+module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS, lingerUnderground, lingerHeldReturn, ASCENT_MARGIN_MS, MAX_ASCENT_DELAY_MS }

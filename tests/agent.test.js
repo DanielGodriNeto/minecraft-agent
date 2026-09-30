@@ -392,3 +392,27 @@ test('planner+remember loop: blocked dig_down then hazard hops climb and hop aga
   }
   assert.ok(!stuck, log.join(','))
 })
+
+test('chargeLinger: only decisions where linger held a return consume the budget', () => {
+  const { chargeLinger } = require('../bot/agent.js')
+  const dark = { y: 20, surfaceY: 70, timeOfDay: 10000, msLeft: 40 * 60000, canShelter: false, hostileNear: false, recentlyAttacked: false, health: 20, food: 20, hasFood: true, freeSlots: 20, deposited: 0, params: DEFAULT_PARAMS, memory: {}, objective: { count: 'max' } }
+  const run = { memory: {} }
+  chargeLinger(run, { ...dark, inv: { iron_pickaxe: 1 } }, 500)
+  assert.strictEqual(run.memory.ascentDelayMs ?? 0, 0)
+  chargeLinger(run, { ...dark, inv: { iron_pickaxe: 1, diamond: 1 } }, 500)
+  assert.strictEqual(run.memory.ascentDelayMs, 500)
+  run.memory.ascentDelayMs = 20 * 60000
+  assert.strictEqual(require('../bot/planner.js').lingerUnderground({ ...dark, inv: { iron_pickaxe: 1, diamond: 1 }, memory: run.memory }), false) // budget cap ends it
+})
+
+test('remember: a hazard result does not reset branchMisses, other results do', () => {
+  const { SOURCES } = require('../bot/planner.js')
+  const branch = { skill: 'explore', args: [{ mode: 'branch', target: SOURCES.diamond.blocks }] }
+  const run = { memory: { branchMisses: 5 } }
+  remember(run, branch, { ok: false, reason: 'hazard' })
+  assert.strictEqual(run.memory.branchMisses, 5)
+  remember(run, branch, { ok: false, reason: 'not_found' })
+  assert.strictEqual(run.memory.branchMisses, 6)
+  remember(run, branch, { ok: false, reason: 'stuck' })
+  assert.strictEqual(run.memory.branchMisses, 0)
+})

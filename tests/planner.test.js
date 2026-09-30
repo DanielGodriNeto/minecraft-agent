@@ -567,3 +567,19 @@ test('branchRelocate: after 12 not_found diamond branch explores one 40-block ho
   remember(run, { skill: 'explore', args: [{ mode: 'branch', target: SOURCES.diamond.blocks }] }, { ok: true })
   assert.strictEqual(memory.branchMisses, 0) // a find resets the count
 })
+
+test('lingerUnderground: needs a carried diamond; lingerHeldReturn only when it blocked a return', () => {
+  const { lingerUnderground, lingerHeldReturn, MAX_ASCENT_DELAY_MS } = require('../bot/planner.js')
+  const dark = { y: 20, surfaceY: 70, timeOfDay: 10000, msLeft: 40 * 60000, canShelter: false }
+  const withDiamond = state({ ...dark, inv: { iron_pickaxe: 1, diamond: 1 } })
+  const noDiamond = state({ ...dark, inv: { iron_pickaxe: 1 } })
+  assert.strictEqual(lingerUnderground(noDiamond), false)
+  assert.strictEqual(lingerHeldReturn(noDiamond), false)
+  assert.strictEqual(lingerUnderground(withDiamond), true)
+  assert.strictEqual(lingerHeldReturn(withDiamond), true) // first diamond: it would have gone up
+  const banked = { ...withDiamond, deposited: 1, pickLeft: 1000 }
+  assert.strictEqual(lingerUnderground(banked), true)
+  assert.strictEqual(lingerHeldReturn(banked), false) // nothing wanted to return anyway
+  const spent = { ...withDiamond, memory: { ...withDiamond.memory, ascentDelayMs: MAX_ASCENT_DELAY_MS } }
+  assert.strictEqual(lingerUnderground(spent), false)
+})

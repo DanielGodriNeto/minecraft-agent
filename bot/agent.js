@@ -1,6 +1,6 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
 const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, clearUnreachable, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
-const { nextAction, lingerUnderground, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
+const { nextAction, lingerHeldReturn, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
 
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
@@ -207,7 +207,7 @@ function remember(run, action, result) {
     return
   }
   if (action.skill === 'explore' && action.args[0].mode === 'branch' && action.args[0].target === SOURCES.diamond.blocks) {
-    run.memory.branchMisses = result.reason === 'not_found' ? (run.memory.branchMisses ?? 0) + 1 : 0
+    run.memory.branchMisses = result.reason === 'not_found' ? (run.memory.branchMisses ?? 0) + 1 : result.reason === 'hazard' ? run.memory.branchMisses ?? 0 : 0
   }
   if (result.ok) return
   if (action.optional) {
@@ -225,6 +225,10 @@ function remember(run, action, result) {
 }
 
 // A skill that a death interrupted reports on the old life: it must not count against the fresh one.
+function chargeLinger(run, state, ms) {
+  if (lingerHeldReturn(state)) run.memory.ascentDelayMs = (run.memory.ascentDelayMs ?? 0) + ms
+}
+
 function afterSkill(run, action, result, deathsBefore) {
   const died = run.deaths !== deathsBefore
   if (!died) remember(run, action, result)
@@ -323,7 +327,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       if (action.skill === 'deposit' && result.ok) startNewTrip(bot, run)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
       afterSkill(run, action, result, deathsBefore)
-      if (lingerUnderground(state)) run.memory.ascentDelayMs = (run.memory.ascentDelayMs ?? 0) + Date.now() - startedAt
+      chargeLinger(run, state, Date.now() - startedAt)
       resetTrail(bot, run.home)
       if (!run.recentlyAttacked && !run.recentlyBurned && !IDLE_EXEMPT.has(action.skill) && !relocHazardExempt(run.memory, action, result) && isStuck(result, action, invBefore)) return finish(run, 'stuck')
     }
@@ -347,4 +351,4 @@ function stopObjective(bot) {
   return true
 }
 
-module.exports = { runObjective, relocHazardExempt, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }
+module.exports = { chargeLinger, runObjective, relocHazardExempt, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }
