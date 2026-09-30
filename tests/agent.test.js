@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
-const { createStuckTracker, stuckTracker, pickLeft, remember, isLost } = require('../bot/agent.js')
+const { createStuckTracker, stuckTracker, pickLeft, remember, isLost, resetLife, resetTrip } = require('../bot/agent.js')
 
 const ok = { ok: true }
 const fail = { ok: false, reason: 'timeout' }
@@ -209,4 +209,25 @@ test('remember: restock steps and failures are counted per item, on the item tha
   remember(run, { skill: 'mine', args: [], restock: 'stone' }, { ok: false })
   remember(run, { skill: 'hunt', args: [], restock: 'food', optional: true }, { ok: false })
   assert.deepStrictEqual(run.memory.restock, { stone: { steps: 2, fails: 1 }, food: { steps: 1, fails: 1 } })
+})
+
+test('resetLife: per-life counters go back to their start, per-run direction and relocation state is kept', () => {
+  const memory = {
+    leg: 3, baseDir: 2, surfaceDir: 1, surfaceLeg: 4, optionalFails: { hunt: 4, rest: 4 }, shelters: 1, noShelter: 3, drownings: 2,
+    digFails: 1, relocations: 5, hazards: 1, hazardUp: true, relocFailed: true, lastDigReason: 'blocked', nightDigs: 6,
+    restock: { food: { steps: 12, fails: 2 } }, homeFails: 2, hopsSinceDescent: 2, foodRests: 2,
+  }
+  const fresh = resetLife(memory)
+  assert.deepStrictEqual([fresh.baseDir, fresh.surfaceDir, fresh.relocations], [2, 1, 5])
+  assert.deepStrictEqual(
+    [fresh.leg, fresh.surfaceLeg, fresh.shelters, fresh.noShelter, fresh.drownings, fresh.digFails, fresh.hazards, fresh.hazardUp, fresh.relocFailed, fresh.nightDigs, fresh.homeFails, fresh.hopsSinceDescent, fresh.foodRests],
+    [0, 0, 0, 0, 0, 0, 0, false, false, 0, 0, 0, 0])
+  assert.deepStrictEqual([fresh.optionalFails, fresh.restock, fresh.lastDigReason], [{}, {}, undefined])
+  assert.strictEqual(memory.nightDigs, 6) // pure: the input is untouched
+})
+
+test('resetTrip: a deposit refills the night-dig, optional-failure and restock budgets and leaves the rest', () => {
+  const memory = { nightDigs: 6, optionalFails: { hunt: 4 }, restock: { food: { steps: 3, fails: 1 } }, digFails: 1, relocations: 2 }
+  resetTrip(memory)
+  assert.deepStrictEqual(memory, { nightDigs: 0, optionalFails: {}, restock: {}, digFails: 1, relocations: 2 })
 })
