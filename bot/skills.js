@@ -33,6 +33,7 @@ const HOME_SLACK = 3
 const HOME_MS = 30000
 const FAR_HOME_MS = 120000
 const MAX_TUNNEL_OUTS = 2
+const SHAFT_MIN_BLOCKS = 8 // a shaft is climbed back on carried blocks
 const HOSTILE_RANGE = 16
 const CANCEL_GRACE_MS = 2000
 const TRAIL_STALE = 8
@@ -223,6 +224,7 @@ async function run(bot, skill, interruptible, escaping = false) {
   let lastHealth = bot.health
   let suffocated = 0
   const damage = []
+  const stats = bot.skillStats = {}
   const cancel = bot.skillCancel = { cancelled: false, reason: null }
   const abort = (reason) => {
     cancel.cancelled = true
@@ -250,9 +252,9 @@ async function run(bot, skill, interruptible, escaping = false) {
   const pending = Promise.resolve().then(skill)
   try {
     await withTimeout(pending, capMs, () => abort('timeout'))
-    return { ok: true, reason: null, ticks, ...(damage.length && { damage }) }
+    return { ok: true, reason: null, ticks, ...stats, ...(damage.length && { damage }) }
   } catch (e) {
-    const failed = { ok: false, ticks, ...(damage.length && { damage }) }
+    const failed = { ok: false, ticks, ...stats, ...(damage.length && { damage }) }
     if (ABORTS.has(cancel.reason)) return { ...failed, reason: cancel.reason }
     if (e instanceof Fail) return { ...failed, reason: e.reason, ...(e.detail && { detail: e.detail }) }
     if (REFUSED.test(e.message)) return { ...failed, reason: 'no_floor', detail: e.message }
@@ -622,6 +624,12 @@ async function tunnelStep(bot, cells, feet) {
   noteTrail(bot)
 }
 
+// The crumb straight above the feet: a 1x1 shaft has no ledge to walk up, so it is climbed on carried blocks.
+function isShaftHop(bot, crumb) {
+  const feet = bot.entity.position.floored()
+  return crumb.x === feet.x && crumb.z === feet.z && crumb.y === feet.y + 1
+}
+
 // Cleared again on the way back because gravel or water may have filled the old tunnel.
 async function retrace(bot, crumb) {
   checkCancelled(bot)
@@ -637,7 +645,9 @@ async function followTrail(bot, done) {
   const trail = bot.trail = dropLoops(bot.trail ?? [])
   while (trail.length && !done(bot.entity.position)) {
     checkCancelled(bot)
-    await retrace(bot, trail.at(-1))
+    const crumb = trail.at(-1)
+    if (isShaftHop(bot, crumb)) await pillarUp(bot, crumb.y)
+    else await retrace(bot, crumb)
     trail.pop()
   }
 }
@@ -789,18 +799,57 @@ const mostCommon = (values) => {
   return [...tally].sort((a, b) => b[1] - a[1])[0]?.[0]
 }
 
+// Why a 1x1 shaft step cannot be taken: the floor block is removed and the bot drops one block onto the next one.
+// The cells above the head, the floor and the two under it must be free of liquids and falling blocks.
+function shaftRefusal(bot, p) {
+  const [head, floor, next, deeper] = [1, -1, -2, -3].map(dy => p.offset(0, dy, 0))
+  if ([head, p, floor, next, deeper].some(c => nearLava(bot, c))) return 'lava'
+  if ([head, p, floor, next, deeper].some(c => nearWater(bot, c))) return 'water'
+  const hazard = fallHazard(bot, [head])
+  if (hazard) return hazard
+  if (!isSolid(bot.blockAt(floor)) || !bot.blockAt(floor).diggable) return 'undiggable'
+  if (lacksTool(bot, bot.blockAt(floor))) return 'no_tool'
+  return isSolid(bot.blockAt(next)) ? null : 'no_floor'
+}
+
+// Digs straight down one block. False when the step is refused or did not descend, so the caller takes a staircase step.
+async function shaftStep(bot, p) {
+  if (placeableCount(bot) < SHAFT_MIN_BLOCKS || nearestHostile(bot) || shaftRefusal(bot, p)) return false
+  try {
+    noteTrail(bot)
+    await dropThrough(bot, at(bot, p, 0, -1, 0))
+    noteTrail(bot)
+  } catch {
+    checkCancelled(bot)
+  }
+  return bot.entity.position.floored().y === p.y - 1
+}
+
+const shaftEnabled = (bot) => bot.objectiveRun?.params.shaft ?? true
+
 async function digDown(bot, targetY) {
   resetStaleTrail(bot)
+  const stats = bot.skillStats ??= {}
+  let shaft = shaftEnabled(bot)
   let d = 0
   let tunnels = 0
   while (Math.floor(bot.entity.position.y) > targetY) {
     checkCancelled(bot)
     const p = bot.entity.position.floored()
     if (await dropThroughCanopy(bot, p)) continue
+    if (shaft && bot.entity.onGround) {
+      const health = bot.health
+      if (await shaftStep(bot, p)) {
+        stats.shaftSteps = (stats.shaftSteps ?? 0) + 1
+        shaft = bot.health >= health // damage in a shaft: stairs for the rest of this call
+        continue
+      }
+    }
     const options = [0, 1, 2, 3].map(i => (d + i) % 4).map(dir => ({ dir, reason: stairRefusal(bot, p, DIRS[dir]) }))
     const taken = await stairStep(bot, p, options)
     if (taken !== null) {
       d = taken
+      stats.stairSteps = (stats.stairSteps ?? 0) + 1
       continue
     }
     if (options.every(o => o.reason === 'no_floor') && await dropFromLedge(bot, p)) continue

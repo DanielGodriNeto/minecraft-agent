@@ -807,3 +807,75 @@ test('return_home: cancellations do not count as unreachable', async () => {
   for (let i = 0; i < 3; i++) await run(bot, () => SKILLS.return_home(bot, HOME), false)
   assert.strictEqual(placed.size, 0)
 })
+
+// Bot on a stone column: stone up to y=19 (overrides by "x,y,z"), air above. Digging the floor drops the bot to the next solid cell.
+// With stairOnly the first dig throws, so a fallback to the staircase shows up as digs[0] being off the column.
+function shaftBot({ overrides = {}, stone = 16, shaft, hostile = false, stopOnDig = false } = {}) {
+  const broken = new Set()
+  const key = (p) => `${p.x},${p.y},${p.z}`
+  const nameAt = (p) => broken.has(key(p)) ? 'air' : (overrides[key(p)] ?? (p.y <= 19 ? 'stone' : 'air'))
+  const pos = { x: 0.5, y: 20, z: 0.5, floored() { return new Vec3(0, Math.floor(this.y), 0) }, distanceTo: () => 99, clone() { return this } }
+  const digs = []
+  const bot = Object.assign(new EventEmitter(), {
+    digs, trail: [], health: 20, heldItem: null,
+    entity: { position: pos, onGround: true, yaw: 0 },
+    objectiveRun: shaft === undefined ? undefined : { params: { shaft } },
+    blockAt: (p) => {
+      const name = nameAt(p)
+      return { name, position: p, diggable: name !== 'bedrock', boundingBox: ['air', 'water', 'lava'].includes(name) ? 'empty' : 'block' }
+    },
+    inventory: { items: () => (stone ? [{ name: 'cobblestone', count: stone, type: 1 }] : []) },
+    pathfinder: { bestHarvestTool: () => null, setGoal() {}, setMovements() {} },
+    nearestEntity: () => (hostile ? { type: 'hostile', position: new Vec3(1, 20, 0) } : null),
+    equip: async () => {},
+    digTime: () => 1,
+    dig: async (b) => {
+      digs.push(key(b.position))
+      if (stopOnDig) throw new Fail('stop')
+      broken.add(key(b.position))
+      while (nameAt(new Vec3(0, Math.floor(pos.y) - 1, 0)) === 'air' && pos.y > 0) pos.y -= 1
+    },
+    stopDigging() {},
+    clearControlStates() {},
+    waitForTicks: async () => {},
+  })
+  return bot
+}
+
+test('dig_down: a safe stone column is descended with a 1x1 shaft and counters are reported', async () => {
+  const bot = shaftBot()
+  const result = await run(bot, () => SKILLS.dig_down(bot, 17), false)
+  assert.strictEqual(result.ok, true, result.detail)
+  assert.strictEqual(Math.floor(bot.entity.position.y), 17)
+  assert.strictEqual(result.shaftSteps, 3)
+  assert.strictEqual(result.stairSteps ?? 0, 0)
+  assert.deepStrictEqual(bot.trail.map(t => t.y), [20, 19, 18, 17])
+})
+
+test('dig_down: shaft off, too few blocks, a hostile near, or a refused column start with the staircase', async () => {
+  const refused = [{ '0,18,0': 'lava' }, { '1,17,0': 'water' }, { '0,21,0': 'gravel' }, { '0,18,0': 'air', '0,17,0': 'air' }, { '0,19,0': 'bedrock' }]
+  const cases = [{ shaft: false }, { stone: 7 }, { hostile: true }, ...refused.map(overrides => ({ overrides }))]
+  for (const options of cases) {
+    const bot = shaftBot({ ...options, stopOnDig: true })
+    const result = await run(bot, () => SKILLS.dig_down(bot, 19), false)
+    assert.ok(!result.shaftSteps, JSON.stringify(options))
+    assert.notStrictEqual(bot.digs[0], '0,19,0', JSON.stringify(options))
+  }
+})
+
+test('dig_down: a failed shaft dig falls back to the staircase for the rest of the call', async () => {
+  const bot = shaftBot({ stopOnDig: true })
+  const result = await run(bot, () => SKILLS.dig_down(bot, 19), false)
+  assert.strictEqual(bot.digs[0], '0,19,0')
+  assert.notStrictEqual(bot.digs[1], '0,19,0')
+  assert.ok(!result.shaftSteps)
+})
+
+test('go_up: a purely vertical shaft trail is climbed by pillaring, one crumb per block', async () => {
+  const { bot } = pillarBot()
+  bot.trail = [new Vec3(0, 12, 0), new Vec3(0, 11, 0), new Vec3(0, 10, 0)]
+  const result = await run(bot, () => SKILLS.go_up(bot, 13), false)
+  assert.strictEqual(result.ok, true, result.detail)
+  assert.strictEqual(Math.floor(bot.entity.position.y), 13)
+  assert.deepStrictEqual(bot.trail, [])
+})
