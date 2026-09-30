@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -687,7 +687,7 @@ function fightBot({ hits = 2, mobAt = 2, weapon = 'iron_sword' } = {}) {
     clearControlStates() {},
     stopDigging() {},
     waitForTicks: () => new Promise(r => setTimeout(r, 1)),
-    nearestEntity: (match) => [mob].find(match) ?? null,
+    nearestEntity: (match) => Object.values(bot.entities).find(match) ?? null,
   })
   return { bot, mob }
 }
@@ -881,6 +881,102 @@ test('go_up: a purely vertical shaft trail is climbed by pillaring, one crumb pe
   assert.strictEqual(result.ok, true, result.detail)
   assert.strictEqual(Math.floor(bot.entity.position.y), 13)
   assert.deepStrictEqual(bot.trail, [])
+})
+
+test('run: a timed-out skill stops at its next checkpoint even after a newer skill installed a fresh token', async () => {
+  const bot = fakeBot()
+  bot.runDeadline = Date.now() - 30000
+  let release
+  const gate = new Promise(r => { release = r })
+  let zombieError = null
+  const first = await run(bot, async () => {
+    await gate
+    try { checkCancelled(bot) } catch (e) { zombieError = e }
+  }, false)
+  assert.strictEqual(first.reason, 'timeout')
+  bot.skillCancel = { cancelled: false, reason: null }
+  release()
+  await new Promise(r => setTimeout(r, 5))
+  assert.strictEqual(zombieError?.reason, 'timeout')
+})
+
+function mineBot(goto) {
+  const stone = { name: 'stone', position: new Vec3(3, 10, 0), diggable: true, boundingBox: 'block' }
+  return Object.assign(fakeBot(), {
+    registry: { blocksByName: { stone: { id: 1 } } },
+    findBlocks: () => [stone.position],
+    blockAt: (p) => (p === stone.position ? stone : { name: 'air', position: p, boundingBox: 'empty' }),
+    canSeeBlock: () => true,
+    world: {},
+    pathfinder: { setGoal() {}, setMovements() {}, goto },
+  })
+}
+
+test('mine: a genuine unreachable outcome blacklists the block, an interruption does not', async () => {
+  const stuck = mineBot(async () => { throw new Error('no path') })
+  assert.strictEqual((await run(stuck, () => SKILLS.mine(stuck, 'stone'), false)).reason, 'reach_failed')
+  assert.strictEqual(stuck.unreachable.size, 1)
+  const hit = mineBot(async () => {
+    hit.health = 10
+    hit.emit('health')
+    checkCancelled(hit)
+  })
+  hit.nearestEntity = () => ({ type: 'hostile', position: new Vec3(3, 10, 0) })
+  const result = await run(hit, () => SKILLS.mine(hit, 'stone'), true)
+  assert.strictEqual(result.reason, 'attacked')
+  assert.ok(!hit.unreachable || hit.unreachable.size === 0)
+})
+
+test('clearUnreachable: empties the blacklist and tolerates a bot without one', () => {
+  const bot = { unreachable: new Set(['a']) }
+  clearUnreachable(bot)
+  assert.strictEqual(bot.unreachable.size, 0)
+  assert.doesNotThrow(() => clearUnreachable({}))
+})
+
+test('run: lava damage aborts the skill as burning, clears the controls and is logged', async () => {
+  const bot = fakeBot(50)
+  let cleared = 0
+  bot.clearControlStates = () => { cleared++ }
+  bot.blockAt = (p) => (p.y === 10 ? { name: 'lava' } : null)
+  const result = await run(bot, async () => {
+    setTimeout(() => { bot.health = 12; bot.emit('health') }, 5)
+    await spin(bot)
+  }, false)
+  assert.strictEqual(result.reason, 'burning')
+  assert.ok(cleared > 0)
+  assert.strictEqual(result.damage[0].cause, 'lava')
+})
+
+test('run: burning does not abort an escaping skill', async () => {
+  const bot = fakeBot(50)
+  bot.blockAt = (p) => (p.y === 10 ? { name: 'fire' } : null)
+  const result = await run(bot, async () => { bot.health = 12; bot.emit('health') }, false, true)
+  assert.strictEqual(result.ok, true)
+})
+
+test('fight: low health throws low_health, and the guard switch turns it off', async () => {
+  const { bot } = fightBot({ hits: 99 })
+  bot.health = FIGHT_MIN_HEALTH - 1
+  assert.strictEqual((await run(bot, () => SKILLS.fight(bot), false)).reason, 'low_health')
+  assert.strictEqual(bot.attacks, 0)
+  const off = fightBot({ hits: 2 }).bot
+  off.health = 1
+  off.objectiveRun = { params: { fightGuard: false } }
+  assert.strictEqual((await run(off, () => SKILLS.fight(off), false)).ok, true)
+})
+
+test('fight: switches to a nearer hostile that appears mid-fight', async () => {
+  const { bot, mob } = fightBot({ hits: 99, mobAt: 3.5 })
+  const near = { id: 8, name: 'skeleton', type: 'hostile', height: 1.9, position: new Vec3(1, 10, 0) }
+  bot.entities[8] = near
+  bot.nearestEntity = (match) => Object.values(bot.entities).filter(match).sort((a, b) => a.position.x - b.position.x)[0] ?? null
+  const hit = []
+  bot.attack = (e) => { hit.push(e.id); if (hit.length >= 2) { delete bot.entities[7]; delete bot.entities[8] } }
+  bot.lookAt = async () => {}
+  const result = await run(bot, () => SKILLS.fight(bot), false)
+  assert.strictEqual(result.ok, true)
+  assert.deepStrictEqual(hit, [8, 8])
 })
 
 test('dig_down: the shaft step waits for the bot to fall after the break instead of reading the height while it is still on the ground', async () => {

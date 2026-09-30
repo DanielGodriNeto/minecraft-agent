@@ -1,4 +1,5 @@
 const fs = require('node:fs')
+const { AsyncLocalStorage } = require('node:async_hooks')
 const path = require('node:path')
 const { goals, Movements } = require('mineflayer-pathfinder')
 
@@ -48,7 +49,8 @@ const AIR_PER_LEVEL = 15
 const EYE_HEIGHT = 1.62
 const DEADLINE_SLACK_MS = 30000
 const SUFFOCATION_ABORT = 3
-const ABORTS = new Set(['attacked', 'drowning', 'suffocating'])
+const ABORTS = new Set(['attacked', 'drowning', 'suffocating', 'burning'])
+const BURNING = new Set(['lava', 'fire', 'magma', 'burning', 'in_fire', 'on_fire'])
 const HAZARD_CAUSE = { lava: 'lava', flowing_lava: 'lava', fire: 'fire', soul_fire: 'fire', magma_block: 'magma', cactus: 'cactus', sweet_berry_bush: 'berry_bush' }
 const NON_INTERRUPTIBLE = new Set(['flee', 'eat', 'shelter', 'fight'])
 const ESCAPES = new Set(['go_up', 'flee', 'shelter']) // how the bot gets out of water, so drowning must not abort them
@@ -69,6 +71,7 @@ const NIGHT_START = 13000
 const NIGHT_END = 23000
 const FIGHT_RANGE = 4
 const FIGHT_MS = 15000
+const FIGHT_MIN_HEALTH = 8
 const SAFE_HEALTH = 16
 const SAFE_FOOD = 18
 
@@ -124,10 +127,16 @@ async function goto(bot, goal, ms = PATH_MS, scaffold = false) {
   }
 }
 
+// Each run() executes its skill inside its own cancel token, so an abandoned skill keeps seeing its own
+// (cancelled) token rather than the fresh one the next skill installs on bot.skillCancel.
+const cancelStore = new AsyncLocalStorage()
+const currentCancel = (bot) => cancelStore.getStore() ?? bot.skillCancel
+
 // Manual loops call this every iteration: run() cancels a skill by flagging its token, since a timed-out
 // or interrupted skill's promise is abandoned but its loops would otherwise keep driving the bot.
 function checkCancelled(bot) {
-  if (bot.skillCancel?.cancelled) throw new Fail(bot.skillCancel.reason)
+  const cancel = currentCancel(bot)
+  if (cancel?.cancelled) throw new Fail(cancel.reason)
 }
 
 async function poll(bot, fn, ms) {
@@ -147,6 +156,9 @@ async function settle(pending, ms) {
   await Promise.race([pending.catch(() => {}), grace])
   clearTimeout(timer)
 }
+
+// The blacklist is per life and per stash trip: after a death or a deposit the blocks may be reachable again.
+const clearUnreachable = (bot) => bot.unreachable?.clear()
 
 const MELEE_RANGE = 6
 const RANGED = new Set(['skeleton', 'stray', 'bogged', 'pillager', 'blaze', 'ghast', 'witch', 'breeze'])
@@ -243,6 +255,7 @@ async function run(bot, skill, interruptible, escaping = false) {
     damage.push(entry)
     if (damage.length > DAMAGE_LOG_MAX) damage.shift()
     if (entry.cause === 'drowning') return escaping ? undefined : abort('drowning')
+    if (BURNING.has(entry.cause)) return escaping ? undefined : abort('burning')
     if (entry.cause === 'suffocation' && (suffocated += lost) >= SUFFOCATION_ABORT) return abort('suffocating')
     if (!interruptible || cancel.cancelled || !nearestHostile(bot)) return
     abort('attacked')
@@ -250,7 +263,7 @@ async function run(bot, skill, interruptible, escaping = false) {
   bot.on('physicsTick', tick)
   bot.on('health', onHealth)
   bot.on('breath', onBreath)
-  const pending = Promise.resolve().then(skill)
+  const pending = Promise.resolve().then(() => cancelStore.run(cancel, skill))
   try {
     await withTimeout(pending, capMs, () => abort('timeout'))
     return { ok: true, reason: null, ticks, ...stats, ...(damage.length && { damage }) }
@@ -694,7 +707,8 @@ async function approach(bot, target) {
 
 const DIG_REASONS = new Set(['no_tool', 'undiggable', 'dig_failed'])
 
-// Any failure blacklists the block, or the planner keeps choosing the same one (e.g. a high log).
+// A genuine failure blacklists the block, or the planner keeps choosing the same one (e.g. a high log).
+// An interrupted run (attacked, drowning, timeout...) says nothing about the block.
 async function mine(bot, name, maxAbove = null) {
   const block = findVisible(bot, name, maxAbove)
   if (!block) throw new Fail('not_visible')
@@ -702,7 +716,7 @@ async function mine(bot, name, maxAbove = null) {
     try {
       await step()
     } catch (e) {
-      bot.unreachable = (bot.unreachable ?? new Set()).add(block.position.toString())
+      if (!currentCancel(bot)?.cancelled) bot.unreachable = (bot.unreachable ?? new Set()).add(block.position.toString())
       throw e instanceof Fail && DIG_REASONS.has(e.reason) ? e : new Fail(reason)
     }
   }
@@ -1083,19 +1097,29 @@ async function arm(bot) {
 }
 
 // Kills the nearest hostile that came within reach; ends when it is dead, out of range, or after ms.
+// With the guard on, every swing re-picks the nearest hostile and gives up below FIGHT_MIN_HEALTH so the planner can flee.
 async function fight(bot, ms = FIGHT_MS) {
-  const mob = nearestHostile(bot, FIGHT_RANGE)
-  if (!mob) throw new Fail('no_target')
+  const first = nearestHostile(bot, FIGHT_RANGE)
+  if (!first) throw new Fail('no_target')
+  const guarded = bot.objectiveRun?.params?.fightGuard !== false
+  const target = () => guarded ? nearestHostile(bot, FIGHT_RANGE)
+    : bot.entities[first.id] && first.position.distanceTo(bot.entity.position) <= FIGHT_RANGE ? first : null
   await arm(bot)
   const end = Date.now() + ms
   let chasing = false
-  const engaged = () => bot.entities[mob.id] && mob.position.distanceTo(bot.entity.position) <= FIGHT_RANGE
-  while (engaged() && Date.now() < end) {
+  let mob = first
+  for (let next = target(); next && Date.now() < end; next = target()) {
     checkCancelled(bot)
+    if (guarded && bot.health < FIGHT_MIN_HEALTH) throw new Fail('low_health')
+    if (next !== mob) {
+      mob = next
+      chasing = false
+      stopPathing(bot)
+    }
     chasing = await strike(bot, mob, chasing)
   }
   stopPathing(bot)
-  if (engaged()) throw new Fail('not_killed')
+  if (target()) throw new Fail('not_killed')
 }
 
 async function hunt(bot, ms = HUNT_MS) {
@@ -1299,4 +1323,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal }
