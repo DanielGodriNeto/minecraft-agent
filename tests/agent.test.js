@@ -346,7 +346,7 @@ test('switches: every ARM key overrides the param the code reads, and 0 disables
   const { normalizeParams } = require('../bot/planner.js')
   const keys = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'localSurface']
   for (const k of keys) {
-    assert.strictEqual(DEFAULT_PARAMS[k], true, k)
+    assert.strictEqual(DEFAULT_PARAMS[k], k !== 'localSurface', k)
     assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=0`) })[k], false, k)
     assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=1`) })[k], true, k)
   }
@@ -418,7 +418,7 @@ test('remember: a hazard result does not reset branchMisses, other results do', 
 })
 
 // Valley case: home on a hill at y 100, the bot surfaces on open ground at y 60.
-const valleyRun = (over = {}) => ({ surfaceY: 100, params: { ...DEFAULT_PARAMS }, memory: { ...resetLife({ baseDir: 0, surfaceDir: 0, relocations: 0 }) }, ...over })
+const valleyRun = (over = {}) => ({ surfaceY: 100, params: { ...DEFAULT_PARAMS, localSurface: true }, memory: { ...resetLife({ baseDir: 0, surfaceDir: 0, relocations: 0 }) }, ...over })
 const plannerState = (run, y, extra = {}) => ({
   inv: { iron_pickaxe: 1, diamond: 1 }, health: 20, food: 20, hasFood: false, y, surfaceY: effectiveSurface(run), isNight: false, hostileNear: false,
   canShelter: false, animalNear: false, visible: {}, tableNear: false, furnaceNear: false, freeSlots: 30, pickLeft: 100,
@@ -445,6 +445,16 @@ test('localSurface: sky open on ground below home makes that height the surface;
   const off = valleyRun({ params: { ...DEFAULT_PARAMS, localSurface: false } })
   trackLocalSurface(column(() => false), off, 60)
   assert.strictEqual(effectiveSurface(off), 100)
+})
+
+test('localSurface: off by default (unless LOCALSURFACE=1); an explicit true still triggers it', () => {
+  if (process.env.LOCALSURFACE !== '1') assert.strictEqual(DEFAULT_PARAMS.localSurface, false)
+  const off = valleyRun({ params: { ...DEFAULT_PARAMS } })
+  const on = valleyRun({ params: { ...DEFAULT_PARAMS, localSurface: true } })
+  trackLocalSurface(column(() => false), off, 60)
+  trackLocalSurface(column(() => false), on, 60)
+  assert.strictEqual(effectiveSurface(off), process.env.LOCALSURFACE === '1' ? 60 : 100)
+  assert.strictEqual(effectiveSurface(on), 60)
 })
 
 test('localSurface: with sky open in the valley the bot walks home instead of climbing', () => {
