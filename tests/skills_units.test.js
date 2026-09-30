@@ -1144,3 +1144,8 @@ test('dig_down: tunnel-outs are capped at 4 and the cap is reported as tunnel_li
   assert.strictEqual(MAX_TUNNEL_OUTS, 4)
 })
 
+test('dig_down: refusal reasons of skipped shaft steps are counted in the result', async () => {
+  const bot = shaftBot({ stone: 7 })
+  const result = await run(bot, () => SKILLS.dig_down(bot, 19), false)
+  assert.ok(result.refusals.no_blocks >= 1, JSON.stringify(result.refusals))
+})

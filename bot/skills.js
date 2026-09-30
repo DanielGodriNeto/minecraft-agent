@@ -851,9 +851,13 @@ function shaftRefusal(bot, p) {
 
 // Digs straight down one block. False when the step is refused or did not descend, so the caller takes a staircase step.
 // It also needs a block per level already descended (and the one about to be), or the bot could not pillar back out.
-async function shaftStep(bot, p, startY) {
+async function shaftStep(bot, p, startY, refusals) {
   const depth = Math.max(bot.objectiveRun?.surfaceY ?? startY, startY) - p.y
-  if (placeableCount(bot) < Math.max(SHAFT_MIN_BLOCKS, depth + 1) || nearestHostile(bot) || shaftRefusal(bot, p)) return false
+  const refusal = placeableCount(bot) < Math.max(SHAFT_MIN_BLOCKS, depth + 1) ? 'no_blocks' : nearestHostile(bot) ? 'hostile' : shaftRefusal(bot, p)
+  if (refusal) {
+    refusals[refusal] = (refusals[refusal] ?? 0) + 1
+    return false
+  }
   try {
     noteTrail(bot)
     await dropThrough(bot, at(bot, p, 0, -1, 0))
@@ -879,7 +883,7 @@ async function digDown(bot, targetY) {
     if (await dropThroughCanopy(bot, p)) continue
     if (shaft && bot.entity.onGround) {
       const health = bot.health
-      if (await shaftStep(bot, p, startY)) {
+      if (await shaftStep(bot, p, startY, stats.refusals ??= {})) {
         stats.shaftSteps = (stats.shaftSteps ?? 0) + 1
         shaft = bot.health >= health // damage in a shaft: stairs for the rest of this call
         continue
