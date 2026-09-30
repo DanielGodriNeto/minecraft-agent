@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const path = require('node:path')
 const req = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))
-const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, retry } = req('./eval.js')
+const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, retry, skillLogPath } = req('./eval.js')
 const { instanceSpec, maxInstances, assertDiskSpace, withPort } = req('./server.js')
 
 const solid = (name) => ({ name, boundingBox: 'block' })
@@ -87,4 +87,10 @@ test('retry: returns the first success, retries failures, throws the last error 
   assert.strictEqual(calls, 3)
   calls = 0
   await assert.rejects(retry(async () => { calls++; throw new Error(`fail ${calls}`) }, 2, 0), /fail 2/)
+})
+
+test('skillLogPath: parallel instances get skills-i<n>-Bot<k>.jsonl, a single one keeps the default', () => {
+  assert.strictEqual(path.basename(skillLogPath({ index: 0, total: 2 }, 'Bot3')), 'skills-i1-Bot3.jsonl')
+  assert.strictEqual(path.basename(skillLogPath({ index: 1, total: 2 }, 'Bot0')), 'skills-i2-Bot0.jsonl')
+  assert.strictEqual(skillLogPath({ index: 0, total: 1 }, 'Bot3'), undefined)
 })

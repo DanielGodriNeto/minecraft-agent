@@ -123,6 +123,10 @@ function parseInstances(arg, totalMemGb = os.totalmem() / 2 ** 30) {
   return n
 }
 
+// Skill logs stay skills-Bot<i>.jsonl for one instance (undefined = keep createBot's default); parallel instances would
+// interleave, so they get skills-i<n>-Bot<i>.jsonl. bot.username is not set until login, so the name is passed in.
+const skillLogPath = ({ index, total }, name) => total > 1 ? path.join(__dirname, '..', 'logs', `skills-i${index + 1}-${name}.jsonl`) : undefined
+
 async function runOne(bot, slot, home, start, minutes, difficulty, log, instance) {
   const rand = mulberry32(slot.id)
   bot.runTag = `slot${slot.id}-${start}`
@@ -159,8 +163,7 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, in
   const server = await startServer('diamonds', { dir, port })
   const bots = slots.map((_, i) => {
     const bot = createBot({ username: `Bot${i}`, port })
-    // Skill logs stay skills-Bot<i>.jsonl for one instance; parallel instances would interleave, so they get skills-i<n>-Bot<i>.jsonl.
-    if (instance.total > 1 && !process.env.SKILL_LOG) bot.skillLogPath = path.join(__dirname, '..', 'logs', `skills-i${instance.index + 1}-${bot.username}.jsonl`)
+    if (!process.env.SKILL_LOG) bot.skillLogPath = skillLogPath(instance, `Bot${i}`) ?? bot.skillLogPath
     return bot
   })
   let stopWatching
@@ -197,5 +200,5 @@ async function main([first, last, bots = '10', minutes = '60', instances = '1'])
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { retry, distribute, chunk, parseInstances, placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })
