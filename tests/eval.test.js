@@ -157,3 +157,94 @@ test('runOne: the row records all five env switches (RESERVE=0 included), the co
   assert.strictEqual(params.shaft, 0)
   assert.strictEqual(row.params.shaft, 0)
 })
+
+// ---- bots in worker processes ----
+const { EventEmitter } = require('node:events')
+const { groupBots, botsPerProc, startMeter, serverProxy, runInProcs } = req('./worker.js')
+
+test('botsPerProc: default 3, 0 = legacy single process, junk is rejected', () => {
+  assert.strictEqual(botsPerProc({}), 3)
+  assert.strictEqual(botsPerProc({ BOTS_PER_PROC: '0' }), 0)
+  assert.strictEqual(botsPerProc({ BOTS_PER_PROC: '1' }), 1)
+  assert.throws(() => botsPerProc({ BOTS_PER_PROC: 'x' }))
+  assert.throws(() => botsPerProc({ BOTS_PER_PROC: '-1' }))
+})
+
+test('groupBots: consecutive bot indices, last group may be short', () => {
+  assert.deepStrictEqual(groupBots(5, 2), [[0, 1], [2, 3], [4]])
+  assert.deepStrictEqual(groupBots(3, 1), [[0], [1], [2]])
+  assert.deepStrictEqual(groupBots(12, 3).length, 4)
+  assert.deepStrictEqual(groupBots(0, 3), [])
+})
+
+test('startMeter: per-bot tick rate (mean, min, p10) from minute windows and loop delay', () => {
+  let t = 0
+  const bot = new EventEmitter()
+  const meter = startMeter([bot], { now: () => t, intervalMs: 0, loopDelay: { mean: 5e6, percentile: () => 40e6, enable() {}, disable() {} } })
+  const tick = (n, ms) => { for (let i = 0; i < n; i++) bot.emit('physicsTick'); t += ms; meter.sample() }
+  tick(600, 60000) // 10/s
+  tick(1200, 60000) // 20/s
+  const { tickRate, loopDelayMs } = meter.read(bot)
+  assert.deepStrictEqual(tickRate, { mean: 15, min: 10, p10: 10 })
+  assert.deepStrictEqual(loopDelayMs, { mean: 5, p99: 40 })
+  meter.stop()
+  bot.emit('physicsTick')
+  assert.strictEqual(meter.read(bot).tickRate.mean, 15)
+})
+
+test('serverProxy: commands go over IPC and resolve on the matching reply, errors reject', async () => {
+  const sent = []
+  const proc = new EventEmitter()
+  proc.send = (m) => sent.push(m)
+  const server = serverProxy(proc)
+  const p = server.command('tp a', /Set spawn/i, 500)
+  assert.deepStrictEqual([sent[0].t, sent[0].cmd, sent[0].reply, sent[0].ms], ['cmd', 'tp a', { source: 'Set spawn', flags: 'i' }, 500])
+  proc.emit('message', { t: 'res', id: sent[0].id, ok: true, value: 'line' })
+  assert.strictEqual(await p, 'line')
+  const q = server.command('x')
+  proc.emit('message', { t: 'res', id: sent[1].id, ok: false, error: 'timeout' })
+  await assert.rejects(q, /timeout/)
+})
+
+function fakeChild(script) {
+  const child = new EventEmitter()
+  child.sent = []
+  child.killed = false
+  child.send = (m) => { child.sent.push(m); script(child, m) }
+  child.kill = () => { child.killed = true; child.emit('exit', null) }
+  setImmediate(() => script(child, { t: 'boot' }))
+  return child
+}
+const say = (child, m) => setImmediate(() => child.emit('message', m))
+
+test('runInProcs: barrier, server commands relayed, rows collected, a crashed worker yields harness rows for its bots', async () => {
+  const cmds = []
+  const server = { command: async (cmd) => { cmds.push(cmd); return 'ok' } }
+  const good = fakeChild((c, m) => {
+    if (m.t === 'boot') say(c, { t: 'spawned' })
+    if (m.t === 'init') return
+    if (m.t === 'start') { say(c, { t: 'row', i: 0, row: { slot: 1, reason: 'timeout' } }); say(c, { t: 'done' }) }
+  })
+  const crashy = fakeChild((c, m) => {
+    if (m.t === 'boot') say(c, { t: 'spawned' })
+    if (m.t === 'start') setImmediate(() => c.emit('exit', 1))
+  })
+  const kids = [good, crashy]
+  const written = []
+  const runner = runInProcs({
+    server, slots: [{ id: 1 }, { id: 2 }], per: 1, init: { minutes: 1, difficulty: 'normal', instance: { index: 0, total: 1 }, port: 25565 },
+    fork: () => kids.shift(), onHarness: (i, slot, detail) => { written.push([i, slot.id, detail]); return { slot: slot.id, reason: 'harness', invalid: true } },
+  })
+  // placed is sent by the test after time set
+  const ready = runner.ready()
+  await new Promise(r => setTimeout(r, 20))
+  assert.deepStrictEqual(cmds, ['time set 0'])
+  good.emit('message', { t: 'placed' }); crashy.emit('message', { t: 'placed' })
+  await ready
+  const rows = await runner.run(Date.now())
+  assert.deepStrictEqual(rows.map(r => r.reason), ['timeout', 'harness'])
+  assert.deepStrictEqual(written.map(w => w.slice(0, 2)), [[1, 2]])
+  assert.ok(good.sent.find(m => m.t === 'init').members[0].slot.id === 1)
+  runner.close()
+  assert.ok(good.killed)
+})

@@ -14,6 +14,7 @@ const { stopObjective, jitterParams } = agent
 const { summarize, isInvalid, mulberry32 } = require('./metrics.js')
 const os = require('node:os')
 const { execSync } = require('node:child_process')
+const { botsPerProc, startMeter, runInProcs } = require('./worker.js')
 const { startServer, snapshot, restore, checkDiskFor, instanceSpec, maxInstances } = require('./server.js')
 
 const SLOTS = JSON.parse(fs.readFileSync(path.join(__dirname, 'slots.json'), 'utf8'))
@@ -150,7 +151,15 @@ function parseInstances(arg, totalMemGb = os.totalmem() / 2 ** 30) {
 // interleave, so they get skills-i<n>-Bot<i>.jsonl. bot.username is not set until login, so the name is passed in.
 const skillLogPath = ({ index, total }, name) => total > 1 ? path.join(__dirname, '..', 'logs', `skills-i${index + 1}-${name}.jsonl`) : undefined
 
-async function runOne(bot, slot, home, start, minutes, difficulty, log, instance, arm = '') {
+// One bot of a batch; bot.username is not set until login, so the name is passed in.
+function newBot(i, port, instance) {
+  const bot = createBot({ username: `Bot${i}`, port })
+  if (!process.env.SKILL_LOG) bot.skillLogPath = skillLogPath(instance, `Bot${i}`) ?? bot.skillLogPath
+  return bot
+}
+
+// meter (optional): startMeter result; adds this bot's tickRate and loopDelayMs to the row.
+async function runOne(bot, slot, home, start, minutes, difficulty, log, instance, arm = '', meter) {
   const rand = mulberry32(slot.id)
   const armText = [process.env.ARM, arm].filter(Boolean).join(',')
   bot.runTag = `slot${slot.id}-${start}`
@@ -175,10 +184,20 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
   } catch (e) {
     result = partial(bot, 'error', e.message) // the bot's own code threw: a failed run, not a harness fault
   }
-  const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, ...(isInvalid(result) && { invalid: true }), minutes: (Date.now() - start) / 60000, difficulty, commit: commitHash(), env: switchesInEffect(), ...(armText && { arm: armText }), ...(instance.total > 1 && { instance: instance.index + 1 }) }
+  const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, ...(isInvalid(result) && { invalid: true }), minutes: (Date.now() - start) / 60000, difficulty, commit: commitHash(), env: switchesInEffect(), ...(armText && { arm: armText }), ...(instance.total > 1 && { instance: instance.index + 1 }), ...meter?.read(bot) }
+  return emitRow(run, instance)
+}
+
+function emitRow(run, instance) {
   fs.appendFileSync(RESULTS, JSON.stringify(run) + '\n')
   console.log(`${instance.total > 1 ? `[i${instance.index + 1}] ` : ''}${JSON.stringify(run)}`)
   return run
+}
+
+// A bot whose worker process died: an invalid harness fault, like a failed placement.
+function harnessRow(i, slot, detail, start, difficulty, instance, arm) {
+  const armText = [process.env.ARM, arm].filter(Boolean).join(',')
+  return emitRow({ slot: slot.id, bot: `Bot${i}`, reason: 'harness', detail, deposited: 0, deaths: 0, decisions: 0, invalid: true, minutes: (Date.now() - start) / 60000, difficulty, commit: commitHash(), env: switchesInEffect(), ...(armText && { arm: armText }), ...(instance.total > 1 && { instance: instance.index + 1 }) }, instance)
 }
 
 // 1m TPS from the console's `tps` reply, colour codes and the '*' cap marker stripped; null when unreadable.
@@ -197,31 +216,57 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, in
   const { dir, port } = instanceSpec(instance.index, instance.total)
   restore(dir)
   const server = await startServer('diamonds', { dir, port })
-  const bots = slots.map((_, i) => {
-    const bot = createBot({ username: `Bot${i}`, port })
-    if (!process.env.SKILL_LOG) bot.skillLogPath = skillLogPath(instance, `Bot${i}`) ?? bot.skillLogPath
-    return bot
-  })
+  const per = botsPerProc()
+  const runner = per > 0
+    ? procRunner(server, slots, per, { port, instance, difficulty, minutes, arm })
+    : localRunner(server, slots, port, minutes, difficulty, log, instance, arm)
   let stopWatching, midTimer, midTps = null
   const tps = []
   try {
-    await Promise.all(bots.map(b => withDeadline(once(b, 'spawn'), SPAWN_MS, `${b.username} spawn`)))
-    await server.command('time set 0')
-    const homes = []
-    for (const [i, slot] of slots.entries()) homes.push(await retry(() => placeAtSlot(server, bots[i], slot), 2, 5000).catch(e => e))
+    await runner.ready()
     const start = Date.now()
     stopWatching = onStart?.(server)
     tps.push(await sampleTps(server))
     midTimer = setTimeout(() => sampleTps(server).then(t => { midTps = t }), minutes * 30000)
-    return await Promise.all(slots.map((slot, i) => runOne(bots[i], slot, homes[i], start, minutes, difficulty, log, instance, arm)))
+    return await runner.run(start)
   } finally {
     stopWatching?.()
     clearTimeout(midTimer)
     tps.push(midTps, await sampleTps(server))
     console.log(`${instance.total > 1 ? `[i${instance.index + 1}] ` : ''}${JSON.stringify({ batch: slots.map(s => s.id), arm, tps })}`)
-    bots.forEach(b => b.end())
+    runner.close()
     await server.stop()
   }
+}
+
+// BOTS_PER_PROC=0: every bot in this process (legacy).
+function localRunner(server, slots, port, minutes, difficulty, log, instance, arm) {
+  const bots = slots.map((_, i) => newBot(i, port, instance))
+  let meter
+  return {
+    async ready() {
+      await Promise.all(bots.map(b => withDeadline(once(b, 'spawn'), SPAWN_MS, `${b.username} spawn`)))
+      await server.command('time set 0')
+      this.homes = []
+      for (const [i, slot] of slots.entries()) this.homes.push(await retry(() => placeAtSlot(server, bots[i], slot), 2, 5000).catch(e => e))
+    },
+    run(start) {
+      meter = startMeter(bots)
+      return Promise.all(slots.map((slot, i) => runOne(bots[i], slot, this.homes[i], start, minutes, difficulty, log, instance, arm, meter)))
+    },
+    close() {
+      meter?.stop()
+      bots.forEach(b => b.end())
+    },
+  }
+}
+
+// BOTS_PER_PROC>0: worker processes own the bots and place them through the parent's console.
+function procRunner(server, slots, per, init) {
+  return runInProcs({
+    server, slots, per, init,
+    onHarness: (i, slot, detail, start) => harnessRow(i, slot, detail, start, init.difficulty, init.instance, init.arm),
+  })
 }
 
 async function runShare(share, index, total, minutes, difficulty) {
@@ -244,5 +289,5 @@ async function main([first, last, bots = '10', minutes = '60', instances = '1'])
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { newBot, once, withDeadline, tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })
