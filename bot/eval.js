@@ -289,5 +289,5 @@ async function main([first, last, bots = '10', minutes = '60', instances = '1'])
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { newBot, once, withDeadline, tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { harnessRow, newBot, once, withDeadline, tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })

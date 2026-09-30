@@ -160,7 +160,7 @@ test('runOne: the row records all five env switches (RESERVE=0 included), the co
 
 // ---- bots in worker processes ----
 const { EventEmitter } = require('node:events')
-const { groupBots, botsPerProc, startMeter, serverProxy, runInProcs } = req('./worker.js')
+const { groupBots, botsPerProc, startMeter, serverProxy, runInProcs, reportRow } = req('./worker.js')
 
 test('botsPerProc: default 3, 0 = legacy single process, junk is rejected', () => {
   assert.strictEqual(botsPerProc({}), 3)
@@ -211,7 +211,7 @@ function fakeChild(script) {
   child.sent = []
   child.killed = false
   child.send = (m) => { child.sent.push(m); script(child, m) }
-  child.kill = () => { child.killed = true; child.emit('exit', null) }
+  child.kill = () => { child.killed = true; child.emit('close', null) }
   setImmediate(() => script(child, { t: 'boot' }))
   return child
 }
@@ -227,7 +227,7 @@ test('runInProcs: barrier, server commands relayed, rows collected, a crashed wo
   })
   const crashy = fakeChild((c, m) => {
     if (m.t === 'boot') say(c, { t: 'spawned' })
-    if (m.t === 'start') setImmediate(() => c.emit('exit', 1))
+    if (m.t === 'start') setImmediate(() => c.emit('close', 1))
   })
   const kids = [good, crashy]
   const written = []
@@ -247,4 +247,52 @@ test('runInProcs: barrier, server commands relayed, rows collected, a crashed wo
   assert.ok(good.sent.find(m => m.t === 'init').members[0].slot.id === 1)
   runner.close()
   assert.ok(good.killed)
+})
+
+test('runInProcs: exit before the last IPC messages are read does not produce a harness row', async () => {
+  const written = []
+  const child = fakeChild((c, m) => {
+    if (m.t === 'boot') say(c, { t: 'spawned' })
+    if (m.t === 'start') {
+      setImmediate(() => c.emit('exit', 0))
+      say(c, { t: 'row', i: 0, row: { slot: 1, reason: 'timeout' } })
+      say(c, { t: 'done' })
+      setTimeout(() => c.emit('close', 0), 5)
+    }
+  })
+  const runner = runInProcs({
+    server: { command: async () => 'ok' }, slots: [{ id: 1 }], per: 1, init: {},
+    fork: () => child, onHarness: (i, slot, detail) => { written.push(i); return { reason: 'harness' } },
+  })
+  const ready = runner.ready()
+  await new Promise(r => setTimeout(r, 20))
+  child.emit('message', { t: 'placed' })
+  await ready
+  const rows = await runner.run(Date.now())
+  assert.deepStrictEqual(rows.map(r => r.reason), ['timeout'])
+  assert.deepStrictEqual(written, [])
+  runner.close()
+})
+
+test('startMeter: mean covers only sampled windows, so a bot that ends early is not inflated', () => {
+  let t = 0
+  const bot = new EventEmitter()
+  const meter = startMeter([bot], { now: () => t, intervalMs: 0, loopDelay: { mean: 0, percentile: () => 0, enable() {}, disable() {} } })
+  for (let i = 0; i < 600; i++) bot.emit('physicsTick')
+  t += 60000; meter.sample()
+  for (let i = 0; i < 600; i++) bot.emit('physicsTick') // partial window, not yet sampled
+  t += 60000
+  assert.strictEqual(meter.read(bot).tickRate.mean, 10)
+})
+
+test('reportRow: a rejected bot sends a harness row for itself only', async () => {
+  const sent = []
+  const proc = { send: (m) => sent.push(m) }
+  const fail = (e) => ({ reason: 'harness', detail: e.message, invalid: true })
+  await Promise.all([
+    reportRow(proc, 0, Promise.resolve({ reason: 'timeout' }), fail),
+    reportRow(proc, 1, Promise.reject(new Error('boom')), fail),
+  ])
+  assert.deepStrictEqual(sent.map(m => [m.t, m.i, m.row.reason]), [['row', 0, 'timeout'], ['row', 1, 'harness']])
+  assert.strictEqual(sent[1].row.detail, 'boom')
 })

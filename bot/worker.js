@@ -48,6 +48,7 @@ function startMeter(bots, { now = Date.now, intervalMs = 60000, loopDelay = moni
   return {
     sample,
     read(bot) {
+      sample()
       const s = state.find(x => x.bot === bot)
       if (!s || !s.rates.length) return { tickRate: null, loopDelayMs: null }
       const sorted = [...s.rates].sort((a, b) => a - b)
@@ -107,7 +108,7 @@ function runInProcs({ server, slots, per, init, onHarness, fork: forkWorker = ()
       return w.barriers[t]
     }
     const gone = () => { w.alive = false; Object.keys(w.barriers).forEach(w.barrier) }
-    child.on('exit', gone)
+    child.on('close', gone) // not 'exit': that can fire before the last row/done messages are read
     child.on('error', gone)
     child.on('message', (m) => {
       if (m.t === 'cmd') relay(w, m)
@@ -149,6 +150,9 @@ const nextMessage = (proc, t) => new Promise(resolve => {
   proc.on('message', on)
 })
 
+// Sends one bot's row; a rejected run becomes that bot's harness row so the others in the process still finish.
+const reportRow = (proc, i, run, fail) => run.catch(fail).then(row => proc.send({ t: 'row', i, row }))
+
 async function workerMain(proc = process) {
   const ev = require('./eval.js') // lazy: eval.js requires this file
   const init = await nextMessage(proc, 'init')
@@ -165,13 +169,13 @@ async function workerMain(proc = process) {
   proc.send({ t: 'placed' })
   const { start } = await started
   const meter = startMeter(bots)
-  await Promise.all(init.members.map(({ i, slot }, k) =>
-    ev.runOne(bots[k], slot, homes[k], start, init.minutes, init.difficulty, null, init.instance, init.arm, meter)
-      .then(row => proc.send({ t: 'row', i, row }))))
+  await Promise.all(init.members.map(({ i, slot }, k) => reportRow(proc, i,
+    ev.runOne(bots[k], slot, homes[k], start, init.minutes, init.difficulty, null, init.instance, init.arm, meter),
+    e => ev.harnessRow(i, slot, `runOne failed: ${e.message}`, start, init.difficulty, init.instance, init.arm))))
   meter.stop()
   bots.forEach(b => b.end())
   proc.send({ t: 'done' }, () => process.exit(0))
 }
 
-module.exports = { botsPerProc, groupBots, startMeter, serverProxy, runInProcs, SPAWN_MS }
+module.exports = { reportRow, botsPerProc, groupBots, startMeter, serverProxy, runInProcs, SPAWN_MS }
 if (require.main === module) workerMain().catch(e => { console.error(e); process.exit(1) })
