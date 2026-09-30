@@ -340,7 +340,14 @@ function toolFor(bot, block) {
   return cheapest ?? bot.pathfinder.bestHarvestTool(block)
 }
 
+// The bot's own deposit chest must survive its stairs and tunnels.
+const isHome = (bot, pos) => {
+  const home = bot.objectiveRun?.home
+  return home?.x === pos.x && home.y === pos.y && home.z === pos.z
+}
+
 async function breakBlock(bot, block) {
+  if (isHome(bot, block.position)) throw new Fail('home')
   for (let tries = 0; tries < 5 && !OPEN.has(bot.blockAt(block.position)?.name); tries++) {
     checkCancelled(bot)
     const current = bot.blockAt(block.position)
@@ -521,6 +528,7 @@ const lacksTool = (bot, block) => needsPickaxe(block) && !cheapestPickaxe(bot.in
 // or null when it can.
 function stairRefusal(bot, p, dir) {
   const cells = stairBlocks(p, dir)
+  if (cells.some(c => isHome(bot, c))) return 'home'
   if (cells.some(c => nearLava(bot, c))) return 'lava'
   if (cells.some(c => nearWater(bot, c))) return 'water'
   const hazard = fallHazard(bot, cells)
@@ -531,7 +539,7 @@ function stairRefusal(bot, p, dir) {
 }
 
 const tunnelCells = (p, [dx, dz]) => [p.offset(dx, 1, dz), p.offset(dx, 0, dz)]
-const tunnelSafe = (bot, cells) => !cells.some(c => nearLava(bot, c) || nearWater(bot, c)) && !fallHazard(bot, cells)
+const tunnelSafe = (bot, cells) => !cells.some(c => isHome(bot, c) || nearLava(bot, c) || nearWater(bot, c)) && !fallHazard(bot, cells)
 
 // A missing floor under the landing cell is bridged with a carried block; false when that is not possible.
 async function floored(bot, landing) {

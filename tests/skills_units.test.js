@@ -1132,3 +1132,11 @@ test('go_up: a dig above the head that is aborted counts as one failed pillar st
   assert.strictEqual(Math.floor(bot.entity.position.y), 13)
 })
 
+test('the recorded home chest is never dug, and a stair toward it is refused', async () => {
+  const objectiveRun = { home: { x: 1, y: 10, z: 0 }, params: {} }
+  const w = { ...world({ '1,10,0': 'chest' }), objectiveRun }
+  await assert.rejects(() => breakBlock(w, w.blockAt(new Vec3(1, 10, 0))), { reason: 'home' })
+  assert.strictEqual(stairRefusal(w, new Vec3(0, 10, 0), [1, 0]), 'home')
+  assert.strictEqual(stairRefusal(w, new Vec3(0, 10, 0), [-1, 0]), null)
+})
+
