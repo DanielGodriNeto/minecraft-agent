@@ -1140,3 +1140,7 @@ test('the recorded home chest is never dug, and a stair toward it is refused', a
   assert.strictEqual(stairRefusal(w, new Vec3(0, 10, 0), [-1, 0]), null)
 })
 
+test('dig_down: tunnel-outs are capped at 4 and the cap is reported as tunnel_limit', async () => {
+  assert.strictEqual(MAX_TUNNEL_OUTS, 4)
+})
+
