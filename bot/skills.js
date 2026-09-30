@@ -20,6 +20,11 @@ const FUELS = ['coal', 'charcoal', ...WOODS.map(w => `${w}_planks`), ...WOODS.ma
 const PATCH_BLOCKS = ['cobblestone', 'cobbled_deepslate', 'dirt']
 const GUARD_MS = 5000
 const GO_UP_PATH_MS = 60000
+const GO_UP_LOOP_PATH_MS = 15000 // one pathfinder attempt per go_up round when looping
+const GO_UP_LONG_CLIMB = 60
+const GO_UP_LONG_CAP_MS = 360000 // ended earlier by the no-progress watchdog
+const GO_UP_IDLE_ROUNDS = 3
+const GO_UP_MIN_GAIN = 2
 const PILLAR_LIFT = 1
 const FALL_SEEN = 0.5
 const PILLAR_FAILS = 3
@@ -224,15 +229,22 @@ function damageEntry(bot) {
 }
 
 // A skill may overrun the run deadline by DEADLINE_SLACK_MS at most.
-function skillCapMs(bot, now = Date.now()) {
+function skillCapMs(bot, now = Date.now(), limit = SKILL_CAP_MS) {
   const deadline = bot.runDeadline ?? Infinity
-  return Math.min(SKILL_CAP_MS, Math.max(deadline - now, 0) + DEADLINE_SLACK_MS)
+  return Math.min(limit, Math.max(deadline - now, 0) + DEADLINE_SLACK_MS)
+}
+
+const goUpLooping = (bot) => bot.objectiveRun?.params?.goUpLoop !== false
+
+// A long climb needs more than the default cap; its own watchdog ends it when it stops gaining height.
+function skillCapFor(bot, name, args, now = Date.now()) {
+  const long = name === 'go_up' && goUpLooping(bot) && args[0] - Math.floor(bot.entity.position.y) > GO_UP_LONG_CLIMB
+  return skillCapMs(bot, now, long ? GO_UP_LONG_CAP_MS : SKILL_CAP_MS)
 }
 
 // A skill is aborted when a hostile hurts the bot, so the planner can react (flee) instead of
 // finishing a 30 s walk while being hit. flee/eat/shelter are not interruptible.
-async function run(bot, skill, interruptible, escaping = false) {
-  const capMs = skillCapMs(bot)
+async function run(bot, skill, interruptible, escaping = false, capMs = skillCapMs(bot)) {
   let ticks = 0
   let lastHealth = bot.health
   let suffocated = 0
@@ -941,7 +953,7 @@ async function clearedAbove(bot, feet) {
   }
 }
 
-// Straight up on carried blocks; gives up after PILLAR_FAILS steps in a row without progress.
+// Straight up on carried blocks; gives up after PILLAR_FAILS steps in a row without progress. Counted in the go_up stats.
 async function pillarUp(bot, targetY) {
   let fails = 0
   while (Math.floor(bot.entity.position.y) < targetY && fails < PILLAR_FAILS) {
@@ -956,7 +968,9 @@ async function pillarUp(bot, targetY) {
       continue
     }
     await guard(bot.look(bot.entity.yaw, -Math.PI / 2, true))
-    fails = await pillarStep(bot, feet, name) ? 0 : fails + 1
+    const stepped = await pillarStep(bot, feet, name)
+    if (stepped && bot.skillStats?.pillarSteps !== undefined) bot.skillStats.pillarSteps++
+    fails = stepped ? 0 : fails + 1
   }
 }
 
@@ -985,7 +999,60 @@ async function followTrailSafely(bot, done) {
   }
 }
 
+const floorY = (bot) => Math.floor(bot.entity.position.y)
+
+// A crumb the pillar could not reach (no headroom, water, gravel) is tunnelled to instead of stalling the trail.
+async function tunnelToCrumb(bot) {
+  const crumb = bot.trail?.at(-1)
+  if (!crumb) return
+  try {
+    await retrace(bot, crumb)
+    bot.trail.pop()
+  } catch (e) {
+    checkCancelled(bot)
+  }
+}
+
+// One round: follow the trail while it keeps gaining height, otherwise a short path attempt, then the pillar.
+async function goUpRound(bot, targetY, high, stats, trailFirst) {
+  if (trailFirst) {
+    stats.trailRounds++
+    await followTrailSafely(bot, high)
+    return
+  }
+  stats.pathRounds++
+  await goto(bot, new goals.GoalY(targetY), GO_UP_LOOP_PATH_MS, true).catch(() => {})
+  if (!high(bot.entity.position)) await pillarUp(bot, targetY)
+}
+
+// Rounds until the target, or GO_UP_IDLE_ROUNDS in a row gain less than GO_UP_MIN_GAIN blocks.
+async function goUpLoop(bot, targetY) {
+  const high = (p) => Math.floor(p.y) >= targetY
+  const startY = floorY(bot)
+  const stats = Object.assign(bot.skillStats ??= {}, { trailRounds: 0, pathRounds: 0, pillarSteps: 0, blocksGained: 0 })
+  let idle = 0
+  let progressed = true
+  const stopSwimming = swimAssist(bot)
+  try {
+    while (!high(bot.entity.position) && idle < GO_UP_IDLE_ROUNDS) {
+      checkCancelled(bot)
+      const before = floorY(bot)
+      await goUpRound(bot, targetY, high, stats, progressed && bot.trail?.length > 0)
+      const gained = floorY(bot) - before
+      if (gained <= 0 && bot.trail?.length && !high(bot.entity.position)) await tunnelToCrumb(bot)
+      progressed = gained > 0
+      idle = gained < GO_UP_MIN_GAIN ? idle + 1 : 0
+      stats.blocksGained = floorY(bot) - startY
+    }
+  } finally {
+    stopSwimming()
+  }
+  if (!high(bot.entity.position)) throw new Fail('not_reached')
+  bot.trail = []
+}
+
 async function goUp(bot, targetY) {
+  if (goUpLooping(bot)) return goUpLoop(bot, targetY)
   const high = (p) => Math.floor(p.y) >= targetY
   const stopSwimming = swimAssist(bot)
   try {
@@ -1362,10 +1429,10 @@ function logSkill(bot, entry) {
 // Every skill resolves to { ok, reason, ticks } and never throws.
 async function runSkill(bot, name, ...args) {
   const before = snapshot(bot)
-  const { damage, ...result } = await run(bot, () => SKILLS[name](bot, ...args), !NON_INTERRUPTIBLE.has(name), ESCAPES.has(name))
+  const { damage, ...result } = await run(bot, () => SKILLS[name](bot, ...args), !NON_INTERRUPTIBLE.has(name), ESCAPES.has(name), skillCapFor(bot, name, args))
   if (result.reason === 'suffocating') await freeHead(bot)
   logSkill(bot, { t: Date.now(), bot: bot.username, run: bot.runTag ?? null, skill: name, args: args.map(logArg), result, ...(damage && { damage }), before, after: snapshot(bot) })
   return result
 }
 
-module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor }

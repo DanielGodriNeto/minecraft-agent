@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS, skillCapFor } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -524,6 +524,43 @@ test('go_up: an untraceable crumb is dropped and the pillar fallback still runs'
   const result = await run(bot, () => SKILLS.go_up(bot, 13), false, true)
   assert.strictEqual(result.ok, true)
   assert.deepStrictEqual(bot.trail, [])
+})
+
+test('go_up loop: a bad crumb mid-trail does not end the trail rounds, and the climb still arrives', async () => {
+  const { bot } = pillarBot()
+  bot.trail = [new Vec3(0, 12, 0), new Vec3(50, 50, 50), new Vec3(0, 11, 0)]
+  const result = await run(bot, () => SKILLS.go_up(bot, 13), false)
+  assert.strictEqual(result.ok, true, result.detail)
+  assert.ok(result.trailRounds >= 2, `trailRounds ${result.trailRounds}`)
+  assert.ok(result.pathRounds >= 1)
+  assert.strictEqual(result.blocksGained, 3)
+  assert.strictEqual(result.pillarSteps, 3)
+  assert.deepStrictEqual(bot.trail, [])
+})
+
+test('go_up loop: three rounds without progress end the call as not_reached', async () => {
+  const { bot } = pillarBot({ blocks: 0 })
+  const result = await run(bot, () => SKILLS.go_up(bot, 13), false)
+  assert.strictEqual(result.reason, 'not_reached')
+  assert.strictEqual(result.pathRounds, 3)
+  assert.strictEqual(result.blocksGained, 0)
+})
+
+test('go_up loop: switched off (goUpLoop=false) it is the single-pass climb without counters', async () => {
+  const { bot } = pillarBot()
+  bot.objectiveRun = { params: { goUpLoop: false } }
+  const result = await run(bot, () => SKILLS.go_up(bot, 13), false)
+  assert.strictEqual(result.ok, true)
+  assert.strictEqual(result.trailRounds, undefined)
+})
+
+test('skillCapFor: only a go_up climbing more than 60 blocks gets the long cap, still bounded by the deadline', () => {
+  const at = (y, params = {}, runDeadline = Infinity) => ({ entity: { position: { y } }, objectiveRun: { params }, runDeadline })
+  assert.strictEqual(skillCapFor(at(-50), 'go_up', [50], 0), 360000)
+  assert.strictEqual(skillCapFor(at(-50, { goUpLoop: false }), 'go_up', [50], 0), 180000)
+  assert.strictEqual(skillCapFor(at(-10), 'go_up', [50], 0), 180000)
+  assert.strictEqual(skillCapFor(at(-50), 'dig_down', [50], 0), 180000)
+  assert.strictEqual(skillCapFor(at(-50, {}, 100000), 'go_up', [50], 0), 130000)
 })
 
 test('run: escape skills are not aborted by low oxygen or drowning damage', async () => {
