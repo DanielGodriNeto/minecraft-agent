@@ -658,13 +658,20 @@ async function retrace(bot, crumb) {
   await moveTo(bot, crumb)
 }
 
+// A crumb the pillar did not reach stays on the trail, so a later attempt (more blocks, another route) still knows the way.
+async function climbShaftHop(bot, crumb) {
+  await pillarUp(bot, crumb.y)
+  if (Math.floor(bot.entity.position.y) >= crumb.y) return
+  throw Object.assign(new Fail('not_reached', 'shaft crumb'), { kept: true })
+}
+
 // Walks the trail backwards until done(position); consumed crumbs are removed.
 async function followTrail(bot, done) {
   const trail = bot.trail = dropLoops(bot.trail ?? [])
   while (trail.length && !done(bot.entity.position)) {
     checkCancelled(bot)
     const crumb = trail.at(-1)
-    if (isShaftHop(bot, crumb)) await pillarUp(bot, crumb.y)
+    if (isShaftHop(bot, crumb)) await climbShaftHop(bot, crumb)
     else await retrace(bot, crumb)
     trail.pop()
   }
@@ -835,8 +842,10 @@ function shaftRefusal(bot, p) {
 }
 
 // Digs straight down one block. False when the step is refused or did not descend, so the caller takes a staircase step.
-async function shaftStep(bot, p) {
-  if (placeableCount(bot) < SHAFT_MIN_BLOCKS || nearestHostile(bot) || shaftRefusal(bot, p)) return false
+// It also needs a block per level already descended (and the one about to be), or the bot could not pillar back out.
+async function shaftStep(bot, p, startY) {
+  const depth = Math.max(bot.objectiveRun?.surfaceY ?? startY, startY) - p.y
+  if (placeableCount(bot) < Math.max(SHAFT_MIN_BLOCKS, depth + 1) || nearestHostile(bot) || shaftRefusal(bot, p)) return false
   try {
     noteTrail(bot)
     await dropThrough(bot, at(bot, p, 0, -1, 0))
@@ -852,6 +861,7 @@ const shaftEnabled = (bot) => bot.objectiveRun?.params.shaft ?? true
 async function digDown(bot, targetY) {
   resetStaleTrail(bot)
   const stats = bot.skillStats ??= {}
+  const startY = Math.floor(bot.entity.position.y)
   let shaft = shaftEnabled(bot)
   let d = 0
   let tunnels = 0
@@ -861,7 +871,7 @@ async function digDown(bot, targetY) {
     if (await dropThroughCanopy(bot, p)) continue
     if (shaft && bot.entity.onGround) {
       const health = bot.health
-      if (await shaftStep(bot, p)) {
+      if (await shaftStep(bot, p, startY)) {
         stats.shaftSteps = (stats.shaftSteps ?? 0) + 1
         shaft = bot.health >= health // damage in a shaft: stairs for the rest of this call
         continue
@@ -942,9 +952,9 @@ function swimAssist(bot) {
 async function followTrailSafely(bot, done) {
   try {
     await followTrail(bot, done)
-  } catch {
+  } catch (e) {
     checkCancelled(bot)
-    bot.trail?.pop()
+    if (!e.kept) bot.trail?.pop()
   }
 }
 
@@ -1255,9 +1265,13 @@ function freeSpace(window, item) {
 }
 
 // Drops stacks until each named item is down to `keep` in total.
+// Underground it also holds back one placeable block per level below the surface, the price of pillaring out.
 async function toss(bot, names, keep = 16) {
+  const surfaceY = bot.objectiveRun?.surfaceY
+  const depth = surfaceY === undefined ? 0 : Math.max(surfaceY - Math.floor(bot.entity.position.y), 0)
   for (const name of names) {
-    let excess = countItem(bot, name) - keep
+    const spare = PLACEABLE.includes(name) ? placeableCount(bot) - depth : Infinity
+    let excess = Math.min(countItem(bot, name) - keep, spare)
     for (const item of bot.inventory.items().filter(i => i.name === name)) {
       if (excess <= 0) break
       const n = Math.min(item.count, excess)

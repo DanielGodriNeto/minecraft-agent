@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -808,9 +808,21 @@ test('return_home: cancellations do not count as unreachable', async () => {
   assert.strictEqual(placed.size, 0)
 })
 
+// One physics tick of a bot that lost its floor: y drops 0.2 per tick, onGround turns true only on landing.
+// physics 'never' models a server that never lets the bot fall (the bot hangs in the air).
+async function fallOneTick(bot, nameAt, physics) {
+  await new Promise(r => setTimeout(r, 1))
+  const pos = bot.entity.position
+  if (physics === 'never' || bot.entity.onGround) return
+  let ground = Math.floor(pos.y)
+  while (nameAt(new Vec3(0, ground - 1, 0)) === 'air' && ground > 0) ground--
+  pos.y = Math.max(ground, pos.y - 0.2)
+  if (pos.y <= ground) bot.entity.onGround = true
+}
+
 // Bot on a stone column: stone up to y=19 (overrides by "x,y,z"), air above. Digging the floor drops the bot to the next solid cell.
 // With stairOnly the first dig throws, so a fallback to the staircase shows up as digs[0] being off the column.
-function shaftBot({ overrides = {}, stone = 16, shaft, hostile = false, stopOnDig = false, fallLag = 0 } = {}) {
+function shaftBot({ overrides = {}, stone = 16, shaft, hostile = false, stopOnDig = false, fallLag = 0, surfaceY, physics } = {}) {
   const broken = new Set()
   const key = (p) => `${p.x},${p.y},${p.z}`
   const nameAt = (p) => broken.has(key(p)) ? 'air' : (overrides[key(p)] ?? (p.y <= 19 ? 'stone' : 'air'))
@@ -821,7 +833,7 @@ function shaftBot({ overrides = {}, stone = 16, shaft, hostile = false, stopOnDi
   const bot = Object.assign(new EventEmitter(), {
     digs, trail: [], health: 20, heldItem: null,
     entity: { position: pos, onGround: true, yaw: 0 },
-    objectiveRun: shaft === undefined ? undefined : { params: { shaft } },
+    objectiveRun: shaft === undefined && surfaceY === undefined ? undefined : { params: { shaft }, surfaceY },
     blockAt: (p) => {
       const name = nameAt(p)
       return { name, position: p, diggable: name !== 'bedrock', boundingBox: ['air', 'water', 'lava'].includes(name) ? 'empty' : 'block' }
@@ -835,12 +847,16 @@ function shaftBot({ overrides = {}, stone = 16, shaft, hostile = false, stopOnDi
       digs.push(key(b.position))
       if (stopOnDig) throw new Fail('stop')
       broken.add(key(b.position))
+      if (physics) bot.entity.onGround = false
       fall = () => { while (nameAt(new Vec3(0, Math.floor(pos.y) - 1, 0)) === 'air' && pos.y > 0) pos.y -= 1 }
-      if (!fallLag) fall()
+      if (!fallLag && !physics) fall()
     },
     stopDigging() {},
     clearControlStates() {},
-    waitForTicks: async () => { if (fallLag && lag-- <= 0) { lag = fallLag; fall(); fall = () => {} } },
+    waitForTicks: async () => {
+      if (physics) return fallOneTick(bot, nameAt, physics)
+      if (fallLag && lag-- <= 0) { lag = fallLag; fall(); fall = () => {} }
+    },
   })
   return bot
 }
@@ -1002,4 +1018,99 @@ test('pickUpDrop: a drop still on the ground after the first approach is walked 
   const result = await run(bot, () => pickUpDrop(bot, new Vec3(2, 10, 0)), false)
   assert.strictEqual(result.ok, true, result.detail)
   assert.deepStrictEqual(ranges, [1, 0])
+})
+
+test('dig_down: a physics-faithful shaft fall (onGround false, 0.2 per tick, then landing) is a completed step', async () => {
+  const bot = shaftBot({ physics: 'faithful' })
+  const result = await run(bot, () => SKILLS.dig_down(bot, 18), false)
+  assert.strictEqual(result.ok, true, result.detail)
+  assert.strictEqual(result.shaftSteps, 2)
+  assert.ok(!result.stairSteps)
+})
+
+test('dig_down: a bot that never falls after the floor break times out the drop and falls back to the staircase', async () => {
+  const bot = shaftBot({ physics: 'never' })
+  const result = await run(bot, () => SKILLS.dig_down(bot, 19), false)
+  assert.ok(!result.shaftSteps)
+  assert.strictEqual(bot.digs[0], '0,19,0')
+})
+
+test('dig_down: the shaft is refused when the carried blocks cannot pillar back out of the depth already descended', async () => {
+  const deep = shaftBot({ stone: 8, surfaceY: 30, stopOnDig: true })
+  const result = await run(deep, () => SKILLS.dig_down(deep, 19), false)
+  assert.ok(!result.shaftSteps)
+  assert.notStrictEqual(deep.digs[0], '0,19,0')
+  const shallow = shaftBot({ stone: 8, surfaceY: 22 })
+  assert.strictEqual((await run(shallow, () => SKILLS.dig_down(shallow, 19), false)).shaftSteps, 1)
+})
+
+test('go_up: crumbs the bot could not pillar up to are kept, not popped', async () => {
+  const { bot } = pillarBot({ blocks: 0 })
+  bot.trail = [new Vec3(0, 12, 0), new Vec3(0, 11, 0), new Vec3(0, 10, 0)]
+  const result = await run(bot, () => SKILLS.go_up(bot, 13), false)
+  assert.strictEqual(result.reason, 'not_reached')
+  assert.deepStrictEqual(bot.trail.map(t => t.y), [12, 11]) // the crumb under the feet was reached, the ones above were not
+})
+
+function tossBot({ y, surfaceY, cobble = 40, dirt = 40 }) {
+  const stacks = [{ name: 'cobblestone', count: cobble, type: 1 }, { name: 'dirt', count: dirt, type: 2 }]
+  const bot = Object.assign(new EventEmitter(), {
+    entity: { position: new Vec3(0, y, 0) },
+    objectiveRun: surfaceY === undefined ? undefined : { surfaceY, params: {} },
+    inventory: { items: () => stacks.filter(s => s.count > 0) },
+    toss: async (type, _meta, n) => { stacks.find(s => s.type === type).count -= n },
+  })
+  return { bot, stacks }
+}
+
+test('toss: keeps enough placeable blocks to pillar out of the current depth, tosses the rest', async () => {
+  const { bot, stacks } = tossBot({ y: 20, surfaceY: 60 })
+  await SKILLS.toss(bot, ['cobblestone', 'dirt'], 0)
+  assert.deepStrictEqual(stacks.map(s => s.count), [0, 40], 'depth 40 needs 40 placeable blocks kept in total')
+})
+
+test('toss: at the surface, or with no run, the keep count is unchanged', async () => {
+  for (const options of [{ y: 60, surfaceY: 60 }, { y: 20 }]) {
+    const { bot, stacks } = tossBot(options)
+    await SKILLS.toss(bot, ['cobblestone'], 16)
+    assert.strictEqual(stacks[0].count, 16, JSON.stringify(options))
+  }
+})
+
+test('mine: a path timeout (PATH_MS) blacklists the block, a cancel while pathing does not', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const slow = mineBot(() => new Promise(() => {}))
+  const pending = run(slow, () => SKILLS.mine(slow, 'stone'), false)
+  for (let i = 0; i < 20; i++) await Promise.resolve()
+  t.mock.timers.tick(30000)
+  assert.strictEqual((await pending).reason, 'reach_failed')
+  assert.strictEqual(slow.unreachable.size, 1)
+  const cancelled = mineBot(async () => { cancelled.skillCancel.cancelled = true; cancelled.skillCancel.reason = 'timeout'; throw new Fail('timeout') })
+  await run(cancelled, () => SKILLS.mine(cancelled, 'stone'), false)
+  assert.ok(!cancelled.unreachable || cancelled.unreachable.size === 0)
+})
+
+test('runSkill: burning aborts a normal skill with reason burning but never go_up, flee or shelter', async () => {
+  const saved = { ...SKILLS }
+  try {
+    for (const name of ['mine', 'go_up', 'flee', 'shelter']) {
+      const bot = fakeBot(50)
+      Object.assign(bot, { food: 20, time: { timeOfDay: 0 }, inventory: { items: () => [] } })
+      bot.blockAt = (p) => (p.y === 10 ? { name: 'lava' } : null)
+      SKILLS[name] = async () => { bot.health = 12; bot.emit('health'); await new Promise(r => setTimeout(r, 5)); checkCancelled(bot) }
+      const result = await runSkill(bot, name)
+      if (name === 'mine') assert.deepStrictEqual([result.ok, result.reason], [false, 'burning'])
+      else assert.strictEqual(result.ok, true, name)
+    }
+  } finally {
+    Object.assign(SKILLS, saved)
+  }
+})
+
+test('fight: a mob that is never killed ends not_killed at the time limit and the fake cannot hang', async () => {
+  const { bot } = fightBot({ hits: Infinity })
+  const attack = bot.attack
+  bot.attack = (e) => { if (bot.attacks > 500) throw new Error('fake fight hang'); attack(e) }
+  const result = await run(bot, () => SKILLS.fight(bot, 30), false)
+  assert.strictEqual(result.reason, 'not_killed')
 })
