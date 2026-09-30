@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const path = require('node:path')
 const req = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))
-const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances } = req('./eval.js')
+const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, retry } = req('./eval.js')
 const { instanceSpec, maxInstances, assertDiskSpace, withPort } = req('./server.js')
 
 const solid = (name) => ({ name, boundingBox: 'block' })
@@ -79,4 +79,12 @@ test('assertDiskSpace: passes with margin, fails with a clear message otherwise'
 test('withPort: overrides server and query ports only', () => {
   assert.strictEqual(withPort('a=1\nserver-port=25565\nquery.port=25565\nrcon.port=25575\n', 25567),
     'a=1\nserver-port=25567\nquery.port=25567\nrcon.port=25575\n')
+})
+
+test('retry: returns the first success, retries failures, throws the last error after the attempts', async () => {
+  let calls = 0
+  assert.strictEqual(await retry(async () => { if (++calls < 3) throw new Error('x'); return 'ok' }, 3, 0), 'ok')
+  assert.strictEqual(calls, 3)
+  calls = 0
+  await assert.rejects(retry(async () => { calls++; throw new Error(`fail ${calls}`) }, 2, 0), /fail 2/)
 })

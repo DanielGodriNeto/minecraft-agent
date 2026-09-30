@@ -9,7 +9,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { createBot } = require('./bot.js')
 const { runObjective, stopObjective, jitterParams } = require('./agent.js')
-const { summarize, mulberry32 } = require('./metrics.js')
+const { summarize, isInvalid, mulberry32 } = require('./metrics.js')
 const os = require('node:os')
 const { startServer, snapshot, restore, checkDiskFor, instanceSpec, maxInstances } = require('./server.js')
 
@@ -58,10 +58,22 @@ function groundY(blockAt, x, z, fromY) {
   throw new Error(`no ground at ${x},${z}`)
 }
 
+async function retry(fn, attempts, delayMs) {
+  for (let i = 1; ; i++) {
+    try { return await fn() } catch (e) {
+      if (i >= attempts) throw e
+      await new Promise(r => setTimeout(r, delayMs))
+    }
+  }
+}
+
+// mineflayer gives up after a fixed 10 s; with several servers and 12 bots each, chunks can take a minute.
+const waitForChunks = (bot) => retry(() => bot.waitForChunksToLoad(), 6, 0)
+
 async function teleport(server, bot, x, y, z) {
   await server.command(`tp ${bot.username} ${x} ${y} ${z}`)
   await poll(() => Math.hypot(bot.entity.position.x - x, bot.entity.position.z - z) < 1, 30000)
-  await bot.waitForChunksToLoad()
+  await waitForChunks(bot)
 }
 
 // Empty inventory, full health, standing on true ground with a storage chest beside it.
@@ -132,7 +144,7 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
   } catch (e) {
     result = partial(bot, 'error', e.message)
   }
-  const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, minutes: (Date.now() - start) / 60000, difficulty, ...(instance.total > 1 && { instance: instance.index + 1 }) }
+  const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, ...(isInvalid(result) && { invalid: true }), minutes: (Date.now() - start) / 60000, difficulty, ...(instance.total > 1 && { instance: instance.index + 1 }) }
   fs.appendFileSync(RESULTS, JSON.stringify(run) + '\n')
   console.log(`${instance.total > 1 ? `[i${instance.index + 1}] ` : ''}${JSON.stringify(run)}`)
   return run
@@ -156,7 +168,7 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, in
     await Promise.all(bots.map(b => withDeadline(once(b, 'spawn'), SPAWN_MS, `${b.username} spawn`)))
     await server.command('time set 0')
     const homes = []
-    for (const [i, slot] of slots.entries()) homes.push(await placeAtSlot(server, bots[i], slot).catch(e => e))
+    for (const [i, slot] of slots.entries()) homes.push(await retry(() => placeAtSlot(server, bots[i], slot), 2, 5000).catch(e => e))
     const start = Date.now()
     stopWatching = onStart?.(server)
     return await Promise.all(slots.map((slot, i) => runOne(bots[i], slot, homes[i], start, minutes, difficulty, log, instance)))
@@ -185,5 +197,5 @@ async function main([first, last, bots = '10', minutes = '60', instances = '1'])
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { distribute, chunk, parseInstances, placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { retry, distribute, chunk, parseInstances, placeAtSlot, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })

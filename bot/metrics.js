@@ -19,9 +19,14 @@ function bootstrapCI(values, rand = mulberry32(1)) {
   return [means[Math.floor(0.025 * BOOTSTRAP_SAMPLES)], means[Math.floor(0.975 * BOOTSTRAP_SAMPLES)]]
 }
 
-// runs: [{ deposited, deaths, reason, minutes }]
-function summarize(runs) {
-  if (runs.length === 0) return { runs: 0, successRate: null, successCI: null, diamondsPerHour: null, deathsPerHour: null, stuckRate: null }
+// A run that ended by error or disconnect says nothing about the bot: stuck, deaths, lost and timeout do.
+const isInvalid = (r) => r.reason === 'error' || r.reason === 'disconnected'
+
+// runs: [{ deposited, deaths, reason, minutes, invalid? }]; invalid rows are counted apart, not in any rate.
+function summarize(all) {
+  const runs = all.filter(r => !r.invalid)
+  const invalidRuns = all.length - runs.length
+  if (runs.length === 0) return { runs: 0, successRate: null, successCI: null, diamondsPerHour: null, deathsPerHour: null, stuckRate: null, invalidRuns }
   const hours = runs.reduce((h, r) => h + r.minutes / 60, 0)
   const success = runs.map(r => (r.deposited >= 1 ? 1 : 0))
   return {
@@ -31,7 +36,8 @@ function summarize(runs) {
     diamondsPerHour: runs.reduce((n, r) => n + r.deposited, 0) / hours,
     deathsPerHour: runs.reduce((n, r) => n + r.deaths, 0) / hours,
     stuckRate: mean(runs.map(r => (r.reason === 'stuck' ? 1 : 0))),
+    invalidRuns,
   }
 }
 
-module.exports = { summarize, bootstrapCI, mulberry32 }
+module.exports = { summarize, isInvalid, bootstrapCI, mulberry32 }
