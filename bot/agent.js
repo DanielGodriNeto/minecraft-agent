@@ -18,14 +18,15 @@ const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock i
 
 // Run memory: which fields belong to one life (reset on death) and which to the whole run.
 //   per-run:  baseDir, surfaceDir, relocations   (directions keep rotating so a new life does not retry the failed one)
-//   per-trip: restock, nightDigs, optionalFails  (also reset by a successful deposit)
+//   per-trip: restock, nightDigs, optionalFails, fightFails  (also reset by a successful deposit)
 //   per-life: leg, surfaceLeg, shelters, noShelter, drownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
-//             homeFails, hopsSinceDescent, foodRests   (the respawn is at home: nothing of the old position applies)
+//             homeFails, hopsSinceDescent, burnUps   (the respawn is at home: nothing of the old position applies)
+//   hopsSinceDescent deliberately survives a deposit: it counts hops since the last real descent, and any descent zeroes it.
 const lifeMemory = () => ({
   leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
-  relocFailed: false, homeFails: 0, hopsSinceDescent: 0, foodRests: 0, ...tripMemory(),
+  relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, ...tripMemory(),
 })
-const tripMemory = () => ({ restock: {}, nightDigs: 0, optionalFails: {} })
+const tripMemory = () => ({ restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0 })
 
 const resetLife = (memory) => ({ ...memory, ...lifeMemory() })
 const resetTrip = (memory) => Object.assign(memory, tripMemory())
@@ -101,6 +102,7 @@ function observe(bot, run) {
     deposited: run.deposited,
     msLeft: run.deadline - Date.now(),
     recentlyAttacked: run.recentlyAttacked,
+    recentlyBurned: run.recentlyBurned,
     drowning: (run.memory.drownings ?? 0) < MAX_DROWN_REACTIONS && isDrowning(bot),
     params: run.params,
     memory: run.memory,
@@ -175,7 +177,8 @@ function remember(run, action, result) {
   if (action.restock) trackRestock(run.memory, action, result)
   trackShelter(run.memory, action)
   trackDigging(run.memory, action, result)
-  if (action.foodRest) run.memory.foodRests = (run.memory.foodRests ?? 0) + 1
+  if (action.skill === 'fight') run.memory.fightFails = result.ok ? 0 : (run.memory.fightFails ?? 0) + 1
+  if (action.key === 'burn_up') run.memory.burnUps = (run.memory.burnUps ?? 0) + 1
   if (action.key === 'night_dig') run.memory.nightDigs = (run.memory.nightDigs ?? 0) + 1
   if (action.skill === 'explore' && !LEG_BLOCKED.has(result.reason)) run.memory.hazards = 0
   if (action.key === 'hazard_up') {
@@ -196,6 +199,14 @@ function remember(run, action, result) {
     run.memory.surfaceDir = (run.memory.surfaceDir + 1) % 4
     run.memory.surfaceLeg++
   }
+}
+
+// A skill that a death interrupted reports on the old life: it must not count against the fresh one.
+function afterSkill(run, action, result, deathsBefore) {
+  const died = run.deaths !== deathsBefore
+  if (!died) remember(run, action, result)
+  run.recentlyAttacked = !died && result.reason === 'attacked'
+  run.recentlyBurned = !died && result.reason === 'burning'
 }
 
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
@@ -252,7 +263,7 @@ function stuckTracker(bot) {
 // home: storage chest position. Resolves with why the run ended.
 async function runObjective(bot, { objective, home, params = jitterParams(), deadline = Infinity, maxDeaths = 3, rand = Math.random }) {
   const run = {
-    objective, home, surfaceY: home.y, params: normalizeParams(params), deadline, deposited: 0, recentlyAttacked: false, deaths: 0, decisions: 0, stopped: false,
+    objective, home, surfaceY: home.y, params: normalizeParams(params), deadline, deposited: 0, recentlyAttacked: false, recentlyBurned: false, deaths: 0, decisions: 0, stopped: false,
     memory: { ...lifeMemory(), baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), relocations: 0 },
   }
   bot.objectiveRun = run
@@ -277,6 +288,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       }
       const action = nextAction(observe(bot, run))
       if (!action) return finish(run, 'done')
+      const deathsBefore = run.deaths
       const invBefore = inventoryCounts(bot)
       const diamondsBefore = invBefore.diamond ?? 0
       const yBefore = bot.entity?.position.y
@@ -285,10 +297,9 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
       if (action.skill === 'deposit' && result.ok) startNewTrip(bot, run)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
-      remember(run, action, result)
+      afterSkill(run, action, result, deathsBefore)
       resetTrail(bot, run.home)
-      run.recentlyAttacked = result.reason === 'attacked'
-      if (!run.recentlyAttacked && !IDLE_EXEMPT.has(action.skill) && isStuck(result, action, invBefore)) return finish(run, 'stuck')
+      if (!run.recentlyAttacked && !run.recentlyBurned && !IDLE_EXEMPT.has(action.skill) && isStuck(result, action, invBefore)) return finish(run, 'stuck')
     }
   } finally {
     bot.off('death', onDeath)
@@ -310,4 +321,4 @@ function stopObjective(bot) {
   return true
 }
 
-module.exports = { runObjective, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, isLost, resetLife, resetTrip, handleDeath, startNewTrip }
+module.exports = { runObjective, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }

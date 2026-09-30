@@ -1,7 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
 const { nextAction, DEFAULT_PARAMS } = require('../bot/planner.js')
-const { createStuckTracker, stuckTracker, pickLeft, remember, isLost, resetLife, resetTrip } = require('../bot/agent.js')
+const { createStuckTracker, stuckTracker, pickLeft, remember, isLost, resetLife, resetTrip, handleDeath } = require('../bot/agent.js')
 
 const ok = { ok: true }
 const fail = { ok: false, reason: 'timeout' }
@@ -216,21 +216,21 @@ test('resetLife: per-life counters go back to their start, per-run direction and
   const memory = {
     leg: 3, baseDir: 2, surfaceDir: 1, surfaceLeg: 4, optionalFails: { hunt: 4, rest: 4 }, shelters: 1, noShelter: 3, drownings: 2,
     digFails: 1, relocations: 5, hazards: 1, hazardUp: true, relocFailed: true, lastDigReason: 'blocked', nightDigs: 6,
-    restock: { food: { steps: 12, fails: 2 } }, homeFails: 2, hopsSinceDescent: 2, foodRests: 2,
+    restock: { food: { steps: 12, fails: 2 } }, homeFails: 2, hopsSinceDescent: 2, burnUps: 2, fightFails: 3,
   }
   const fresh = resetLife(memory)
   assert.deepStrictEqual([fresh.baseDir, fresh.surfaceDir, fresh.relocations], [2, 1, 5])
   assert.deepStrictEqual(
-    [fresh.leg, fresh.surfaceLeg, fresh.shelters, fresh.noShelter, fresh.drownings, fresh.digFails, fresh.hazards, fresh.hazardUp, fresh.relocFailed, fresh.nightDigs, fresh.homeFails, fresh.hopsSinceDescent, fresh.foodRests],
-    [0, 0, 0, 0, 0, 0, 0, false, false, 0, 0, 0, 0])
+    [fresh.leg, fresh.surfaceLeg, fresh.shelters, fresh.noShelter, fresh.drownings, fresh.digFails, fresh.hazards, fresh.hazardUp, fresh.relocFailed, fresh.nightDigs, fresh.homeFails, fresh.hopsSinceDescent, fresh.burnUps, fresh.fightFails],
+    [0, 0, 0, 0, 0, 0, 0, false, false, 0, 0, 0, 0, 0])
   assert.deepStrictEqual([fresh.optionalFails, fresh.restock, fresh.lastDigReason], [{}, {}, undefined])
   assert.strictEqual(memory.nightDigs, 6) // pure: the input is untouched
 })
 
 test('resetTrip: a deposit refills the night-dig, optional-failure and restock budgets and leaves the rest', () => {
-  const memory = { nightDigs: 6, optionalFails: { hunt: 4 }, restock: { food: { steps: 3, fails: 1 } }, digFails: 1, relocations: 2 }
+  const memory = { nightDigs: 6, fightFails: 4, optionalFails: { hunt: 4 }, restock: { food: { steps: 3, fails: 1 } }, digFails: 1, relocations: 2 }
   resetTrip(memory)
-  assert.deepStrictEqual(memory, { nightDigs: 0, optionalFails: {}, restock: {}, digFails: 1, relocations: 2 })
+  assert.deepStrictEqual(memory, { nightDigs: 0, optionalFails: {}, restock: {}, fightFails: 0, digFails: 1, relocations: 2 })
 })
 
 // Planner + remember against a world where digging down here always fails but every hop succeeds,
@@ -282,11 +282,48 @@ test('hops: descending resets the hop count, a fresh-column hop resets it too', 
   assert.strictEqual(run.memory.hopsSinceDescent, 0)
 })
 
-test('remember: food rest steps are counted so the planner can cap them', () => {
+test('remember: consecutive failed fights are counted, a won fight resets the count', () => {
   const run = { memory: { optionalFails: {} } }
-  remember(run, { skill: 'go_up', args: [70], foodRest: true }, { ok: true })
-  remember(run, { skill: 'shelter', args: [0, 'rest'], foodRest: true, optional: true, key: 'rest' }, { ok: true })
-  assert.strictEqual(run.memory.foodRests, 2)
+  remember(run, { skill: 'fight', args: [] }, { ok: false, reason: 'not_killed' })
+  remember(run, { skill: 'fight', args: [] }, { ok: false, reason: 'low_health' })
+  assert.strictEqual(run.memory.fightFails, 2)
+  remember(run, { skill: 'fight', args: [] }, { ok: true })
+  assert.strictEqual(run.memory.fightFails, 0)
+})
+
+test('remember: burn_up climbs are counted per life', () => {
+  const run = { memory: { optionalFails: {} } }
+  remember(run, { skill: 'go_up', args: [60], key: 'burn_up' }, { ok: true })
+  assert.strictEqual(run.memory.burnUps, 1)
+})
+
+test('afterSkill: attacked and burning flag the next decision, a result from a life that ended is not remembered', () => {
+  const { afterSkill } = require('../bot/agent.js')
+  const run = { deaths: 0, memory: { optionalFails: {}, fightFails: 0 } }
+  const fight = { skill: 'fight', args: [] }
+  afterSkill(run, fight, { ok: false, reason: 'attacked' }, 0)
+  assert.deepStrictEqual([run.recentlyAttacked, run.recentlyBurned, run.memory.fightFails], [true, false, 1])
+  afterSkill(run, fight, { ok: false, reason: 'burning' }, 0)
+  assert.deepStrictEqual([run.recentlyAttacked, run.recentlyBurned], [false, true])
+  run.deaths = 1
+  afterSkill(run, fight, { ok: false, reason: 'burning' }, 0) // died during the skill
+  assert.deepStrictEqual([run.recentlyAttacked, run.recentlyBurned, run.memory.fightFails], [false, false, 2])
+})
+
+test('handleDeath: memory goes back to a fresh life, only the per-run keys survive', () => {
+  const bot = { unreachable: new Set(), clearControlStates() {}, pathfinder: { setGoal() {} } }
+  const dirty = {
+    leg: 3, surfaceLeg: 4, shelters: 1, noShelter: 3, drownings: 2, digFails: 1, lastDigReason: 'blocked', hazards: 1, hazardUp: true,
+    relocFailed: true, homeFails: 2, hopsSinceDescent: 2, burnUps: 2, restock: { food: { steps: 1, fails: 1 } }, nightDigs: 6, optionalFails: { hunt: 4 }, fightFails: 3,
+    baseDir: 2, surfaceDir: 1, relocations: 5,
+  }
+  const run = { deaths: 0, memory: dirty }
+  handleDeath(bot, run)
+  assert.deepStrictEqual(run.memory, {
+    leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
+    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
+    baseDir: 2, surfaceDir: 1, relocations: 5,
+  })
 })
 
 test('death and a successful deposit both clear the unreachable set', () => {
