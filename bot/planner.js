@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP') }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: on('LOCALSURFACE') }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -42,7 +42,8 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   NIGHTASCENT    nightAscent    a deep bot with a diamond keeps mining while its predicted surface arrival is in the dark
 //   BRANCHRELOCATE branchRelocate after many empty branch legs at depth, hop 40 blocks sideways to fresh ground
 //   GOUPLOOP   goUpLoop    go_up loops trail/path/pillar rounds with a no-progress watchdog and a 360 s cap for climbs over 60 blocks
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop']
+//   LOCALSURFACE localSurface open sky (or two failed climbs) below home's height makes that height the surface, so the bot stops climbing toward a hill it cannot reach
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])) })
 
@@ -379,6 +380,23 @@ function foodStep(s) {
   return { ...act('hunt'), optional: true }
 }
 
+// Bank trip: deposit at the chest, else climb out and walk home (after a night wait when the dark makes the walk deadly).
+function returnTrip(s) {
+  if (s.distHome <= 4) return act('deposit', s.home)
+  const dawn = s.isNight && underground(s) && !(s.msLeft < NIGHT_WAIT_MIN_MS) ? holdUp(s, 'dawn') : null
+  if (dawn) return dawn
+  if (s.y < s.surfaceY - 8) return act('go_up', s.surfaceY)
+  return act('return_home', s.home)
+}
+
+// Home trips timed out twice in a row (agent.js sets the pause): once, a carried chest is placed here and becomes home
+// (deposit adopts a chest when none stands at the given spot); otherwise the trip waits and normal work goes on.
+const homePaused = (s) => (s.memory.homePause ?? 0) > 0
+function adoptHome(s) {
+  if (!s.memory.homeAdopt || !has(s, 'chest') || !s.pos) return null
+  return { ...act('deposit', s.pos), key: 'adopt_home' }
+}
+
 function nextAction(s) {
   if (objectiveDone(s)) return null
   const danger = dangerStep(s)
@@ -391,13 +409,8 @@ function nextAction(s) {
   if (waiting) return waiting
   const junk = junkAction(s)
   if (junk) return junk
-  if (shouldReturn(s)) {
-    if (s.distHome <= 4) return act('deposit', s.home)
-    const dawn = s.isNight && underground(s) && !(s.msLeft < NIGHT_WAIT_MIN_MS) ? holdUp(s, 'dawn') : null
-    if (dawn) return dawn
-    if (s.y < s.surfaceY - 8) return act('go_up', s.surfaceY)
-    return act('return_home', s.home)
-  }
+  const homeTrip = shouldReturn(s) ? (homePaused(s) ? adoptHome(s) : returnTrip(s)) : null
+  if (homeTrip) return homeTrip
   if (s.visible.diamond && has(s, 'iron_pickaxe')) return mineAct('diamond')
   const restock = reserveStep(s)
   if (restock) return restock

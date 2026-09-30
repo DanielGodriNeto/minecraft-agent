@@ -1,7 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
 const { nextAction, DEFAULT_PARAMS } = require('../bot/planner.js')
-const { createStuckTracker, stuckTracker, relocHazardExempt, pickLeft, remember, isLost, resetLife, resetTrip, handleDeath } = require('../bot/agent.js')
+const { createStuckTracker, stuckTracker, relocHazardExempt, pickLeft, remember, isLost, resetLife, resetTrip, handleDeath, effectiveSurface, trackLocalSurface } = require('../bot/agent.js')
 
 const ok = { ok: true }
 const fail = { ok: false, reason: 'timeout' }
@@ -314,14 +314,14 @@ test('handleDeath: memory goes back to a fresh life, only the per-run keys survi
   const bot = { unreachable: new Set(), clearControlStates() {}, pathfinder: { setGoal() {} } }
   const dirty = {
     leg: 3, surfaceLeg: 4, shelters: 1, noShelter: 3, drownings: 2, digFails: 1, lastDigReason: 'blocked', hazards: 1, hazardUp: true,
-    relocFailed: true, homeFails: 2, hopsSinceDescent: 2, burnUps: 2, crowdFlees: 2, relocHazards: 2, ascentDelayMs: 9, branchMisses: 5, branchRelocs: 1, restock: { food: { steps: 1, fails: 1 } }, nightDigs: 6, optionalFails: { hunt: 4 }, fightFails: 3,
+    relocFailed: true, homeFails: 2, hopsSinceDescent: 2, burnUps: 2, crowdFlees: 2, relocHazards: 2, ascentDelayMs: 9, branchMisses: 5, branchRelocs: 1, localSurfaceY: 60, goUpFails: 2, goUpY: 60, homeTimeouts: 1, homePause: 4, homeAdopt: true, restock: { food: { steps: 1, fails: 1 } }, nightDigs: 6, optionalFails: { hunt: 4 }, fightFails: 3,
     baseDir: 2, surfaceDir: 1, relocations: 5,
   }
   const run = { deaths: 0, memory: dirty }
   handleDeath(bot, run)
   assert.deepStrictEqual(run.memory, {
     leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
-    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
+    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
     baseDir: 2, surfaceDir: 1, relocations: 5,
   })
 })
@@ -344,7 +344,7 @@ test('switches: every ARM key overrides the param the code reads, and 0 disables
   const { parseArm } = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))('./eval.js')
   const { jitterParams } = require('../bot/agent.js')
   const { normalizeParams } = require('../bot/planner.js')
-  const keys = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate']
+  const keys = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'localSurface']
   for (const k of keys) {
     assert.strictEqual(DEFAULT_PARAMS[k], true, k)
     assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=0`) })[k], false, k)
@@ -415,4 +415,116 @@ test('remember: a hazard result does not reset branchMisses, other results do', 
   assert.strictEqual(run.memory.branchMisses, 6)
   remember(run, branch, { ok: false, reason: 'stuck' })
   assert.strictEqual(run.memory.branchMisses, 0)
+})
+
+// Valley case: home on a hill at y 100, the bot surfaces on open ground at y 60.
+const valleyRun = (over = {}) => ({ surfaceY: 100, params: { ...DEFAULT_PARAMS }, memory: { ...resetLife({ baseDir: 0, surfaceDir: 0, relocations: 0 }) }, ...over })
+const plannerState = (run, y, extra = {}) => ({
+  inv: { iron_pickaxe: 1, diamond: 1 }, health: 20, food: 20, hasFood: false, y, surfaceY: effectiveSurface(run), isNight: false, hostileNear: false,
+  canShelter: false, animalNear: false, visible: {}, tableNear: false, furnaceNear: false, freeSlots: 30, pickLeft: 100,
+  home: { x: 0, y: 100, z: 0 }, distHome: 40, objective: { item: 'diamond', count: 'max' }, deposited: 0, params: run.params, memory: run.memory, ...extra,
+})
+const column = (solidAbove) => ({
+  entity: { position: { floored: () => ({ offset: (dx, dy, dz) => ({ dx, dy, dz }) }) } },
+  blockAt: ({ dy }) => (solidAbove(dy) ? { name: 'stone', boundingBox: 'block' } : { name: 'air', boundingBox: 'empty' }),
+})
+
+test('localSurface: sky open on ground below home makes that height the surface; covered or too low it does not', () => {
+  const open = valleyRun()
+  trackLocalSurface(column(() => false), open, 60)
+  assert.strictEqual(effectiveSurface(open), 60)
+  const roofed = valleyRun()
+  trackLocalSurface(column(dy => dy === 10), roofed, 60)
+  assert.strictEqual(effectiveSurface(roofed), 100)
+  const leaves = valleyRun()
+  trackLocalSurface({ ...column(() => false), blockAt: () => ({ name: 'oak_leaves', boundingBox: 'block' }) }, leaves, 60)
+  assert.strictEqual(effectiveSurface(leaves), 60)
+  const deep = valleyRun()
+  trackLocalSurface(column(() => false), deep, 20)
+  assert.strictEqual(effectiveSurface(deep), 100)
+  const off = valleyRun({ params: { ...DEFAULT_PARAMS, localSurface: false } })
+  trackLocalSurface(column(() => false), off, 60)
+  assert.strictEqual(effectiveSurface(off), 100)
+})
+
+test('localSurface: with sky open in the valley the bot walks home instead of climbing', () => {
+  const run = valleyRun()
+  trackLocalSurface(column(() => false), run, 60)
+  assert.strictEqual(nextAction(plannerState(run, 60)).skill, 'return_home')
+})
+
+test('localSurface: two go_up not_reached at about the same height stop the climb toward home; the loop ends in return_home and deposit', () => {
+  const run = valleyRun()
+  const trace = []
+  for (let i = 0; i < 6; i++) {
+    const action = nextAction(plannerState(run, 60 + (i % 2), { distHome: i < 4 ? 40 : 2 }))
+    trace.push(action.skill)
+    remember(run, action, action.skill === 'go_up' ? { ok: false, reason: 'not_reached', y: 60 + (i % 2) } : { ok: true, y: 60 })
+  }
+  assert.deepStrictEqual(trace.slice(0, 4), ['go_up', 'go_up', 'return_home', 'return_home'])
+  assert.strictEqual(trace[4], 'deposit')
+  assert.strictEqual(effectiveSurface(run), 61)
+})
+
+test('localSurface: a far-apart or shallow failure does not count, a home-bound success clears it, death resets it', () => {
+  const run = valleyRun()
+  const up = { skill: 'go_up', args: [100] }
+  remember(run, up, { ok: false, reason: 'not_reached', y: 60 })
+  remember(run, up, { ok: false, reason: 'not_reached', y: 70 })
+  assert.strictEqual(effectiveSurface(run), 100)
+  remember(run, up, { ok: false, reason: 'not_reached', y: 70 })
+  assert.strictEqual(effectiveSurface(run), 70)
+  remember(run, { skill: 'go_up', args: [100] }, { ok: true, y: 100 })
+  assert.strictEqual(effectiveSurface(run), 100)
+  const mine = valleyRun()
+  remember(mine, up, { ok: false, reason: 'not_reached', y: -50 })
+  remember(mine, up, { ok: false, reason: 'not_reached', y: -50 })
+  assert.strictEqual(effectiveSurface(mine), 100) // deep underground is not a surface
+  const dead = valleyRun()
+  trackLocalSurface(column(() => false), dead, 60)
+  assert.strictEqual(effectiveSurface({ ...dead, memory: resetLife(dead.memory) }), 100)
+})
+
+test('home stall: two return_home/deposit timeouts in a row pause the trip and arm one chest adoption; other results reset the count', () => {
+  const run = valleyRun()
+  remember(run, { skill: 'return_home', args: [{}] }, { ok: false, reason: 'timeout' })
+  remember(run, { skill: 'deposit', args: [{}] }, { ok: false, reason: 'no_path' })
+  remember(run, { skill: 'return_home', args: [{}] }, { ok: false, reason: 'timeout' })
+  assert.strictEqual(run.memory.homePause ?? 0, 0)
+  remember(run, { skill: 'return_home', args: [{}] }, { ok: false, reason: 'timeout' })
+  assert.deepStrictEqual([run.memory.homePause, run.memory.homeAdopt], [6, true])
+  remember(run, { skill: 'deposit', args: [{}], key: 'adopt_home' }, { ok: true })
+  assert.deepStrictEqual([run.memory.homePause, run.memory.homeAdopt], [0, false])
+  const failed = valleyRun()
+  remember(failed, { skill: 'return_home', args: [{}] }, { ok: false, reason: 'timeout' })
+  remember(failed, { skill: 'return_home', args: [{}] }, { ok: false, reason: 'timeout' })
+  remember(failed, { skill: 'deposit', args: [{}], key: 'adopt_home' }, { ok: false, reason: 'timeout' })
+  assert.deepStrictEqual([failed.memory.homePause, failed.memory.homeAdopt], [5, false])
+  remember(failed, { skill: 'explore', args: [{ mode: 'branch', target: [] }] }, { ok: true })
+  assert.strictEqual(failed.memory.homePause, 4)
+})
+
+test('home stall: paused, the bot adopts a carried chest once, else goes back to normal work; the pause runs out', () => {
+  const run = valleyRun()
+  run.memory.homePause = 6
+  run.memory.homeAdopt = true
+  const carried = plannerState(run, 100, { inv: { iron_pickaxe: 1, diamond: 1, chest: 1 }, pos: { x: 30, y: 100, z: 5 } })
+  assert.deepStrictEqual(nextAction(carried), { skill: 'deposit', args: [{ x: 30, y: 100, z: 5 }], key: 'adopt_home' })
+  run.memory.homeAdopt = false
+  assert.ok(!['deposit', 'return_home'].includes(nextAction(carried).skill))
+  assert.ok(!['deposit', 'return_home'].includes(nextAction(plannerState(run, 100)).skill))
+  run.memory.homePause = 0
+  assert.strictEqual(nextAction(plannerState(run, 100)).skill, 'return_home')
+})
+
+test('post-bank restock: with no pickaxe after a no_tool dig the planner restocks wood at day and night, it does not dig again', () => {
+  const run = valleyRun()
+  run.memory.digFails = 1
+  run.memory.lastDigReason = 'no_tool'
+  for (const isNight of [false, true]) {
+    const action = nextAction(plannerState(run, 100, { inv: {}, isNight, distHome: 0 }))
+    assert.deepStrictEqual([action.skill, action.args[0].mode], ['explore', 'surface'])
+  }
+  const wood = nextAction(plannerState(run, 100, { inv: {}, visible: { log: true }, distHome: 0 }))
+  assert.strictEqual(wood.skill, 'mine')
 })

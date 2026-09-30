@@ -20,17 +20,81 @@ const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock i
 // Run memory: which fields belong to one life (reset on death) and which to the whole run.
 //   per-run:  baseDir, surfaceDir, relocations   (directions keep rotating so a new life does not retry the failed one)
 //   per-trip: restock, nightDigs, optionalFails, fightFails  (also reset by a successful deposit)
-//   per-life: leg, surfaceLeg, shelters, noShelter, drownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
+//   per-life: localSurfaceY, goUpFails, goUpY, homeTimeouts, homePause, homeAdopt, leg, surfaceLeg, shelters, noShelter, drownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
 //             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs   (the respawn is at home: nothing of the old position applies)
 //   hopsSinceDescent deliberately survives a deposit: it counts hops since the last real descent, and any descent zeroes it.
 const lifeMemory = () => ({
   leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
-  relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0, ...tripMemory(),
+  relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0,
+  localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, ...tripMemory(),
 })
 const tripMemory = () => ({ restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0 })
 
 const resetLife = (memory) => ({ ...memory, ...lifeMemory() })
 const resetTrip = (memory) => Object.assign(memory, tripMemory())
+
+// A hill home hides the real ground: open sky at a height below home (valley, water edge) is the surface for this life.
+const MIN_SURFACE_Y = 50 // sea level is 63; lower open sky is a ravine or a pit, not ground to work from
+const SKY_SCAN = 32
+const SEE_THROUGH = /leaves|glass/
+const COLUMNS = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] // the bot's column and its neighbours: a dug shaft is open above but walled
+const MAX_GO_UP_FAILS = 2
+const SAME_HEIGHT = 3
+const MAX_HOME_TIMEOUTS = 2
+const HOME_PAUSE = 6
+
+const effectiveSurface = (run) => (run.params.localSurface ? Math.min(run.surfaceY, run.memory.localSurfaceY ?? Infinity) : run.surfaceY)
+
+function skyOpen(bot) {
+  const feet = bot.entity.position.floored()
+  const clear = ([dx, dz]) => {
+    for (let dy = 2; dy <= SKY_SCAN; dy++) {
+      const block = bot.blockAt(feet.offset(dx, dy, dz))
+      if (block?.boundingBox === 'block' && !SEE_THROUGH.test(block.name)) return false
+    }
+    return true
+  }
+  return COLUMNS.every(clear)
+}
+
+function trackLocalSurface(bot, run, y) {
+  if (!run.params.localSurface || y < MIN_SURFACE_Y || y >= effectiveSurface(run)) return
+  if (skyOpen(bot)) run.memory.localSurfaceY = y
+}
+
+// Two climbs toward home that both ended at about the same height above MIN_SURFACE_Y: that height is as high as this bot gets.
+function trackGoUp(run, action, result) {
+  const { memory } = run
+  if (action.skill !== 'go_up' || action.args[0] !== run.surfaceY) return
+  if (result.ok) {
+    memory.goUpFails = 0
+    memory.localSurfaceY = undefined
+    return
+  }
+  if (result.reason !== 'not_reached' || result.y === undefined) return
+  memory.goUpFails = memory.goUpY !== undefined && Math.abs(result.y - memory.goUpY) <= SAME_HEIGHT ? memory.goUpFails + 1 : 1
+  memory.goUpY = result.y
+  if (run.params.localSurface && memory.goUpFails >= MAX_GO_UP_FAILS && result.y >= MIN_SURFACE_Y) memory.localSurfaceY = result.y
+}
+
+// Home trips that time out twice in a row are not repeated: pause them, and offer one chest adoption.
+function trackHomeTrip(memory, action, result) {
+  if (action.key === 'adopt_home') {
+    memory.homeAdopt = false
+    if (result.ok) memory.homePause = 0
+    else memory.homePause = Math.max(memory.homePause - 1, 0)
+    return
+  }
+  if (action.skill !== 'return_home' && action.skill !== 'deposit') {
+    memory.homePause = Math.max(memory.homePause - 1, 0)
+    return
+  }
+  memory.homeTimeouts = result.reason === 'timeout' ? memory.homeTimeouts + 1 : 0
+  if (memory.homeTimeouts < MAX_HOME_TIMEOUTS) return
+  memory.homeTimeouts = 0
+  memory.homePause = HOME_PAUSE
+  memory.homeAdopt = true
+}
 
 function handleDeath(bot, run) {
   run.deaths++
@@ -78,6 +142,8 @@ const countHostiles = (bot) => Object.values(bot.entities).filter(e => e.type ==
 
 function observe(bot, run) {
   const pos = bot.entity.position
+  const y = Math.floor(pos.y)
+  trackLocalSurface(bot, run, y)
   const near = (name, maxDistance = NEAR) => bot.findBlock({ matching: bot.registry.blocksByName[name].id, maxDistance }) !== null
   const visible = {}
   for (const [key, source] of Object.entries(SOURCES)) visible[key] = findVisible(bot, source.blocks, source.maxAbove ?? null) !== null
@@ -87,8 +153,9 @@ function observe(bot, run) {
     food: bot.food,
     hasFood: bot.inventory.items().some(i => bot.registry.foodsByName[i.name]),
     foodCount: bot.inventory.items().reduce((n, i) => n + (bot.registry.foodsByName[i.name] ? i.count : 0), 0),
-    y: Math.floor(pos.y),
-    surfaceY: run.surfaceY,
+    y,
+    pos: { x: Math.floor(pos.x), y, z: Math.floor(pos.z) },
+    surfaceY: effectiveSurface(run),
     isNight: isNight(bot),
     timeOfDay: bot.time.timeOfDay,
     enclosed: sealed(bot, pos.floored()),
@@ -189,6 +256,8 @@ function trackRestock(memory, action, result) {
 function remember(run, action, result) {
   if (action.restock) trackRestock(run.memory, action, result)
   trackShelter(run.memory, action)
+  trackGoUp(run, action, result)
+  trackHomeTrip(run.memory, action, result)
   trackDigging(run.memory, action, result)
   if (action.skill === 'fight') run.memory.fightFails = result.ok ? 0 : (run.memory.fightFails ?? 0) + 1
   if (action.key === 'crowd_flee') run.memory.crowdFlees = (run.memory.crowdFlees ?? 0) + 1
@@ -321,7 +390,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       const invBefore = inventoryCounts(bot)
       const diamondsBefore = invBefore.diamond ?? 0
       const yBefore = bot.entity?.position.y
-      const result = { ...await runSkill(bot, action.skill, ...action.args), descended: bot.entity?.position.y < yBefore - 1 }
+      const result = { ...await runSkill(bot, action.skill, ...action.args), descended: bot.entity?.position.y < yBefore - 1, y: Math.floor(bot.entity?.position.y) }
       run.decisions++
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
       if (action.skill === 'deposit' && result.ok) startNewTrip(bot, run)
@@ -351,4 +420,4 @@ function stopObjective(bot) {
   return true
 }
 
-module.exports = { chargeLinger, runObjective, relocHazardExempt, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }
+module.exports = { effectiveSurface, trackLocalSurface, chargeLinger, runObjective, relocHazardExempt, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }
