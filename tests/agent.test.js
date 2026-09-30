@@ -1,7 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
 const { nextAction, DEFAULT_PARAMS } = require('../bot/planner.js')
-const { createStuckTracker, stuckTracker, pickLeft, remember, isLost, resetLife, resetTrip, handleDeath } = require('../bot/agent.js')
+const { createStuckTracker, stuckTracker, relocHazardExempt, pickLeft, remember, isLost, resetLife, resetTrip, handleDeath } = require('../bot/agent.js')
 
 const ok = { ok: true }
 const fail = { ok: false, reason: 'timeout' }
@@ -314,14 +314,14 @@ test('handleDeath: memory goes back to a fresh life, only the per-run keys survi
   const bot = { unreachable: new Set(), clearControlStates() {}, pathfinder: { setGoal() {} } }
   const dirty = {
     leg: 3, surfaceLeg: 4, shelters: 1, noShelter: 3, drownings: 2, digFails: 1, lastDigReason: 'blocked', hazards: 1, hazardUp: true,
-    relocFailed: true, homeFails: 2, hopsSinceDescent: 2, burnUps: 2, crowdFlees: 2, restock: { food: { steps: 1, fails: 1 } }, nightDigs: 6, optionalFails: { hunt: 4 }, fightFails: 3,
+    relocFailed: true, homeFails: 2, hopsSinceDescent: 2, burnUps: 2, crowdFlees: 2, relocHazards: 2, restock: { food: { steps: 1, fails: 1 } }, nightDigs: 6, optionalFails: { hunt: 4 }, fightFails: 3,
     baseDir: 2, surfaceDir: 1, relocations: 5,
   }
   const run = { deaths: 0, memory: dirty }
   handleDeath(bot, run)
   assert.deepStrictEqual(run.memory, {
     leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
-    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
+    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
     baseDir: 2, surfaceDir: 1, relocations: 5,
   })
 })
@@ -357,4 +357,38 @@ test('remember: a crowd_flee is counted per life', () => {
   remember(run, { skill: 'flee', args: [], key: 'crowd_flee' }, { ok: true })
   assert.strictEqual(run.memory.crowdFlees, 1)
   assert.strictEqual(resetLife(run.memory).crowdFlees, 0)
+})
+
+test('relocation hazard hops are exempt from the stuck tracker a bounded number of times per life', () => {
+  const hop = { skill: 'explore', args: [{ mode: 'branch' }], relocate: true }
+  const run = { memory: { optionalFails: {}, relocFailed: false, relocHazards: 0 } }
+  let exempt = 0
+  for (let i = 0; i < 10; i++) {
+    remember(run, hop, { ok: false, reason: 'hazard' })
+    if (relocHazardExempt(run.memory, hop, { ok: false, reason: 'hazard' })) exempt++
+  }
+  assert.strictEqual(exempt, 2)
+  assert.strictEqual(relocHazardExempt(run.memory, { skill: 'dig_down', args: [] }, { ok: false, reason: 'hazard' }), false)
+  assert.strictEqual(resetLife(run.memory).relocHazards, 0)
+})
+
+test('planner+remember loop: blocked dig_down then hazard hops climb and hop again, and the stuck tracker never trips on the exempt hops', () => {
+  const { nextAction, DEFAULT_PARAMS } = require('../bot/planner.js')
+  const track = createStuckTracker()
+  const run = { memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: {}, relocations: 0, hopsSinceDescent: 0, digFails: 0, relocFailed: false, relocHazards: 0 } }
+  let y = 70
+  let stuck = false
+  const log = []
+  for (let i = 0; i < 12 && !stuck; i++) {
+    const s = { inv: { iron_pickaxe: 1, cobblestone: 40, stick: 8 }, health: 20, food: 20, hasFood: true, y, surfaceY: 70, isNight: false, hostileNear: false, canShelter: true, animalNear: false,
+      visible: {}, tableNear: false, furnaceNear: false, freeSlots: 30, pickLeft: 200, foodCount: 8, home: { x: 0, y: 70, z: 0 }, distHome: 0, msLeft: 3600000,
+      objective: { item: 'diamond', count: 'max' }, deposited: 0, params: DEFAULT_PARAMS, memory: run.memory }
+    const a = nextAction(s)
+    log.push(a.key ?? a.skill)
+    const result = a.skill === 'dig_down' ? { ok: false, reason: 'blocked' } : a.skill === 'go_up' ? (y = 70, { ok: true }) : a.relocate && y === 70 ? { ok: true, reason: 'not_found' } : { ok: false, reason: 'hazard' }
+    if (a.skill === 'dig_down') y = 60
+    remember(run, a, result)
+    if (!relocHazardExempt(run.memory, a, result)) stuck = track(result, { pos: { x: 0, y, z: 0 }, inv: 'a' })
+  }
+  assert.ok(!stuck, log.join(','))
 })
