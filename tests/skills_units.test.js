@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -1114,3 +1114,21 @@ test('fight: a mob that is never killed ends not_killed at the time limit and th
   const result = await run(bot, () => SKILLS.fight(bot, 30), false)
   assert.strictEqual(result.reason, 'not_killed')
 })
+
+test('go_up: a dig above the head that is aborted counts as one failed pillar step, not the end of the climb', async () => {
+  const { bot } = pillarBot()
+  const dug = new Set()
+  const base = bot.blockAt
+  let rejects = 1
+  bot.blockAt = (p) => (p.x === 0 && p.z === 0 && p.y === 12 && !dug.has('12') ? { ...base(p), name: 'dirt', boundingBox: 'block' } : base(p))
+  bot.pathfinder.bestHarvestTool = () => null
+  bot.digTime = () => 1
+  bot.dig = async () => {
+    if (rejects-- > 0) throw new Error('Digging aborted')
+    dug.add('12')
+  }
+  const result = await run(bot, () => SKILLS.go_up(bot, 13), false)
+  assert.strictEqual(result.ok, true, result.detail)
+  assert.strictEqual(Math.floor(bot.entity.position.y), 13)
+})
+

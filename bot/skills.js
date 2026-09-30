@@ -919,6 +919,16 @@ async function clearAbove(bot, feet) {
   return true
 }
 
+// clearAbove where a dig that aborts or fails is a lost step (false); null when the way up is impossible.
+async function clearedAbove(bot, feet) {
+  try {
+    return await clearAbove(bot, feet) ? true : null
+  } catch (e) {
+    checkCancelled(bot)
+    return false
+  }
+}
+
 // Straight up on carried blocks; gives up after PILLAR_FAILS steps in a row without progress.
 async function pillarUp(bot, targetY) {
   let fails = 0
@@ -927,7 +937,12 @@ async function pillarUp(bot, targetY) {
     const name = PLACEABLE.find(n => findItem(bot, n))
     if (!name) return
     const feet = bot.entity.position.floored()
-    if (!await clearAbove(bot, feet)) return
+    const cleared = await clearedAbove(bot, feet)
+    if (cleared === null) return
+    if (!cleared) {
+      fails++
+      continue
+    }
     await guard(bot.look(bot.entity.yaw, -Math.PI / 2, true))
     fails = await pillarStep(bot, feet, name) ? 0 : fails + 1
   }
@@ -1341,4 +1356,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS }
