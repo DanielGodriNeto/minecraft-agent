@@ -226,8 +226,11 @@ function trackDigging(memory, action, result) {
 
 // A hazard met on a relocation hop right after a blocked dig_down is not a stuck bot: the planner climbs and hops again
 // from the surface (reloc_up). Only the first MAX_RELOC_HAZARDS per life are exempt, so it cannot loop.
-function relocHazardExempt(memory, action, result) {
-  return Boolean(action.relocate) && result.reason === 'hazard' && (memory.relocHazards ?? 0) <= MAX_RELOC_HAZARDS
+// With params.hazardGrace, an explore hazard is also exempt while a hazard_up climb is pending (planner runs it next).
+function relocHazardExempt(memory, action, result, params) {
+  if (result.reason !== 'hazard') return false
+  if (params?.hazardGrace && action.skill === 'explore' && memory.hazardUp) return true
+  return Boolean(action.relocate) && (memory.relocHazards ?? 0) <= MAX_RELOC_HAZARDS
 }
 
 // A branch tunnel that met water, lava or rock it cannot dig (bedrock) is abandoned: head another way from scratch, and after two in a row climb first.
@@ -398,7 +401,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       afterSkill(run, action, result, deathsBefore)
       chargeLinger(run, state, Date.now() - startedAt)
       resetTrail(bot, run.home)
-      if (!run.recentlyAttacked && !run.recentlyBurned && !IDLE_EXEMPT.has(action.skill) && !relocHazardExempt(run.memory, action, result) && isStuck(result, action, invBefore)) return finish(run, 'stuck')
+      if (!run.recentlyAttacked && !run.recentlyBurned && !IDLE_EXEMPT.has(action.skill) && !relocHazardExempt(run.memory, action, result, state.params) && isStuck(result, action, invBefore)) return finish(run, 'stuck')
     }
   } finally {
     bot.off('death', onDeath)

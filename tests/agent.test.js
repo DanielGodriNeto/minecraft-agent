@@ -372,6 +372,20 @@ test('relocation hazard hops are exempt from the stuck tracker a bounded number 
   assert.strictEqual(resetLife(run.memory).relocHazards, 0)
 })
 
+test('hazardGrace: off by default; on, an explore hazard is exempt from stuck only while hazardUp is pending', () => {
+  const { DEFAULT_PARAMS } = require('../bot/planner.js')
+  if (process.env.HAZARDGRACE !== '1') assert.strictEqual(DEFAULT_PARAMS.hazardGrace, false)
+  const leg = { skill: 'explore', args: [{ mode: 'branch' }] }
+  const hazard = { ok: false, reason: 'hazard' }
+  const pending = { hazardUp: true }
+  assert.strictEqual(relocHazardExempt(pending, leg, hazard, { hazardGrace: false }), false)
+  assert.strictEqual(relocHazardExempt(pending, leg, hazard), false)
+  assert.strictEqual(relocHazardExempt(pending, leg, hazard, { hazardGrace: true }), true)
+  assert.strictEqual(relocHazardExempt({ hazardUp: false }, leg, hazard, { hazardGrace: true }), false)
+  assert.strictEqual(relocHazardExempt(pending, leg, { ok: false, reason: 'not_found' }, { hazardGrace: true }), false)
+  assert.strictEqual(relocHazardExempt(pending, { skill: 'dig_down', args: [] }, hazard, { hazardGrace: true }), false)
+})
+
 test('planner+remember loop: blocked dig_down then hazard hops climb and hop again, and the stuck tracker never trips on the exempt hops', () => {
   const { nextAction, DEFAULT_PARAMS } = require('../bot/planner.js')
   const track = createStuckTracker()
