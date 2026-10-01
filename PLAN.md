@@ -239,7 +239,7 @@ Gate threshold was ≥ 50% (needs lower CI > ~45%): passes.
 | exp3 | crowdFlee on 63% vs off 46% | |
 | exp4 | bundle nightAscent+branchRelocate+goUpLoop on 58% vs off 46% | deaths/h 0.91 vs 2.34; death-limit endings 0 vs 8 |
 | exp5 | localSurface on 54% vs off 67% | no gain; now opt-in (`LOCALSURFACE=1`) |
-| exp6 | pickFirst (`PICKFIRST=1`) | pending A/B |
+| exp6 | pickFirst (`PICKFIRST=1`) | paired slots 200-247, 48 runs/arm: banked 34 vs 34, diamonds 191 vs 192, stuck 19 vs 20 -> no effect, left off |
 
 **Changed since `8a22930`:** shaft descent, per-life counter resets, per-run cancel token, climb loop, crowd flee,
 timed ascent, barren relocation, process-isolated bots with tick-rate metrics (5-minute smoke test: p10 ticks/s

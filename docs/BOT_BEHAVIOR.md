@@ -411,4 +411,4 @@ What it is (from the earlier diff):
 
 ## pickFirst (switch `PICKFIRST=1`, off by default)
 
-A bot holding no pickaxe at all obtains or crafts one before any home trip, because `go_up` and dig need a pickaxe (48 of 84 stuck runs ended pickaxe-less after banking). Off, the home trip runs first. Result: pending A/B.
+A bot holding no pickaxe at all obtains or crafts one before any home trip, because `go_up` and dig need a pickaxe (48 of 84 stuck runs ended pickaxe-less after banking). Off, the home trip runs first. Result: paired A/B on slots 200-247, 48 runs/arm, banked 34 vs 34, diamonds 191 vs 192, stuck 19 vs 20 -> no effect, left off.
