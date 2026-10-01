@@ -583,3 +583,13 @@ test('lingerUnderground: needs a carried diamond; lingerHeldReturn only when it 
   const spent = { ...withDiamond, memory: { ...withDiamond.memory, ascentDelayMs: MAX_ASCENT_DELAY_MS } }
   assert.strictEqual(lingerUnderground(spent), false)
 })
+
+test('pickFirst: off by default (unless PICKFIRST=1); on, a pickaxe-less bot with inputs crafts before the home trip', () => {
+  if (process.env.PICKFIRST !== '1') assert.strictEqual(DEFAULT_PARAMS.pickFirst, false)
+  const bare = { inv: { diamond: 1, oak_planks: 3, stick: 2 }, tableNear: true, y: -58, distHome: 200 }
+  assert.strictEqual(nextAction(state({ ...bare, params: { ...DEFAULT_PARAMS, pickFirst: false } })).skill, 'go_up')
+  const act = nextAction(state({ ...bare, params: { ...DEFAULT_PARAMS, pickFirst: true } }))
+  assert.deepStrictEqual([act.skill, act.args[0]], ['craft', 'wooden_pickaxe'])
+  const armed = nextAction(state({ ...bare, inv: { ...bare.inv, iron_pickaxe: 1 }, params: { ...DEFAULT_PARAMS, pickFirst: true } }))
+  assert.strictEqual(armed.skill, 'go_up') // with a pickaxe the home trip still goes first
+})
