@@ -408,3 +408,7 @@ What it is (from the earlier diff):
   then stone, then food), each item capped at 12 steps and 2 failures per trip;
 - the stone-junk toss threshold moves from 16 to the reserve's 32 cobblestone;
 - the purpose was to give the recovery skills (table, pickaxe, pillar, shelter, `adoptChest`) their materials.
+
+## pickFirst (switch `PICKFIRST=1`, off by default)
+
+A bot holding no pickaxe at all obtains or crafts one before any home trip, because `go_up` and dig need a pickaxe (48 of 84 stuck runs ended pickaxe-less after banking). Off, the home trip runs first. Result: pending A/B.
