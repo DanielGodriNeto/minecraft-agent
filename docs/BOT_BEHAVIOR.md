@@ -1,7 +1,7 @@
 # Diamond bot: what it does, what it values, and why
 
 Written from the code at commit `44ea7b3` (HEAD). References are `file:line` at that commit.
-Uncommitted work in the tree (the "reserve kit") is only described in section 8.
+The "reserve kit" (section 8) is committed and measured: no effect. Newer results (gate, experiments) are in PLAN.md "Phase 2 results"; the code described below predates `402c306`.
 Numbers in section 6 marked "(owner analysis)" were supplied by the project owner and were not recomputed here.
 
 Files: `bot/planner.js` (P), `bot/agent.js` (A), `bot/skills.js` (S), `bot/eval.js` (E),
@@ -33,7 +33,7 @@ disconnect. Difficulty is read from `server/diamonds.properties`; all logged run
 | stuck rate | share of runs whose end reason is `stuck` |
 
 **Slot sets** (PLAN.md): 0-99 held-out gate (run once per phase), 100-199 dev (all tuning), 200-599 training
-data for the later ML phases. **Phase 2 gate: >= 50% success on slots 0-99.** Not yet run.
+data for the later ML phases. **Phase 2 gate: >= 50% success on slots 0-99.** Passed: 71/100 (CI 62-80%) at `402c306`.
 Per-slot randomness is deterministic: `jitterParams(mulberry32(slot.id))` (E:115, E:126).
 
 Time-of-day: `time set 0` at batch start (E:157), so every run begins at dawn; night is ticks 13000-23000
@@ -335,7 +335,7 @@ Non-jittered constants that matter more: `MAX_DIG_FAILS` 1, `HAZARD_CLIMB` 4, `R
 | dev11 | 100-123 | 24 | 33% (8/24) | regression after the stuck fixes; cause: relocation-hop bug, fixed in `44ea7b3` |
 
 Early dev batches (dev1-8, slots 100-119, 10 bots) were 0-30% and are the record of the bugs fixed in the git log.
-The 0-99 gate set has not been run. A later 4-run partial batch in the log (slots 106-115, all ended `stuck` after
+The 0-99 gate set was later run once: 71/100 (PLAN.md). A later 4-run partial batch in the log (slots 106-115, all ended `stuck` after
 10-15 min, after the `44ea7b3` timestamp) has no tag saying what it tested; treat it as unexplained until someone
 looks at it. `44ea7b3` is therefore **not yet confirmed** to have cured dev11.
 
@@ -398,14 +398,13 @@ bug. Top failure reasons overall: `go_up:drowning` 2333, `explore:not_found` 230
 
 ---
 
-## 8. In progress, not yet evaluated: the "reserve kit"
+## 8. The "reserve kit" (committed, measured: no effect)
 
-Uncommitted edits in `bot/planner.js`, `bot/agent.js` and the tests (not in HEAD, and not in any eval number above).
-From the diff as it stood when this was written; it may change:
+Paired experiment exp1: reserve kit on 46% vs off 50% success, so no effect; it sits behind the `RESERVE` switch.
+What it is (from the earlier diff):
 - a chest recipe (8 planks) and `RESERVE = { planks: 16, chest: 1, stone: 32, food: 6 }`;
-- a new `reserveStep`, placed after "mine a visible diamond" and before the tech tree: once the iron pickaxe is held, on the
+- a `reserveStep`, placed after "mine a visible diamond" and before the tech tree: once the iron pickaxe is held, on the
   surface, with no hostile, not night, and >= 8 min left, top the reserve up from what is *in view* (wood, then the chest,
-  then stone, then food), each item capped at 12 steps and 2 failures per trip so it cannot become a loop;
+  then stone, then food), each item capped at 12 steps and 2 failures per trip;
 - the stone-junk toss threshold moves from 16 to the reserve's 32 cobblestone;
-- the purpose is to give the recovery skills (table, pickaxe, pillar, shelter, `adoptChest`) their materials so a
-  mid-run problem does not end the run. Whether it helps or just burns surface time is unmeasured.
+- the purpose was to give the recovery skills (table, pickaxe, pillar, shelter, `adoptChest`) their materials.

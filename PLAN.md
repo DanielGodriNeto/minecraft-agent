@@ -190,20 +190,21 @@ Descope rule: if week 5 ends with failures, ship `mine`/`dig_down`/`deposit` fir
       (estimate: ~5–10 GB per copy — measure after generation). **Measured: 14 GB per copy**, 310 GB free.
       Slots in `bot/slots.json` (seed 20260928, land only, 1024-block grid); `node bot/pregen.js`,
       `node bot/eval.js snapshot`. Fresh spawn (restore + start) ≈ 40 s.
-- [ ] 2.2 Fixed-plan planner: tech tree → iron pickaxe → dig to y≈-58 → branch-mine → deposit → repeat.
+- [x] 2.2 Fixed-plan planner: tech tree → iron pickaxe → dig to y≈-58 → branch-mine → deposit → repeat.
       Planner parameters (branch y, spacing, return thresholds) get small random jitter per run
       so recorded data covers more states.
-- [ ] 2.3 `max` loop: return and deposit when inventory full, pickaxe low, food low, or night + surface
+- [x] 2.3 `max` loop: return and deposit when inventory full, pickaxe low, food low, or night + surface
 - [x] 2.4 **Capacity benchmark (before any eval):** raise bot count until server TPS < 19 or
       CPU > 85%; set N to the last good value; rewrite the Budget table with measured N,
       run length and restore overhead.
       **Measured** (`node bot/bench.js 4,8,12,16 8`): N=4/8/12 pass (min TPS 20/19.8/19.2, CPU median
       7/11/13%), N=16 fails (min TPS 17.6). **N = 12**; the limit is server TPS, not CPU.
-- [ ] 2.5 Eval harness at that N: fresh spawn → runs on a slot set → success rate,
+- [x] 2.5 Eval harness at that N: fresh spawn → runs on a slot set → success rate,
       diamonds/hour, deaths/hour, stuck rate, 95% CI. Tune against **dev slots 100–199**;
       run the held-out slots 0–99 once for the gate
       `node eval.js <first> <last> 12 60 K` runs K Paper servers in parallel (server/run-<n>/, port 25565+n,
       6 GB heap each, K <= 4); each needs its own ~14 GB world copy + 10 GB margin free (checked up front).
+      **Gate run done** (results below).
 
 **Tests**
 - [x] `test_planner_order` — never attempts a craft whose inputs it can't have
@@ -213,8 +214,45 @@ Descope rule: if week 5 ends with failures, ship `mine`/`dig_down`/`deposit` fir
       through the running server and they match the pristine snapshot
 
 **Gate:** ≥ 50% success on the 100 held-out runs (slots 0–99). This caps the ML phases — fix skills until it passes.
+**Passed** (commit `402c306`, see Phase 2 results).
 **At this point the bot is usable** — Phase 5 hardening can be pulled forward if you want to use it
 on a real server before the ML work.
+
+#### Phase 2 results (commit `402c306`, difficulty easy, 60 min runs, 2 server instances, BOTS_PER_PROC=3)
+| Set | Slots | Success | Diamonds banked (per h) | Deaths/h | Outcomes |
+|---|---|---|---|---|---|
+| **Gate (held-out)** | 0–99, one run each | **71/100 = 71%** (95% CI 62–80%) | 424 (5.52/h) | 0.98 | 46 timeout / 46 stuck / 8 death-limit; 0 invalid runs |
+| Dev confirmation | 100–199 | 77/100 = 77% (CI 68–85%) | 450 (5.41/h) | 1.02 | 49 timeout / 38 stuck / 13 deaths |
+
+Gate threshold was ≥ 50% (needs lower CI > ~45%): passes.
+
+**Eval history** (success rate, N runs):
+| Batch | Success (N) | What changed / compared |
+|---|---|---|
+| dev8 | 25% (24) | |
+| dev9 | 58% (24) | |
+| dev10 | 59% (76) | |
+| dev11 | 33% (24) | relocation-hop regression |
+| dev13 | 25% (24) | |
+| exp1 | reserve kit on 46% vs off 50% | no effect |
+| exp2 | shaft on 63% vs off 50% | diamonds/h 2.71 vs 1.10 |
+| exp3 | crowdFlee on 63% vs off 46% | |
+| exp4 | bundle nightAscent+branchRelocate+goUpLoop on 58% vs off 46% | deaths/h 0.91 vs 2.34; death-limit endings 0 vs 8 |
+| exp5 | localSurface on 54% vs off 67% | no gain; now opt-in (`LOCALSURFACE=1`) |
+
+**Changed since `8a22930`:** shaft descent, per-life counter resets, per-run cancel token, climb loop, crowd flee,
+timed ascent, barren relocation, process-isolated bots with tick-rate metrics (5-minute smoke test: p10 ticks/s
+14.4 -> 19.9, event-loop p99 440 -> 125 ms).
+
+**Paired A/B experiments:** behaviour changes sit behind env switches `SHAFT NIGHTSURF FOODGATE FIGHTGUARD RESERVE
+CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE`. Run the same slots with `ARMS` (list of arms) or one arm
+via `ARM`; `BOTS_PER_PROC` sets bots per process (default 3). One change per experiment.
+
+**Caveats:** results hold for this world seed and difficulty easy; dev slots were tuned on; stuck is still ~40–46% of
+runs (many already banked a diamond). Open issues: unknown cause of the go_up valley/hill loop (localSurface did not
+fix it), `craft no_tool` after banking is unexplained, water-spawn slots, and 24-run experiments detect only ~25-point effects.
+
+**Next: Phase 3 (pending, not started).**
 
 ### Phase 3 — Your model: behavior cloning (weeks 9–11)
 - [ ] 3.1 gymnasium Env: step = run one skill; obs, action mask, reward as above
