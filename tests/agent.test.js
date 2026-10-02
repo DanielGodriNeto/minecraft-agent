@@ -352,6 +352,18 @@ test('switches: every ARM key overrides the param the code reads, and 0 disables
   }
 })
 
+test('opt-in switches: off by default, and ARMS key=1 / key=0 override the param', () => {
+  const path = require('node:path')
+  const { parseArm } = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))('./eval.js')
+  const { jitterParams } = require('../bot/agent.js')
+  const { normalizeParams } = require('../bot/planner.js')
+  for (const [k, env] of [['watchdog', 'WATCHDOG']]) {
+    if (process.env[env] !== '1') assert.strictEqual(DEFAULT_PARAMS[k], false, k)
+    assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=1`) })[k], true, k)
+    assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=0`) })[k], false, k)
+  }
+})
+
 test('remember: a crowd_flee is counted per life', () => {
   const run = { memory: { optionalFails: {} } }
   remember(run, { skill: 'flee', args: [], key: 'crowd_flee' }, { ok: true })

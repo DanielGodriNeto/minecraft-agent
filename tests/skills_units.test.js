@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS, skillCapFor } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -552,6 +552,27 @@ test('go_up loop: switched off (goUpLoop=false) it is the single-pass climb with
   const result = await run(bot, () => SKILLS.go_up(bot, 13), false)
   assert.strictEqual(result.ok, true)
   assert.strictEqual(result.trailRounds, undefined)
+})
+
+test('stalled: needs a full window of history and under one block of movement inside it', () => {
+  const s = (t, x) => ({ t, x, y: 0, z: 0 })
+  assert.strictEqual(stalled([]), false)
+  assert.strictEqual(stalled([s(0, 0), s(4000, 0)]), false) // under 5 s of history
+  assert.strictEqual(stalled([s(0, 0), s(2500, 0.3), s(5000, 0.5)]), true)
+  assert.strictEqual(stalled([s(0, 0), s(2500, 0.5), s(5000, 1.2)]), false) // 0.7 from the last inside the window, but 1.2 at the start
+  assert.strictEqual(stalled([s(-1000, 0), s(2500, 3), s(5000, 3.4)]), true) // moved before the window, still now
+  assert.strictEqual(stalled([s(0, 0), s(5000, 2)]), false)
+})
+
+test('watchdog: a path goal that never moves the bot fails as no_progress, blacklists the target and cancels the skill', { timeout: 15000 }, async () => {
+  const { goals } = require('../bot/node_modules/mineflayer-pathfinder')
+  const { bot } = pillarBot()
+  bot.pathfinder.goto = () => new Promise(() => {})
+  bot.objectiveRun = { params: { watchdog: true } }
+  bot.unreachable = new Set()
+  const result = await run(bot, () => goto(bot, new goals.GoalBlock(3, 4, 5), 30000), false)
+  assert.strictEqual(result.reason, 'no_progress')
+  assert.ok(bot.unreachable.has(new Vec3(3, 4, 5).toString()))
 })
 
 test('skillCapFor: only a go_up climbing more than 60 blocks gets the long cap, still bounded by the deadline', () => {

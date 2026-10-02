@@ -241,13 +241,14 @@ Gate threshold was ≥ 50% (needs lower CI > ~45%): passes.
 | exp5 | localSurface on 54% vs off 67% | no gain; now opt-in (`LOCALSURFACE=1`) |
 | exp6 | pickFirst (`PICKFIRST=1`) | paired slots 200-247, 48 runs/arm: banked 34 vs 34, diamonds 191 vs 192, stuck 19 vs 20 -> no effect, left off |
 | exp7 | hazardGrace (`HAZARDGRACE=1`) | pending A/B |
+| exp8 | watchdog (`WATCHDOG=1`) | pending A/B |
 
 **Changed since `8a22930`:** shaft descent, per-life counter resets, per-run cancel token, climb loop, crowd flee,
 timed ascent, barren relocation, process-isolated bots with tick-rate metrics (5-minute smoke test: p10 ticks/s
 14.4 -> 19.9, event-loop p99 440 -> 125 ms).
 
 **Paired A/B experiments:** behaviour changes sit behind env switches `SHAFT NIGHTSURF FOODGATE FIGHTGUARD RESERVE
-CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST HAZARDGRACE`. Run the same slots with `ARMS` (list of arms) or one arm
+CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST HAZARDGRACE WATCHDOG`. Run the same slots with `ARMS` (list of arms) or one arm
 via `ARM`; `BOTS_PER_PROC` sets bots per process (default 3). One change per experiment.
 
 **Caveats:** results hold for this world seed and difficulty easy; dev slots were tuned on; stuck is still ~40–46% of
