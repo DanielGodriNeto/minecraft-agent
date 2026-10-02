@@ -357,7 +357,7 @@ test('opt-in switches: off by default, and ARMS key=1 / key=0 override the param
   const { parseArm } = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))('./eval.js')
   const { jitterParams } = require('../bot/agent.js')
   const { normalizeParams } = require('../bot/planner.js')
-  for (const [k, env] of [['watchdog', 'WATCHDOG'], ['recovery', 'RECOVERY']]) {
+  for (const [k, env] of [['watchdog', 'WATCHDOG'], ['recovery', 'RECOVERY'], ['traceLog', 'TRACELOG']]) {
     if (process.env[env] !== '1') assert.strictEqual(DEFAULT_PARAMS[k], false, k)
     assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=1`) })[k], true, k)
     assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=0`) })[k], false, k)
@@ -402,6 +402,40 @@ test('tryRecovery: off by default; on, runs the routine once per signature, note
   on.memory = resetLife(on.memory)
   on.memory.failSigs['go_up:not_reached'] = 1
   assert.strictEqual(await tryRecovery(bot, on, action, fail, exec), true)
+})
+
+test('traceLine: one flat JSON-able record per planner decision', () => {
+  const { traceLine } = require('../bot/agent.js')
+  const state = {
+    pos: { x: 1, y: -58, z: 3 }, y: -58, health: 17, food: 12,
+    inv: { wooden_pickaxe: 1, iron_pickaxe: 1, stick: 3, cobblestone: 5, cobbled_deepslate: 2, oak_log: 2, birch_planks: 4, diamond: 2, dirt: 9 },
+    memory: { hazardUp: true, digFails: 1, goUpFails: 2, hazards: 1, homeTimeouts: 0, failSigs: { 'explore:hazard': 2 } },
+  }
+  const action = { skill: 'explore', args: [{ mode: 'branch', dir: 1 }], key: 'branch_relocate' }
+  const run = { deaths: 1, lastFailure: { skill: 'go_up', reason: 'not_reached' } }
+  const line = traceLine(state, action, run, 1234)
+  assert.deepStrictEqual(line, {
+    ts: 1234, skill: 'explore', key: 'branch_relocate', args: [{ mode: 'branch', dir: 1 }], pos: [1, -58, 3], y: -58, health: 17, food: 12,
+    inv: { pickaxes: { wooden: 1, stone: 0, iron: 1, diamond: 0 }, stick: 3, stone: 7, wood: 6, diamond: 2 },
+    deaths: 1, hazardUp: true, stuck: { digFails: 1, goUpFails: 2, hazards: 1, homeTimeouts: 0, failSigs: { 'explore:hazard': 2 } },
+    lastFailure: { skill: 'go_up', reason: 'not_reached' },
+  })
+  assert.strictEqual(JSON.parse(JSON.stringify(line)).skill, 'explore')
+  const bare = traceLine({ ...state, memory: {} }, { skill: 'eat', args: [] }, { deaths: 0 }, 5)
+  assert.deepStrictEqual([bare.key, bare.hazardUp, bare.lastFailure, bare.stuck.failSigs], [undefined, false, null, {}])
+})
+
+test('trace-summary: aggregates the last traces of stuck runs into signatures, skills and depth', () => {
+  const { summarize } = require('../bot/tools/trace-summary.js')
+  const t = (skill, y, lastFailure = null, hazardUp = false) => ({ skill, y, hazardUp, lastFailure })
+  const runs = [
+    [t('mine', 60), t('go_up', -50), t('go_up', -50, { skill: 'go_up', reason: 'not_reached' }, true)],
+    [t('explore', -58, { skill: 'explore', reason: 'hazard' }), t('go_up', -50, { skill: 'go_up', reason: 'not_reached' })],
+  ]
+  assert.deepStrictEqual(summarize(runs), {
+    runs: 2, lastFailure: { 'go_up:not_reached': 2 }, skills: { mine: 1, go_up: 3, explore: 1 }, hazardUp: 1, medianY: -50,
+  })
+  assert.deepStrictEqual(summarize([]), { runs: 0, lastFailure: {}, skills: {}, hazardUp: 0, medianY: null })
 })
 
 test('remember: failure signatures are counted per life', () => {

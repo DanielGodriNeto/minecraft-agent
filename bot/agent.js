@@ -1,6 +1,8 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
 const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, clearUnreachable, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
-const { nextAction, lingerHeldReturn, recoveryFor, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
+const fs = require('node:fs')
+const path = require('node:path')
+const { nextAction, lingerHeldReturn, recoveryFor, GROUPS, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
 
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
@@ -333,6 +335,37 @@ function afterSkill(run, action, result, deathsBefore) {
   if (!died) remember(run, action, result)
   run.recentlyAttacked = !died && result.reason === 'attacked'
   run.recentlyBurned = !died && result.reason === 'burning'
+  if (!result.ok) run.lastFailure = { skill: action.skill, reason: result.reason }
+}
+
+// One flat record per planner decision (params.traceLog). Pure: state is observe()'s result.
+const TIERS = ['wooden', 'stone', 'iron', 'diamond']
+const sumOf = (inv, names) => names.reduce((n, name) => n + (inv[name] ?? 0), 0)
+function traceLine(state, action, run, ts = Date.now()) {
+  const { inv, memory: m } = state
+  return {
+    ts, skill: action.skill, key: action.key, args: action.args, pos: [state.pos.x, state.pos.y, state.pos.z], y: state.y, health: state.health, food: state.food,
+    inv: { pickaxes: Object.fromEntries(TIERS.map(t => [t, inv[`${t}_pickaxe`] ?? 0])), stick: inv.stick ?? 0, stone: sumOf(inv, GROUPS.stone), wood: sumOf(inv, [...GROUPS.log, ...GROUPS.planks]), diamond: inv.diamond ?? 0 },
+    deaths: run.deaths, hazardUp: Boolean(m.hazardUp),
+    stuck: { digFails: m.digFails ?? 0, goUpFails: m.goUpFails ?? 0, hazards: m.hazards ?? 0, homeTimeouts: m.homeTimeouts ?? 0, failSigs: m.failSigs ?? {} },
+    lastFailure: run.lastFailure ?? null,
+  }
+}
+
+// Append stream, opened on first use and closed with the run; no sync fs per decision.
+function openTrace(bot) {
+  let stream
+  return {
+    write(line) {
+      if (!stream) {
+        const dir = path.join(__dirname, '..', 'logs')
+        fs.mkdirSync(dir, { recursive: true })
+        stream = fs.createWriteStream(path.join(dir, `trace-${bot.runTag ?? bot.username ?? 'run'}.jsonl`), { flags: 'a' })
+      }
+      stream.write(JSON.stringify(line) + '\n')
+    },
+    end: () => stream?.end(),
+  }
 }
 
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
@@ -401,6 +434,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
   bot.on('death', onDeath)
   bot.on('spawn', onSpawn)
   let isStuck = stuckTracker(bot)
+  const trace = run.params.traceLog ? openTrace(bot) : null
   try {
     for (;;) {
       if (run.stopped) return finish(run, 'stopped')
@@ -416,6 +450,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       const action = nextAction(state)
       const startedAt = Date.now()
       if (!action) return finish(run, 'done')
+      trace?.write(traceLine(state, action, run))
       const deathsBefore = run.deaths
       const invBefore = inventoryCounts(bot)
       const diamondsBefore = invBefore.diamond ?? 0
@@ -435,6 +470,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
   } finally {
     bot.off('death', onDeath)
     bot.off('spawn', onSpawn)
+    trace?.end()
     bot.runDeadline = null
     if (bot.objectiveRun === run) bot.objectiveRun = null
   }
@@ -452,4 +488,4 @@ function stopObjective(bot) {
   return true
 }
 
-module.exports = { effectiveSurface, trackLocalSurface, chargeLinger, runObjective, relocHazardExempt, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, tryRecovery, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }
+module.exports = { effectiveSurface, trackLocalSurface, chargeLinger, runObjective, relocHazardExempt, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, tryRecovery, traceLine, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }
