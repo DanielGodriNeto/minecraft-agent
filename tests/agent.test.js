@@ -438,6 +438,26 @@ test('trace-summary: aggregates the last traces of stuck runs into signatures, s
   assert.deepStrictEqual(summarize([]), { runs: 0, lastFailure: {}, skills: {}, hazardUp: 0, medianY: null })
 })
 
+test('MINEY: the env override fixes branchY, the other jittered params still draw as before', () => {
+  const { jitterParams } = require('../bot/agent.js')
+  const saved = process.env.MINEY
+  try {
+    delete process.env.MINEY
+    const drawn = jitterParams(() => 0)
+    assert.strictEqual(drawn.branchY, -59)
+    process.env.MINEY = '-53'
+    const fixed = jitterParams(() => 0)
+    assert.strictEqual(fixed.branchY, -53)
+    assert.deepStrictEqual({ ...fixed, branchY: 0 }, { ...drawn, branchY: 0 })
+    assert.strictEqual(jitterParams(() => 0.99).branchY, -53)
+    process.env.MINEY = 'abc'
+    assert.strictEqual(jitterParams(() => 0.99).branchY, -56) // not a number: ignored
+  } finally {
+    if (saved === undefined) delete process.env.MINEY
+    else process.env.MINEY = saved
+  }
+})
+
 test('remember: failure signatures are counted per life', () => {
   const run = { memory: { optionalFails: {}, failSigs: {} } }
   remember(run, { skill: 'explore', args: [{ mode: 'surface' }] }, { ok: false, reason: 'hazard' })

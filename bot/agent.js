@@ -113,11 +113,14 @@ function startNewTrip(bot, run) {
 }
 
 // Small per-run jitter so recorded runs cover more states (plan 2.2).
+// MINEY=<y> fixes the branch level for an A/B arm; branchY is still drawn so the other params keep the same random stream.
+const fixedBranchY = () => (Number.isFinite(Number.parseFloat(process.env.MINEY)) ? Number.parseFloat(process.env.MINEY) : undefined)
 function jitterParams(rand = Math.random) {
   const int = (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1))
+  const drawnBranchY = int(-59, -56)
   return {
     ...DEFAULT_PARAMS,
-    branchY: int(-59, -56),
+    branchY: fixedBranchY() ?? drawnBranchY,
     spacing: int(2, 4),
     tunnelLength: int(24, 40),
     returnAt: int(3, 8),

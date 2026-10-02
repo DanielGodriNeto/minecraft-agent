@@ -428,3 +428,7 @@ Before the stuck tracker ends a run, the failing action's signature (`skill:reas
 ## traceLog (switch `TRACELOG=1`, off by default)
 
 Diagnostic only. One JSONL line per planner decision is appended to `logs/trace-<run>.jsonl` (ts, skill/key/args, position, health, food, pickaxe tiers, sticks, stone, wood, diamonds, deaths, hazardUp, stuck counters, last failure), built by the pure `traceLine` and written through an append stream. `node tools/trace-summary.js` (from `bot/`) aggregates the last 20 decisions of every `stuck` run in `logs/eval.jsonl`. Result: traceLog: pending A/B (check it costs nothing).
+
+## MINEY (env override of branchY, unset by default)
+
+`branchY` is drawn per slot from the seeded rand in `jitterParams` (-59..-56). `MINEY=-53` fixes it for every bot of that eval; the draw still happens, so the other jittered params are unchanged and arms stay paired. Env cannot differ per arm, so a two-arm run uses the param form, `ARMS="branchY=-58;branchY=-53"` (parseArm overrides the draw the same way). Result: branch level A/B: pending.
