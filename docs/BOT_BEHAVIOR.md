@@ -419,7 +419,7 @@ An `explore` hazard failure does not count toward the stuck tracker while a `haz
 
 ## watchdog (switch `WATCHDOG=1`, off by default)
 
-A pathfinder goal that moves the bot less than 1 block in 5 s is dead: `goto` cancels it, flags the skill cancel token, blacklists the goal block in `bot.unreachable` (so `findVisible` and the planner stop re-targeting it; cleared on death and on each new trip) and fails the skill as `no_progress`. The detector is the pure `stalled(samples)` in skills.js. Pillar and dig loops are not covered (they have their own bounded fail counters). Result: watchdog: pending A/B.
+A pathfinder goal that moves the bot less than 1 block in 5 s is dead: `goto` cancels it, flags the skill cancel token, blacklists the goal block in `bot.unreachable` (so `findVisible` and the planner stop re-targeting it; cleared on death and on each new trip) and fails the skill as `no_progress`. The detector is the pure `stalled(samples)` in skills.js. Pillar and dig loops are not covered (they have their own bounded fail counters). Result: watchdog: REJECTED (default off). A/B slots 296-343, 48 pairs: banked 28 vs 32, better on 5 slots worse on 9, stuck 27 vs 14, but diamonds 181 vs 140 and deaths 2 vs 11 - it cancels slow-but-progressing paths into stuck; worth revisiting with a longer window.
 
 ## recovery (switch `RECOVERY=1`, off by default)
 
