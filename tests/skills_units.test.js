@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -571,6 +571,12 @@ test('stalled: needs a full window of history and under one block of movement in
   assert.strictEqual(stalled([s(0, 0), s(2500, 0.5), s(5000, 1.2)]), false) // 0.7 from the last inside the window, but 1.2 at the start
   assert.strictEqual(stalled([s(-1000, 0), s(2500, 3), s(5000, 3.4)]), true) // moved before the window, still now
   assert.strictEqual(stalled([s(0, 0), s(5000, 2)]), false)
+})
+
+test('watchdogWindow: off at 0, 5 s for mode 1 everywhere', () => {
+  assert.strictEqual(watchdogWindow(0, false), 0)
+  assert.strictEqual(watchdogWindow(undefined, true), 0)
+  for (const scaffold of [true, false]) assert.strictEqual(watchdogWindow(1, scaffold), 5000)
 })
 
 test('watchdog: a path goal that never moves the bot fails as no_progress, blacklists the target and cancels the skill', { timeout: 15000 }, async () => {

@@ -126,7 +126,12 @@ const WATCHDOG_MS = 5000
 const WATCHDOG_MOVE = 1
 const WATCHDOG_TICK_MS = 500
 
-// Pure: samples are [{ t, x, y, z }] oldest first. True when the last WATCHDOG_MS of history stayed within WATCHDOG_MOVE of the latest position.
+// Pure: stall window in ms for a watchdog mode (params.watchdog), or 0 for no watchdog on this goto. scaffold = go_up/dig paths.
+function watchdogWindow(mode, scaffold) {
+  return mode >= 1 ? WATCHDOG_MS : 0
+}
+
+// Pure: samples are [{ t, x, y, z }] oldest first. True when the last `ms` of history stayed within WATCHDOG_MOVE of the latest position.
 function stalled(samples, ms = WATCHDOG_MS, move = WATCHDOG_MOVE) {
   const last = samples.at(-1)
   if (!last || samples[0].t > last.t - ms) return false
@@ -141,15 +146,15 @@ function blacklistGoal(bot, goal) {
 }
 
 // Rejects with no_progress once stalled; the skill's cancel token is flagged so loops after a swallowed goto failure stop too.
-function pathWatchdog(bot, goal) {
+function pathWatchdog(bot, goal, ms) {
   const samples = []
   let timer
   const tripped = new Promise((_, reject) => {
     timer = setInterval(() => {
       const { x, y, z } = bot.entity.position
       samples.push({ t: Date.now(), x, y, z })
-      while (samples.length > 1 && samples[1].t <= samples.at(-1).t - WATCHDOG_MS) samples.shift()
-      if (!stalled(samples)) return
+      while (samples.length > 1 && samples[1].t <= samples.at(-1).t - ms) samples.shift()
+      if (!stalled(samples, ms)) return
       blacklistGoal(bot, goal)
       const cancel = currentCancel(bot)
       if (cancel) {
@@ -165,7 +170,8 @@ function pathWatchdog(bot, goal) {
 
 async function goto(bot, goal, ms = PATH_MS, scaffold = false) {
   if (scaffold) bot.pathfinder.setMovements(scaffoldMovements(bot))
-  const dog = bot.objectiveRun?.params?.watchdog ? pathWatchdog(bot, goal) : null
+  const window = watchdogWindow(bot.objectiveRun?.params?.watchdog, scaffold)
+  const dog = window ? pathWatchdog(bot, goal, window) : null
   try {
     await withTimeout(dog ? Promise.race([bot.pathfinder.goto(goal), dog.tripped]) : bot.pathfinder.goto(goal), ms, () => stopPathing(bot))
   } catch (e) {
@@ -1537,4 +1543,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow }
