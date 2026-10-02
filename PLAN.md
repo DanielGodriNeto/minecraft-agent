@@ -243,8 +243,8 @@ Gate threshold was ≥ 50% (needs lower CI > ~45%): passes.
 | exp7 | hazardGrace (`HAZARDGRACE=1`) | pending A/B |
 | exp8 | watchdog (`WATCHDOG=1`) | REJECTED (default off): slots 296-343, 48 pairs, banked 28 vs 32, better on 5 slots worse on 9, stuck 27 vs 14; but diamonds 181 vs 140, deaths 2 vs 11; retry with a longer window |
 | exp9 | recovery (`RECOVERY=1`) | REJECTED (default off), weak positive: 96 pairs (slots 344-391, 440-487) banked 65 vs 60, better on 17 slots worse on 12, diamonds 406 vs 329, deaths 15 vs 16 |
-| exp10 | traceLog (`TRACELOG=1`) | diagnostic only, no behaviour change; pending A/B (cost check) |
-| exp11 | branch level (`MINEY=-53`, or per arm `branchY=-53`) | pending A/B |
+| exp10 | traceLog (`TRACELOG=1`) | diagnostic only, no behaviour change; used on in every A/B since 296, no ill effect seen |
+| exp11 | branch level (`MINEY=-53`, or per arm `branchY=-53`) | REJECTED (keep -58): slots 392-439, 48 pairs, banked 28 (-53) vs 29 (-58), -53 better on 8 slots worse on 9, diamonds 192 vs 179, stuck 17 vs 23 but deaths 15 vs 10 |
 
 **Changed since `8a22930`:** shaft descent, per-life counter resets, per-run cancel token, climb loop, crowd flee,
 timed ascent, barren relocation, process-isolated bots with tick-rate metrics (5-minute smoke test: p10 ticks/s
