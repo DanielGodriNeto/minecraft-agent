@@ -486,9 +486,9 @@ test('relocation hazard hops are exempt from the stuck tracker a bounded number 
   assert.strictEqual(resetLife(run.memory).relocHazards, 0)
 })
 
-test('hazardGrace: off by default; on, an explore hazard is exempt from stuck only while hazardUp is pending', () => {
+test('hazardGrace: on by default (HAZARDGRACE=0 disables); on, an explore hazard is exempt from stuck only while hazardUp is pending', () => {
   const { DEFAULT_PARAMS } = require('../bot/planner.js')
-  if (process.env.HAZARDGRACE !== '1') assert.strictEqual(DEFAULT_PARAMS.hazardGrace, false)
+  if (process.env.HAZARDGRACE !== '0') assert.strictEqual(DEFAULT_PARAMS.hazardGrace, true)
   const leg = { skill: 'explore', args: [{ mode: 'branch' }] }
   const hazard = { ok: false, reason: 'hazard' }
   const pending = { hazardUp: true }

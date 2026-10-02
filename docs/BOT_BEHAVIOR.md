@@ -415,7 +415,7 @@ A bot holding no pickaxe at all obtains or crafts one before any home trip, beca
 
 ## hazardGrace (switch `HAZARDGRACE=1`, off by default)
 
-An `explore` hazard failure does not count toward the stuck tracker while a `hazard_up` climb is pending (same exemption idea as relocation hazards), because 20 stuck endings were repeated explore:hazard at y -60..-50 before the climb could run. Result: hazardGrace: pending A/B.
+An `explore` hazard failure does not count toward the stuck tracker while a `hazard_up` climb is pending (same exemption idea as relocation hazards), because 20 stuck endings were repeated explore:hazard at y -60..-50 before the climb could run. Result: hazardGrace: ADOPTED (default on). A/B slots 248-295, 48 pairs: banked 37 vs 25, diamonds 186 vs 129, stuck 14 vs 25, better on 13 slots, worse on 1.
 
 ## watchdog (switch `WATCHDOG=1`, off by default)
 
