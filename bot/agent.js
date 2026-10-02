@@ -380,12 +380,14 @@ const isLost = (pos, home) => distance(pos, home) > LOST_BLOCKS
 // or a full window of decisions with no success, or one that went nowhere and gained nothing (oscillation),
 // or STUCK_IDLE decisions in a row that moved < IDLE_MOVE blocks and changed nothing, successful or not.
 // Pure: takes a { pos: {x,y,z}, inv: string } snapshot taken after each decision.
-function createStuckTracker() {
+// ignoresNoProgress() true (watchdog=5): a no_progress failure is recorded but does not add to the STUCK_FAILURES count.
+function createStuckTracker(ignoresNoProgress = () => false) {
   let failures = 0
   let idle = 0
   let anchor = null
   let previous = null
   const window = []
+  const skipped = (result) => result.reason === 'no_progress' && ignoresNoProgress()
   const stalled = () => window.length === STUCK_WINDOW && (
     window.every(w => !w.ok) ||
     (distance(window[0].pos, window.at(-1).pos) < STUCK_MOVE && window.every(w => w.inv === window[0].inv)))
@@ -397,18 +399,19 @@ function createStuckTracker() {
     window.push({ ok: result.ok, ...snapshot })
     if (window.length > STUCK_WINDOW) window.shift()
     if (result.ok || !anchor || anchor.inv !== snapshot.inv || distance(anchor.pos, snapshot.pos) >= STUCK_MOVE) {
-      failures = result.ok ? 0 : 1
+      failures = result.ok || skipped(result) ? 0 : 1
       anchor = snapshot
       return stalled()
     }
-    return ++failures >= STUCK_FAILURES || stalled()
+    if (!skipped(result)) failures++
+    return failures >= STUCK_FAILURES || stalled()
   }
 }
 
 // A successful toss is neither progress nor a reset: it is skipped, and what it threw away is added back to the
 // inventory signature so the change does not look like progress on the next decision.
 function stuckTracker(bot) {
-  const track = createStuckTracker()
+  const track = createStuckTracker(() => bot.objectiveRun?.params?.watchdog === 5)
   const tossed = {}
   return (result, action, before) => {
     const now = inventoryCounts(bot)

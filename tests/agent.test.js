@@ -16,6 +16,18 @@ test('stuck: three failures in place trip the tracker, a success resets it', () 
   assert.strictEqual(again(fail, snap(0)), false)
 })
 
+test('stuck: with the rule on, no_progress failures do not count toward the failure limit; other failures still do', () => {
+  const noProgress = { ok: false, reason: 'no_progress' }
+  let n = 0
+  const at = () => snap((n++ % 2) * 2) // jitters 2 blocks so the idle rule does not trip
+  const track = createStuckTracker(() => true)
+  assert.deepStrictEqual(Array.from({ length: 4 }, () => track(noProgress, at())), [false, false, false, false])
+  assert.deepStrictEqual([track(fail, at()), track(fail, at())], [false, false])
+  assert.strictEqual(track(fail, at()), true)
+  const off = createStuckTracker()
+  assert.deepStrictEqual(Array.from({ length: 3 }, () => off(noProgress, at())), [false, false, true])
+})
+
 test('stuck: twelve failures while moving and looting is still stuck', () => {
   const track = createStuckTracker()
   const results = Array.from({ length: 12 }, (_, i) => track(fail, snap(i * 10, JSON.stringify({ n: i }))))
