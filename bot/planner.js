@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', hazardGrace: process.env.HAZARDGRACE === '1', watchdog: process.env.WATCHDOG === '1' }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', hazardGrace: process.env.HAZARDGRACE === '1', watchdog: process.env.WATCHDOG === '1', recovery: process.env.RECOVERY === '1' }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -46,7 +46,8 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   LOCALSURFACE localSurface (OFF by default; =1 enables, experiment 5 found no gain) open sky (or two failed climbs) below home's height makes that height the surface, so the bot stops climbing toward a hill it cannot reach
 //   HAZARDGRACE hazardGrace (OFF by default; =1 enables) an explore hazard does not count toward stuck while a hazard_up climb is pending
 //   WATCHDOG   watchdog (OFF by default; =1 enables) a path goal that moves the bot <1 block in 5 s is cancelled, its target blacklisted, and the skill fails as no_progress
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'hazardGrace', 'watchdog']
+//   RECOVERY   recovery (OFF by default; =1 enables) before the stuck tracker ends a run, one named recovery routine per failure signature and life (recoveryFor)
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'hazardGrace', 'watchdog', 'recovery']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])) })
 
@@ -435,4 +436,17 @@ function nextAction(s) {
   return swordStep(s) ?? spareStep(s) ?? gather(s, 'diamond')
 }
 
-module.exports = { nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS, lingerUnderground, lingerHeldReturn, ASCENT_MARGIN_MS, MAX_ASCENT_DELAY_MS }
+// Recovery: failure signature ("skill:reason") -> the one routine worth trying before the run is called stuck.
+// s: { inv, memory }. A signature is recovered once per life (memory.recovered) and only after RECOVER_AFTER failures of it.
+const RECOVER_AFTER = { 'explore:hazard': 2 }
+function recoveryFor(signature, s) {
+  if (s.memory.recovered?.[signature] || (s.memory.failSigs?.[signature] ?? 0) < (RECOVER_AFTER[signature] ?? 1)) return null
+  if (signature === 'go_up:not_reached' || signature === 'go_up:no_progress') {
+    if (pickaxeCount(s) > 0) return 'dig_out'
+    return count(s, 'stone') >= 3 ? 'pillar_out' : null
+  }
+  if (signature === 'craft:no_tool') return (s.inv.stick ?? 0) >= 2 && count(s, 'stone') >= 3 && has(s, 'crafting_table') ? 'table_spot' : null
+  return signature === 'explore:hazard' ? 'retreat' : null
+}
+
+module.exports = { recoveryFor, nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS, lingerUnderground, lingerHeldReturn, ASCENT_MARGIN_MS, MAX_ASCENT_DELAY_MS }

@@ -1448,8 +1448,66 @@ async function returnHome(bot, home) {
   }
 }
 
+// ---- recovery routines (agent.js tryRecovery picks one per stuck cause; planner.js recoveryFor) ----
+
+const DIG_OUT_BLOCKS = 2
+const OPEN_AIR_RADIUS = 6
+const RETREAT_BLOCKS = 6
+
+// Two blocks sideways through whichever wall is safe to tunnel, then one up (on carried blocks when there are any).
+async function digOut(bot) {
+  const start = bot.entity.position.floored()
+  const dir = DIRS.find(d => tunnelSafe(bot, tunnelCells(start, d).concat(tunnelCells(start.offset(d[0], 0, d[1]), d))))
+  if (!dir) throw new Fail('hazard')
+  for (let n = 1; n <= DIG_OUT_BLOCKS; n++) {
+    const cells = tunnelCells(bot.entity.position.floored(), dir)
+    if (!await floored(bot, cells[1])) throw new Fail('no_floor')
+    await tunnelStep(bot, cells, cells[1])
+  }
+  await pillarUp(bot, start.y + 1)
+}
+
+// No tunnel to dig: straight up on carried blocks.
+async function pillarOut(bot) {
+  const start = floorY(bot)
+  await pillarUp(bot, start + 3)
+  if (floorY(bot) <= start) throw new Fail('not_reached')
+}
+
+// Boxed in with the table in the pack: walk to the nearest standing cell that has a free neighbour and place it there.
+async function tableSpot(bot) {
+  const feet = bot.entity.position.floored()
+  const spots = []
+  for (let dx = -OPEN_AIR_RADIUS; dx <= OPEN_AIR_RADIUS; dx++) {
+    for (let dz = -OPEN_AIR_RADIUS; dz <= OPEN_AIR_RADIUS; dz++) {
+      for (let dy = -2; dy <= 2; dy++) {
+        const p = feet.offset(dx, dy, dz)
+        if (isFree(bot.blockAt(p)) && isFree(bot.blockAt(p.offset(0, 1, 0))) && isSolid(bot.blockAt(p.offset(0, -1, 0))) && placeSpot(bot, p)) spots.push(p)
+      }
+    }
+  }
+  const nearest = spots.sort((a, b) => a.distanceTo(feet) - b.distanceTo(feet))[0]
+  if (!nearest) throw new Fail('no_space')
+  if (nearest.distanceTo(feet) > 0) await goto(bot, new goals.GoalBlock(nearest.x, nearest.y, nearest.z), 10000)
+  await placeFromInventory(bot, 'crafting_table')
+}
+
+// Back along the trail away from the hazard (agent.js then flips the branch direction).
+async function retreat(bot) {
+  const start = bot.entity.position.clone()
+  if (!bot.trail?.length) throw new Fail('no_trail')
+  await followTrail(bot, p => p.distanceTo(start) >= RETREAT_BLOCKS)
+}
+
+const RECOVERIES = { dig_out: digOut, pillar_out: pillarOut, table_spot: tableSpot, retreat }
+
+async function recover(bot, routine) {
+  if (!RECOVERIES[routine]) throw new Fail('unknown_routine')
+  await RECOVERIES[routine](bot)
+}
+
 const SKILLS = {
-  explore, approach, mine, dig_down: digDown, go_up: goUp, craft, smelt,
+  explore, approach, mine, dig_down: digDown, go_up: goUp, recover, craft, smelt,
   equip, eat, flee, shelter, fight, hunt, deposit, toss, return_home: returnHome,
 }
 

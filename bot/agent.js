@@ -1,6 +1,6 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
 const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, clearUnreachable, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
-const { nextAction, lingerHeldReturn, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
+const { nextAction, lingerHeldReturn, recoveryFor, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
 
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
@@ -21,12 +21,12 @@ const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock i
 //   per-run:  baseDir, surfaceDir, relocations   (directions keep rotating so a new life does not retry the failed one)
 //   per-trip: restock, nightDigs, optionalFails, fightFails  (also reset by a successful deposit)
 //   per-life: localSurfaceY, goUpFails, goUpY, homeTimeouts, homePause, homeAdopt, leg, surfaceLeg, shelters, noShelter, drownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
-//             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs   (the respawn is at home: nothing of the old position applies)
+//             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs, failSigs, recovered   (the respawn is at home: nothing of the old position applies)
 //   hopsSinceDescent deliberately survives a deposit: it counts hops since the last real descent, and any descent zeroes it.
 const lifeMemory = () => ({
   leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
   relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0,
-  localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, ...tripMemory(),
+  failSigs: {}, recovered: {}, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, ...tripMemory(),
 })
 const tripMemory = () => ({ restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0 })
 
@@ -256,7 +256,34 @@ function trackRestock(memory, action, result) {
   if (!result.ok) counts.fails++
 }
 
+const signature = (action, result) => `${action.skill}:${result.reason}`
+
+function countFailure(memory, action, result) {
+  const sig = signature(action, result)
+  const sigs = (memory.failSigs ??= {})
+  sigs[sig] = (sigs[sig] ?? 0) + 1
+}
+
+// Before the run is called stuck: one named routine for this failure's signature (recoveryFor), once per signature per life.
+// The skill log records the routine as skill 'recover'; run.recoveries lists them for the result.
+// Resolves whether a routine ran; the caller then gives the stuck tracker a fresh start.
+async function tryRecovery(bot, run, action, result, exec = runSkill) {
+  if (!run.params.recovery || result.ok) return false
+  const sig = signature(action, result)
+  const routine = recoveryFor(sig, { inv: inventoryCounts(bot), memory: run.memory })
+  if (!routine) return false
+  run.memory.recovered[sig] = true
+  run.recoveries.push(`${sig}>${routine}`)
+  await exec(bot, 'recover', routine)
+  if (routine === 'retreat') {
+    run.memory.baseDir = (run.memory.baseDir + 2) % 4 // relocate: the other way from the hazard
+    run.memory.leg = 0
+  }
+  return true
+}
+
 function remember(run, action, result) {
+  if (!result.ok) countFailure(run.memory, action, result)
   if (action.restock) trackRestock(run.memory, action, result)
   trackShelter(run.memory, action)
   trackGoUp(run, action, result)
@@ -362,7 +389,7 @@ function stuckTracker(bot) {
 // home: storage chest position. Resolves with why the run ended.
 async function runObjective(bot, { objective, home, params = jitterParams(), deadline = Infinity, maxDeaths = 3, rand = Math.random }) {
   const run = {
-    objective, home, surfaceY: home.y, params: normalizeParams(params), deadline, deposited: 0, recentlyAttacked: false, recentlyBurned: false, deaths: 0, decisions: 0, stopped: false,
+    objective, home, surfaceY: home.y, params: normalizeParams(params), deadline, deposited: 0, recentlyAttacked: false, recentlyBurned: false, deaths: 0, decisions: 0, stopped: false, recoveries: [],
     memory: { ...lifeMemory(), baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), relocations: 0 },
   }
   bot.objectiveRun = run
@@ -373,7 +400,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
   }
   bot.on('death', onDeath)
   bot.on('spawn', onSpawn)
-  const isStuck = stuckTracker(bot)
+  let isStuck = stuckTracker(bot)
   try {
     for (;;) {
       if (run.stopped) return finish(run, 'stopped')
@@ -401,7 +428,9 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       afterSkill(run, action, result, deathsBefore)
       chargeLinger(run, state, Date.now() - startedAt)
       resetTrail(bot, run.home)
-      if (!run.recentlyAttacked && !run.recentlyBurned && !IDLE_EXEMPT.has(action.skill) && !relocHazardExempt(run.memory, action, result, state.params) && isStuck(result, action, invBefore)) return finish(run, 'stuck')
+      if (run.recentlyAttacked || run.recentlyBurned || IDLE_EXEMPT.has(action.skill) || relocHazardExempt(run.memory, action, result, state.params) || !isStuck(result, action, invBefore)) continue
+      if (!await tryRecovery(bot, run, action, result)) return finish(run, 'stuck')
+      isStuck = stuckTracker(bot)
     }
   } finally {
     bot.off('death', onDeath)
@@ -412,7 +441,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
 }
 
 function finish(run, reason) {
-  return { reason, deposited: run.deposited, deaths: run.deaths, decisions: run.decisions, params: run.params }
+  return { reason, deposited: run.deposited, deaths: run.deaths, decisions: run.decisions, params: run.params, ...(run.recoveries.length && { recoveries: run.recoveries }) }
 }
 
 function stopObjective(bot) {
@@ -423,4 +452,4 @@ function stopObjective(bot) {
   return true
 }
 
-module.exports = { effectiveSurface, trackLocalSurface, chargeLinger, runObjective, relocHazardExempt, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }
+module.exports = { effectiveSurface, trackLocalSurface, chargeLinger, runObjective, relocHazardExempt, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, tryRecovery, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }

@@ -554,6 +554,15 @@ test('go_up loop: switched off (goUpLoop=false) it is the single-pass climb with
   assert.strictEqual(result.trailRounds, undefined)
 })
 
+test('recover: pillar_out climbs on carried blocks, fails without any, and an unknown routine is refused', async () => {
+  const { bot } = pillarBot()
+  assert.strictEqual((await run(bot, () => SKILLS.recover(bot, 'pillar_out'), false)).ok, true)
+  assert.strictEqual(Math.floor(bot.entity.position.y), 13)
+  const bare = pillarBot({ blocks: 0 }).bot
+  assert.strictEqual((await run(bare, () => SKILLS.recover(bare, 'pillar_out'), false)).reason, 'not_reached')
+  assert.strictEqual((await run(bare, () => SKILLS.recover(bare, 'nope'), false)).reason, 'unknown_routine')
+})
+
 test('stalled: needs a full window of history and under one block of movement inside it', () => {
   const s = (t, x) => ({ t, x, y: 0, z: 0 })
   assert.strictEqual(stalled([]), false)

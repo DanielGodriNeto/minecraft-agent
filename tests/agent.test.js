@@ -321,7 +321,7 @@ test('handleDeath: memory goes back to a fresh life, only the per-run keys survi
   handleDeath(bot, run)
   assert.deepStrictEqual(run.memory, {
     leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
-    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
+    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, failSigs: {}, recovered: {}, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
     baseDir: 2, surfaceDir: 1, relocations: 5,
   })
 })
@@ -357,11 +357,59 @@ test('opt-in switches: off by default, and ARMS key=1 / key=0 override the param
   const { parseArm } = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))('./eval.js')
   const { jitterParams } = require('../bot/agent.js')
   const { normalizeParams } = require('../bot/planner.js')
-  for (const [k, env] of [['watchdog', 'WATCHDOG']]) {
+  for (const [k, env] of [['watchdog', 'WATCHDOG'], ['recovery', 'RECOVERY']]) {
     if (process.env[env] !== '1') assert.strictEqual(DEFAULT_PARAMS[k], false, k)
     assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=1`) })[k], true, k)
     assert.strictEqual(normalizeParams({ ...jitterParams(), ...parseArm(`${k}=0`) })[k], false, k)
   }
+})
+
+test('recoveryFor: one routine per failure signature, once per life, only when its materials are on hand', () => {
+  const { recoveryFor } = require('../bot/planner.js')
+  const s = (inv, memory = {}) => ({ inv, memory: { failSigs: {}, recovered: {}, ...memory } })
+  const fails = (sig, n) => ({ failSigs: { [sig]: n } })
+  for (const sig of ['go_up:not_reached', 'go_up:no_progress']) {
+    assert.strictEqual(recoveryFor(sig, s({ stone_pickaxe: 1 }, fails(sig, 1))), 'dig_out', sig)
+    assert.strictEqual(recoveryFor(sig, s({ cobblestone: 5 }, fails(sig, 1))), 'pillar_out', sig)
+    assert.strictEqual(recoveryFor(sig, s({}, fails(sig, 1))), null, sig)
+  }
+  const table = { stick: 2, cobblestone: 3, crafting_table: 1 }
+  assert.strictEqual(recoveryFor('craft:no_tool', s(table, fails('craft:no_tool', 1))), 'table_spot')
+  assert.strictEqual(recoveryFor('craft:no_tool', s({ ...table, stick: 1 }, fails('craft:no_tool', 1))), null)
+  assert.strictEqual(recoveryFor('craft:no_tool', s({ stick: 2, cobblestone: 3 }, fails('craft:no_tool', 1))), null)
+  assert.strictEqual(recoveryFor('explore:hazard', s({}, fails('explore:hazard', 1))), null)
+  assert.strictEqual(recoveryFor('explore:hazard', s({}, fails('explore:hazard', 2))), 'retreat')
+  assert.strictEqual(recoveryFor('go_up:not_reached', s({ stone_pickaxe: 1 }, { ...fails('go_up:not_reached', 1), recovered: { 'go_up:not_reached': true } })), null)
+  assert.strictEqual(recoveryFor('mine:timeout', s({ stone_pickaxe: 1 }, fails('mine:timeout', 5))), null)
+})
+
+test('tryRecovery: off by default; on, runs the routine once per signature, notes it, and a fresh life forgets it', async () => {
+  const { tryRecovery } = require('../bot/agent.js')
+  const calls = []
+  const exec = async (bot, skill, ...args) => { calls.push([skill, ...args]); return { ok: true } }
+  const bot = { inventory: { items: () => [{ name: 'stone_pickaxe', count: 1 }] } }
+  const action = { skill: 'go_up', args: [60] }
+  const fail = { ok: false, reason: 'not_reached' }
+  const mk = (recovery) => ({ params: { recovery }, memory: { failSigs: { 'go_up:not_reached': 1 }, recovered: {} }, recoveries: [] })
+  const off = mk(false)
+  assert.strictEqual(await tryRecovery(bot, off, action, fail, exec), false)
+  const on = mk(true)
+  assert.strictEqual(await tryRecovery(bot, on, action, fail, exec), true)
+  assert.deepStrictEqual(calls, [['recover', 'dig_out']])
+  assert.deepStrictEqual(on.recoveries, ['go_up:not_reached>dig_out'])
+  assert.strictEqual(await tryRecovery(bot, on, action, fail, exec), false) // once per signature
+  assert.strictEqual(await tryRecovery(bot, on, action, { ok: true }, exec), false)
+  on.memory = resetLife(on.memory)
+  on.memory.failSigs['go_up:not_reached'] = 1
+  assert.strictEqual(await tryRecovery(bot, on, action, fail, exec), true)
+})
+
+test('remember: failure signatures are counted per life', () => {
+  const run = { memory: { optionalFails: {}, failSigs: {} } }
+  remember(run, { skill: 'explore', args: [{ mode: 'surface' }] }, { ok: false, reason: 'hazard' })
+  remember(run, { skill: 'explore', args: [{ mode: 'surface' }] }, { ok: false, reason: 'hazard' })
+  assert.strictEqual(run.memory.failSigs['explore:hazard'], 2)
+  assert.deepStrictEqual(resetLife(run.memory).failSigs, {})
 })
 
 test('remember: a crowd_flee is counted per life', () => {
