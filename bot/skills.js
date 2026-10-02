@@ -129,6 +129,7 @@ const WATCHDOG_TICK_MS = 500
 // Pure: stall window in ms for a watchdog mode (params.watchdog), or 0 for no watchdog on this goto. scaffold = go_up/dig paths.
 function watchdogWindow(mode, scaffold) {
   if (mode === 2) return scaffold ? 0 : WATCHDOG_MS
+  if (mode === 3) return scaffold ? 15000 : WATCHDOG_MS
   return mode >= 1 ? WATCHDOG_MS : 0
 }
 

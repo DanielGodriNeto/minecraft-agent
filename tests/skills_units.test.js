@@ -584,6 +584,11 @@ test('watchdogWindow: mode 2 skips scaffold gotos, 5 s elsewhere', () => {
   assert.strictEqual(watchdogWindow(2, false), 5000)
 })
 
+test('watchdogWindow: mode 3 gives scaffold gotos 15 s, 5 s elsewhere', () => {
+  assert.strictEqual(watchdogWindow(3, true), 15000)
+  assert.strictEqual(watchdogWindow(3, false), 5000)
+})
+
 test('watchdog: a path goal that never moves the bot fails as no_progress, blacklists the target and cancels the skill', { timeout: 15000 }, async () => {
   const { goals } = require('../bot/node_modules/mineflayer-pathfinder')
   const { bot } = pillarBot()
