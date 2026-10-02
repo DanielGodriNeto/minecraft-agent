@@ -130,6 +130,7 @@ const WATCHDOG_TICK_MS = 500
 function watchdogWindow(mode, scaffold) {
   if (mode === 2) return scaffold ? 0 : WATCHDOG_MS
   if (mode === 3) return scaffold ? 15000 : WATCHDOG_MS
+  if (mode === 4) return 10000
   return mode >= 1 ? WATCHDOG_MS : 0
 }
 
