@@ -442,7 +442,7 @@ Diagnostic only. One JSONL line per planner decision is appended to `logs/trace-
 
 ## earlyBank (switch `EARLYBANK=1`, off by default)
 
-Banking the first diamond at once already exists: `wantsReturn` is true whenever a diamond is held and `deposited === 0`, so `returnAt` is never consulted for the first deposit. The one thing that still delays it is `lingerUnderground` (nightAscent: keep mining while the surface arrival would be in the dark). earlyBank skips the linger while `deposited === 0`, so a carried first diamond starts the trip immediately. Later deposits are unchanged. Result: pending A/B.
+Banking the first diamond at once already exists: `wantsReturn` is true whenever a diamond is held and `deposited === 0`, so `returnAt` is never consulted for the first deposit. The one thing that still delays it is `lingerUnderground` (nightAscent: keep mining while the surface arrival would be in the dark). earlyBank skips the linger while `deposited === 0`, so a carried first diamond starts the trip immediately. Later deposits are unchanged. Result: REJECTED 2026-10-04 (26 of 48 pairs: banked 24 vs 22, better 3 worse 2, deaths 10 vs 3). Stays off.
 
 ## spawnEscape (switch `SPAWNESCAPE=1`, off by default)
 
