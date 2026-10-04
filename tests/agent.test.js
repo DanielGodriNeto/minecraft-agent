@@ -333,7 +333,7 @@ test('handleDeath: memory goes back to a fresh life, only the per-run keys survi
   handleDeath(bot, run)
   assert.deepStrictEqual(run.memory, {
     leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, mineDrownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
-    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, failSigs: {}, recovered: {}, spawnEscapes: 0, escapeStart: undefined, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
+    relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, failSigs: {}, recovered: {}, spawnEscapes: 0, escapeStart: undefined, walk: undefined, restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0,
     baseDir: 2, surfaceDir: 1, relocations: 5,
   })
 })

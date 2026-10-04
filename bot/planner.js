@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1', veinScan: process.env.VEINSCAN === '1' }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1', veinScan: process.env.VEINSCAN === '1', spawnWalk: process.env.SPAWNWALK === '1' }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -52,8 +52,9 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   EARLYBANK  earlyBank (OFF by default; =1 enables) wantsReturn already banks the first diamond at once; this stops lingerUnderground (nightAscent) from delaying that first deposit
 //   SPAWNESCAPE spawnEscape (OFF by default; =1 enables) no wood and no pickaxe after 2 go_up:not_reached or failed surface searches: one 64-block surface walk in a fresh direction (max 3 per life) before the next log search
 //   VEINSCAN   veinScan (OFF by default; =1 enables) at y <= -40 each branch tunnel step scans radius 48 for a buried diamond (visible needs an exposed face) and tunnels toward it; an ore whose detour fails is blacklisted (skills.js veinTarget)
+//   SPAWNWALK  spawnWalk (OFF by default; =1 enables) supersedes spawnEscape: on the same bad-spawn trigger the bot picks one heading (opposite surfaceDir) and keeps walking it in 56-block surface legs, sidestepping a blocked leg with a 16-block lateral leg then resuming, until a log is seen; cap 600 blocks or 10 min, then the old behaviour
 //   RECOVERY   recovery (OFF by default; =1 enables) before the stuck tracker ends a run, one named recovery routine per failure signature and life (recoveryFor)
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan']
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 // watchdog is the one multi-value param (0 off, 1-5 variants), so it is coerced to an integer instead.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])), ...('watchdog' in params && { watchdog: Number(params.watchdog) || 0 }) })
@@ -110,6 +111,11 @@ const MAX_BRANCH_RELOCS = 2 // per life
 const ESCAPE_FAILS = 2 // go_up:not_reached failures or failed surface searches before a spawn escape
 const ESCAPE_BLOCKS = 64
 const MAX_ESCAPES = 3 // per life, each in a different direction
+const WALK_BLOCKS = 56 // spawnWalk leg along the heading
+const WALK_SIDE_BLOCKS = 16 // lateral leg that goes around a blocked one
+const WALK_CAP_BLOCKS = 600
+const WALK_CAP_MS = 10 * 60000
+const MAX_WALK_FAILS = 6 // consecutive failed legs (including sidesteps) before giving up
 
 // Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
 const BIGGEST_STACK = new Set(['planks', 'stone'])
@@ -175,11 +181,35 @@ function gather(s, item) {
 // A bad spawn (water, a basin) with no wood and no tool keeps failing the same climb or search: walk far in a fresh direction instead.
 // The first escape goes opposite surfaceDir; later ones continue from escapeStart (set by agent.js), so no direction repeats.
 function spawnEscape(s, source) {
+  if (s.params.spawnWalk) return spawnWalk(s, source)
   const { spawnEscapes = 0, escapeStart, surfaceDir = 0, surfaceLeg = 0, failSigs = {} } = s.memory
   if (!s.params.spawnEscape || spawnEscapes >= MAX_ESCAPES || count(s, 'log') > 0 || count(s, 'planks') > 0 || pickaxeCount(s) > 0) return null
   if ((failSigs['go_up:not_reached'] ?? 0) < ESCAPE_FAILS && surfaceLeg < ESCAPE_FAILS) return null
   const dir = ((escapeStart ?? surfaceDir + 2) + spawnEscapes) % DIRS
   return { ...act('explore', { target: source.blocks, mode: 'surface', dir, maxBlocks: ESCAPE_BLOCKS, maxAbove: source.maxAbove }), key: 'spawn_escape' }
+}
+
+// spawnWalk: memory.walk = { dir (the heading, fixed by the first leg), blocks (walked so far), fails (consecutive), detour (0, or 1/3 = sidestep to that side of the heading), startedAt }.
+// The same trigger as spawnEscape, but once started it continues from the walk state until a log is seen (agent.js clears it) or a cap is hit, after which the old behaviour resumes.
+function spawnWalk(s, source) {
+  const { walk, surfaceDir = 0, surfaceLeg = 0, failSigs = {} } = s.memory
+  if (count(s, 'log') > 0 || count(s, 'planks') > 0 || pickaxeCount(s) > 0) return null
+  if (!walk && (failSigs['go_up:not_reached'] ?? 0) < ESCAPE_FAILS && surfaceLeg < ESCAPE_FAILS) return null
+  const w = walk ?? { dir: (surfaceDir + 2) % DIRS, blocks: 0, fails: 0, detour: 0 }
+  if (w.blocks >= WALK_CAP_BLOCKS || w.fails >= MAX_WALK_FAILS || (w.startedAt !== undefined && s.now !== undefined && s.now - w.startedAt >= WALK_CAP_MS)) return null
+  const dir = (w.dir + (w.detour ?? 0)) % DIRS
+  const maxBlocks = w.detour ? WALK_SIDE_BLOCKS : WALK_BLOCKS
+  return { ...act('explore', { target: source.blocks, mode: 'surface', dir, maxBlocks, maxAbove: source.maxAbove }), key: 'spawn_walk' }
+}
+
+// Walk state after a leg (pure). ok = a log is in view: the walk is over. not_found = the leg was walked in full.
+// Any other failure counts, and the next leg sidesteps to alternating sides of the heading before the heading resumes.
+function walkAfter(walk, leg, result, now = Date.now()) {
+  if (result.ok) return undefined
+  const w = { dir: leg.dir, blocks: 0, fails: 0, detour: 0, ...walk, startedAt: walk?.startedAt ?? now }
+  if (result.reason === 'not_found') return { ...w, blocks: w.blocks + leg.maxBlocks, fails: 0, detour: 0 }
+  const fails = w.fails + 1
+  return { ...w, fails, detour: fails % 2 ? 1 : 3 }
 }
 
 const inputsOnHand =(s, item) => Object.entries(RECIPES[item].in).every(([input, n]) => count(s, input) >= n)
@@ -472,4 +502,4 @@ function recoveryFor(signature, s) {
   return signature === 'explore:hazard' ? 'retreat' : null
 }
 
-module.exports = { recoveryFor, nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS, lingerUnderground, lingerHeldReturn, ASCENT_MARGIN_MS, MAX_ASCENT_DELAY_MS }
+module.exports = { walkAfter, recoveryFor, nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS, lingerUnderground, lingerHeldReturn, ASCENT_MARGIN_MS, MAX_ASCENT_DELAY_MS }
