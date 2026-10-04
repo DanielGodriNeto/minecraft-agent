@@ -446,7 +446,7 @@ Banking the first diamond at once already exists: `wantsReturn` is true whenever
 
 ## spawnEscape (switch `SPAWNESCAPE=1`, off by default)
 
-23 of 58 zero-diamond stuck runs never got a stone pickaxe: they sat on a bad spawn (water, basin) looping `go_up:not_reached` / flee with no wood. With no log, planks or pickaxe held, and either 2 `go_up:not_reached` failures or 2 failed surface searches in this life, the log gather step becomes one 64-block surface `explore` (key `spawn_escape`) before the climb or the next search. The first escape heads opposite `surfaceDir`, later ones rotate from the first (`escapeStart`), so no direction repeats; at most 3 per life. A found log (explore ok) clears the two trigger counters. Water is not detected: the pathfinder's own refusal to cross it is what the hop retries sideways. Result: pending A/B.
+23 of 58 zero-diamond stuck runs never got a stone pickaxe: they sat on a bad spawn (water, basin) looping `go_up:not_reached` / flee with no wood. With no log, planks or pickaxe held, and either 2 `go_up:not_reached` failures or 2 failed surface searches in this life, the log gather step becomes one 64-block surface `explore` (key `spawn_escape`) before the climb or the next search. The first escape heads opposite `surfaceDir`, later ones rotate from the first (`escapeStart`), so no direction repeats; at most 3 per life. A found log (explore ok) clears the two trigger counters. Water is not detected: the pathfinder's own refusal to cross it is what the hop retries sideways. Result: REJECTED 2026-10-04 (26 of 48 pairs after memory-guard losses, better 1 worse 2, no measurable effect). Stays off.
 
 ## veinScan (switch `VEINSCAN=1`, off by default)
 
