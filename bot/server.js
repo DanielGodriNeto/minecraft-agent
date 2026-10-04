@@ -15,7 +15,7 @@ const TOTAL_HEAP_GB = 24 // all instances together, leaves the rest of the RAM t
 const MAX_INSTANCES = 4
 const DISK_MARGIN = 10 * 2 ** 30
 // Aikar-style G1 flags; Xms=Xmx so the heap never resizes under load.
-const GC_FLAGS = ['-XX:+UseG1GC', '-XX:+ParallelRefProcEnabled', '-XX:MaxGCPauseMillis=200', '-XX:+DisableExplicitGC',
+const GC_FLAGS = ['-XX:+UnlockExperimentalVMOptions', '-XX:+UseG1GC', '-XX:+ParallelRefProcEnabled', '-XX:MaxGCPauseMillis=200', '-XX:+DisableExplicitGC',
   '-XX:G1NewSizePercent=30', '-XX:G1MaxNewSizePercent=40', '-XX:G1HeapRegionSize=8M', '-XX:G1ReservePercent=20',
   '-XX:G1HeapWastePercent=5', '-XX:G1MixedGCCountTarget=4', '-XX:InitiatingHeapOccupancyPercent=15',
   '-XX:G1MixedGCLiveThresholdPercent=90', '-XX:SurvivorRatio=32', '-XX:MaxTenuringThreshold=1']
