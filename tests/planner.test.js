@@ -680,6 +680,64 @@ test('walkAfter / spawnWalk caps: 600 blocks, 10 minutes, or 6 failed legs in a 
   assert.strictEqual(walkAfter(w, { dir: 2, maxBlocks: 56 }, { ok: false, reason: 'timeout' }).detour, 1)
 })
 
+test('pickReady: off by default (unless PICKREADY=1) and coerced to a boolean from an ARM value', () => {
+  if (process.env.PICKREADY !== '1') assert.strictEqual(DEFAULT_PARAMS.pickReady, false)
+  assert.strictEqual(normalizeParams({ pickReady: 1 }).pickReady, true)
+})
+
+// pickReady: a spare iron pickaxe is prepared from what is near, and a low or lost one restocks instead of mining on.
+const ready = { ...DEFAULT_PARAMS, pickReady: true }
+const pr = (over = {}) => state({ params: ready, inv: { iron_pickaxe: 1, stone_pickaxe: 1 }, ironLeft: 250, msLeft: 3600000, foodCount: 6, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0 }, ...over })
+const mem = (extra = {}) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, ...extra })
+
+test('pickReady: before the descent visible iron is mined, smelted, then crafted into a spare pickaxe', () => {
+  assert.strictEqual(nextAction(pr({ visible: { raw_iron: true }, params: DEFAULT_PARAMS })).skill, 'dig_down') // off
+  const mine = nextAction(pr({ visible: { raw_iron: true } }))
+  assert.deepStrictEqual([mine.skill, mine.restock], ['mine', 'pick_ready'])
+  assert.strictEqual(nextAction(pr()).skill, 'dig_down') // nothing near: no search for iron
+  const smelt = nextAction(pr({ inv: { iron_pickaxe: 1, stone_pickaxe: 1, raw_iron: 3, coal: 2 }, tableNear: true, furnaceNear: true }))
+  assert.deepStrictEqual([smelt.skill, smelt.args[0]], ['smelt', 'iron_ingot'])
+  const sticks = nextAction(pr({ inv: { iron_pickaxe: 1, stone_pickaxe: 1, iron_ingot: 3, oak_planks: 2 }, tableNear: true }))
+  assert.deepStrictEqual([sticks.skill, sticks.args[0]], ['craft', 'stick'])
+  const craft = nextAction(pr({ inv: { iron_pickaxe: 1, stone_pickaxe: 1, iron_ingot: 3, stick: 8 }, tableNear: true }))
+  assert.deepStrictEqual([craft.skill, craft.args[0]], ['craft', 'iron_pickaxe'])
+  const noTable = nextAction(pr({ inv: { iron_pickaxe: 1, stone_pickaxe: 1, iron_ingot: 3, stick: 8 } }))
+  assert.strictEqual(noTable.skill, 'dig_down') // materials kept, no wood fetched for a table
+})
+
+test('pickReady: no preparing with a spare, at night, near the deadline, at diamond depth, after the restock budget', () => {
+  const visible = { raw_iron: true }
+  assert.strictEqual(nextAction(pr({ visible, inv: { iron_pickaxe: 2 } })).skill, 'dig_down')
+  assert.notStrictEqual(nextAction(pr({ visible, isNight: true }))?.restock, 'pick_ready')
+  assert.notStrictEqual(nextAction(pr({ visible, msLeft: 15 * 60000 }))?.restock, 'pick_ready')
+  assert.notStrictEqual(nextAction(pr({ visible, y: DEFAULT_PARAMS.branchY, surfaceY: 70 }))?.restock, 'pick_ready')
+  assert.notStrictEqual(nextAction(pr({ visible, memory: mem({ restock: { pick_ready: { steps: 12, fails: 0 } } }) }))?.restock, 'pick_ready')
+})
+
+test('pickReady: a low iron pickaxe with no spare climbs to the iron level, crafts at once when it can, and is bounded', () => {
+  const deep = { y: -40, surfaceY: 70, ironLeft: 20 }
+  const up = nextAction(pr(deep))
+  assert.deepStrictEqual([up.skill, up.args, up.key], ['go_up', [16], 'pick_up'])
+  assert.notStrictEqual(nextAction(pr({ ...deep, ironLeft: 100 })).key, 'pick_up') // 15% of 250 is 37
+  assert.notStrictEqual(nextAction(pr({ ...deep, memory: mem({ pickUps: 2 }) })).key, 'pick_up')
+  assert.notStrictEqual(nextAction(pr({ ...deep, inv: { iron_pickaxe: 2 } })).key, 'pick_up') // a spare is held
+  const craft = nextAction(pr({ ...deep, inv: { iron_pickaxe: 1, iron_ingot: 3, stick: 2 }, tableNear: true }))
+  assert.deepStrictEqual([craft.skill, craft.args[0]], ['craft', 'iron_pickaxe'])
+  const atIron = nextAction(pr({ y: 14, surfaceY: 70, ironLeft: 20, visible: { raw_iron: true } }))
+  assert.deepStrictEqual([atIron.skill, atIron.restock], ['mine', 'pick_ready'])
+  const { remember } = require('../bot/agent.js')
+  const run = { memory: mem({ failSigs: {}, optionalFails: {}, restock: {} }) }
+  remember(run, up, { ok: true })
+  assert.strictEqual(run.memory.pickUps, 1)
+})
+
+test('pickReady: no iron pickaxe deep underground climbs to the iron level; at the surface the normal tech tree runs', () => {
+  assert.notStrictEqual(nextAction(pr({ inv: { stone_pickaxe: 1 }, ironLeft: undefined, y: -40 })).key, 'pick_up') // durability unknown keeps the old path
+  const broken = nextAction(pr({ inv: { stone_pickaxe: 1 }, ironLeft: 0, y: -40 }))
+  assert.deepStrictEqual([broken.skill, broken.key], ['go_up', 'pick_up'])
+  assert.notStrictEqual(nextAction(pr({ inv: { stone_pickaxe: 1 }, ironLeft: 0 })).key, 'pick_up') // at the surface
+})
+
 test('veinScan: off by default (unless VEINSCAN=1) and coerced to a boolean from an ARM value', () => {
   if (process.env.VEINSCAN !== '1') assert.strictEqual(DEFAULT_PARAMS.veinScan, false)
   assert.strictEqual(normalizeParams({ veinScan: 1 }).veinScan, true)

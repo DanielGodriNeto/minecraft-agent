@@ -252,13 +252,14 @@ Gate threshold was ≥ 50% (needs lower CI > ~45%): passes.
 | exp15 | spawnEscape (`SPAWNESCAPE=1`) | REJECTED 2026-10-04 (slots 296-343, 26 of 48 pairs after memory-guard losses: banked 25 vs 26, better 1 worse 2, no measurable effect; the target case is only ~6% of runs): no wood/pickaxe after 2 go_up:not_reached or failed surface searches -> 64-block surface walk in a fresh direction, max 3 per life (targets 23 of 58 zero-diamond stuck runs with no stone pickaxe) |
 | exp16 | veinScan (`VEINSCAN=1`) | pending A/B: at y <= -40 branch tunnel steps scan radius 48 for a buried diamond and tunnel toward it (nearest within -1..+2 y, 32 blocks horizontal); failed detours blacklist the ore (targets explore:not_found, ~16 min per success run) |
 | exp17 | spawnWalk (`SPAWNWALK=1`) | pending A/B: supersedes spawnEscape (which was rejected as a bounded 64-block walk): same bad-spawn trigger, but one heading (opposite surfaceDir) is kept in 56-block surface legs, a blocked leg sidestepped by a 16-block lateral leg, until a log is seen; cap 600 blocks / 10 min / 6 failed legs in a row, then the old behaviour |
+| exp18 | pickReady (`PICKREADY=1`) | pending A/B: targets pickaxe loss (98 of 246 successful runs ended with no pickaxe, 35 of 58 stuck runs had none): before the final descent a spare iron pickaxe is prepared from nearby iron (mine visible iron, smelt, craft); with one iron pickaxe under 15% durability, or none, and no spare, the bot crafts a replacement if it holds the materials, else climbs to y16 (max 2 per life) to restock instead of mining on |
 
 **Changed since `8a22930`:** shaft descent, per-life counter resets, per-run cancel token, climb loop, crowd flee,
 timed ascent, barren relocation, process-isolated bots with tick-rate metrics (5-minute smoke test: p10 ticks/s
 14.4 -> 19.9, event-loop p99 440 -> 125 ms).
 
 **Paired A/B experiments:** behaviour changes sit behind env switches `SHAFT NIGHTSURF FOODGATE FIGHTGUARD RESERVE
-CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST STATIONABOVE DROWNCAP HAZARDGRACE WATCHDOG RECOVERY TRACELOG MINEY EARLYBANK SPAWNESCAPE VEINSCAN SPAWNWALK`. Run the same slots with `ARMS` (list of arms) or one arm
+CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST STATIONABOVE DROWNCAP HAZARDGRACE WATCHDOG RECOVERY TRACELOG MINEY EARLYBANK SPAWNESCAPE VEINSCAN SPAWNWALK PICKREADY`. Run the same slots with `ARMS` (list of arms) or one arm
 via `ARM`; `BOTS_PER_PROC` sets bots per process (default 3). One change per experiment.
 
 **Caveats:** results hold for this world seed and difficulty easy; dev slots were tuned on; stuck is still ~40–46% of
