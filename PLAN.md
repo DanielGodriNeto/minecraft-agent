@@ -203,7 +203,7 @@ Descope rule: if week 5 ends with failures, ship `mine`/`dig_down`/`deposit` fir
       diamonds/hour, deaths/hour, stuck rate, 95% CI. Tune against **dev slots 100–199**;
       run the held-out slots 0–99 once for the gate
       `node eval.js <first> <last> 12 60 K` runs K Paper servers in parallel (server/run-<n>/, port 25565+n,
-      6 GB heap each, K <= 4); each needs its own ~14 GB world copy + 10 GB margin free (checked up front).
+      6 GB heap each by default, `MC_HEAP_GB=3` for 3 GB; K <= 4); each needs its own ~14 GB world copy + 10 GB margin free (checked up front).
       **Gate run done** (results below).
 
 **Tests**
@@ -363,3 +363,8 @@ Success rate · diamonds deposited/hour · deaths/hour · stuck rate · gate run
 - JARVIS-1: https://arxiv.org/html/2311.05997 · Optimus-1: https://arxiv.org/html/2408.03615v2
 - Mineflayer: https://github.com/PrismarineJS/mineflayer
 - mineflayer-pathfinder hang issue: https://github.com/PrismarineJS/mineflayer-pathfinder/issues/222
+
+#### Parallel-instance memory (3 GB heap, Aikar G1 flags, Xms=Xmx, save-off)
+Baseline 1 instance x12 bots, 6G heap: java RSS peak 3.0 GB, median tick p10 ~19, median loop p99 ~103 ms, free RAM 14.7 GB (of 19.8).
+3 GB heap, java RSS peak 3.5 GB: 3 instances (36 bots) median tick p10 19.8, loop p99 110, min free RAM 4.7 GB (pass).
+4 instances (48 bots): tick p10 19.6, loop p99 123, min free 1.7 GB (fail, below 2 GB). Use 3 instances: `MC_HEAP_GB=3 node eval.js <first> <last> 12 <min> 3`.

@@ -5,7 +5,7 @@ Mineflayer bot that mines and deposits diamonds. Read `docs/BOT_BEHAVIOR.md` fir
 ## Commands (run from `bot/`)
 - `npm test` - unit tests, safe any time (no server).
 - `npm run test:live` - flat-world skill tests; starts a server, never run while an eval is running.
-- `node eval.js <firstSlot> <lastSlot> <bots> <minutes> [instances]` - eval on slots from `slots.json` (0-99 held-out gate, run once; 100-199 dev; 200-599 train). 12 bots per server max; instances = parallel servers (max 4).
+- `node eval.js <firstSlot> <lastSlot> <bots> <minutes> [instances]` - eval on slots from `slots.json` (0-99 held-out gate, run once; 100-199 dev; 200-599 train). 12 bots per server max; instances = parallel servers (max 4). On this 32 GB box use `MC_HEAP_GB=3 node eval.js ... 3` (3 instances validated; 4 left only 1.7 GB free).
 - Restore `server/diamonds.properties` after any server run: `git checkout -- server/diamonds.properties`.
 
 ## Workflow
