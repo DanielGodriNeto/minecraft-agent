@@ -246,13 +246,15 @@ Gate threshold was ≥ 50% (needs lower CI > ~45%): passes.
 | exp9 | recovery (`RECOVERY=1`) | REJECTED (default off), weak positive: 96 pairs (slots 344-391, 440-487) banked 65 vs 60, better on 17 slots worse on 12, diamonds 406 vs 329, deaths 15 vs 16 |
 | exp10 | traceLog (`TRACELOG=1`) | diagnostic only, no behaviour change; used on in every A/B since 296, no ill effect seen |
 | exp11 | branch level (`MINEY=-53`, or per arm `branchY=-53`) | REJECTED (keep -58): slots 392-439, 48 pairs, banked 28 (-53) vs 29 (-58), -53 better on 8 slots worse on 9, diamonds 192 vs 179, stuck 17 vs 23 but deaths 15 vs 10 |
+| exp12 | drownCap (`DROWNCAP=1`) | pending A/B: after 2 drownings in a life while mining, ban the ore area (radius 2); targets the slot 102 mine:drowning <-> go_up:ok loop |
+| exp13 | stationAbove (`STATIONABOVE=1`) | pending A/B: placeSpot also tries above the head and below the feet; targets craft:no_tool endings (21 runs) |
 
 **Changed since `8a22930`:** shaft descent, per-life counter resets, per-run cancel token, climb loop, crowd flee,
 timed ascent, barren relocation, process-isolated bots with tick-rate metrics (5-minute smoke test: p10 ticks/s
 14.4 -> 19.9, event-loop p99 440 -> 125 ms).
 
 **Paired A/B experiments:** behaviour changes sit behind env switches `SHAFT NIGHTSURF FOODGATE FIGHTGUARD RESERVE
-CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST HAZARDGRACE WATCHDOG RECOVERY TRACELOG MINEY`. Run the same slots with `ARMS` (list of arms) or one arm
+CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST STATIONABOVE DROWNCAP HAZARDGRACE WATCHDOG RECOVERY TRACELOG MINEY`. Run the same slots with `ARMS` (list of arms) or one arm
 via `ARM`; `BOTS_PER_PROC` sets bots per process (default 3). One change per experiment.
 
 **Caveats:** results hold for this world seed and difficulty easy; dev slots were tuned on; stuck is still ~40–46% of

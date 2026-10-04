@@ -413,6 +413,14 @@ What it is (from the earlier diff):
 
 A bot holding no pickaxe at all obtains or crafts one before any home trip, because `go_up` and dig need a pickaxe (48 of 84 stuck runs ended pickaxe-less after banking). Off, the home trip runs first. Result: paired A/B on slots 200-247, 48 runs/arm, banked 34 vs 34, diamonds 191 vs 192, stuck 19 vs 20 -> no effect, left off.
 
+## drownCap (switch `DROWNCAP=1`, off by default)
+
+After the second drowning in a life while `mine` is running, the ore area (radius 2 around the target) goes into `bot.unreachable` so the planner picks another target. The existing drowning counter resets on any other result, so a `mine:drowning` <-> `go_up:ok` loop (slot 102, y 58->62->58, no inventory change) never reached the cap or the stuck tracker. Result: pending A/B.
+
+## stationAbove (switch `STATIONABOVE=1`, off by default)
+
+`placeSpot` (table/chest placement) also tries the cell two above the feet and the cell below the feet, after the horizontal neighbours. In a shaft or 1-wide tunnel none of those is free, so the bot tried to dig a side wall without a pickaxe and failed `craft:no_tool` (21 runs). Result: pending A/B.
+
 ## hazardGrace (switch `HAZARDGRACE=1`, off by default)
 
 An `explore` hazard failure does not count toward the stuck tracker while a `hazard_up` climb is pending (same exemption idea as relocation hazards), because 20 stuck endings were repeated explore:hazard at y -60..-50 before the climb could run. Result: hazardGrace: ADOPTED (default on). A/B slots 248-295, 48 pairs: banked 37 vs 25, diamonds 186 vs 129, stuck 14 vs 25, better on 13 slots, worse on 1.
