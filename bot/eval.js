@@ -216,6 +216,7 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, in
   const { dir, port } = instanceSpec(instance.index, instance.total)
   restore(dir)
   const server = await startServer('diamonds', { dir, port })
+  await server.command('save-off', /Automatic saving is now disabled|already/i) // the world is restored from the snapshot every batch
   const per = botsPerProc()
   const runner = per > 0
     ? procRunner(server, slots, per, { port, instance, difficulty, minutes, arm })
