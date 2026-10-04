@@ -132,7 +132,7 @@ function assignArms(batches, arms, workers) {
 const commitHash = () => {
   try { return execSync('git rev-parse --short HEAD', { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() } catch { return undefined }
 }
-const SWITCHES = ['SHAFT', 'NIGHTSURF', 'FOODGATE', 'FIGHTGUARD', 'RESERVE', 'CROWDFLEE', 'NIGHTASCENT', 'BRANCHRELOCATE', 'GOUPLOOP', 'LOCALSURFACE', 'PICKFIRST', 'HAZARDGRACE', 'WATCHDOG', 'RECOVERY', 'TRACELOG', 'MINEY']
+const SWITCHES = ['SHAFT', 'NIGHTSURF', 'FOODGATE', 'FIGHTGUARD', 'RESERVE', 'CROWDFLEE', 'NIGHTASCENT', 'BRANCHRELOCATE', 'GOUPLOOP', 'LOCALSURFACE', 'PICKFIRST', 'STATIONABOVE', 'HAZARDGRACE', 'WATCHDOG', 'RECOVERY', 'TRACELOG', 'MINEY']
 const switchesInEffect = () => Object.fromEntries(SWITCHES.filter(k => process.env[k] !== undefined).map(k => [k, process.env[k]]))
 
 function chunk(items, size) {

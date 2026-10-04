@@ -479,8 +479,11 @@ const canHold = (bot, p) => isFree(bot.blockAt(p)) && !bot.refusedSpots?.has(p.t
 const placeFace = (bot, spot) => PLACE_FACES.find(f => isSolid(at(bot, spot, ...f)))
 
 // Cells around the bot at feet, head and below-feet level (the last one after a dig down).
+// params.stationAbove: in a shaft or 1-wide tunnel also the cell above the head and the one below the feet, which need no digging.
 function placeSpot(bot, feet) {
-  return [0, 1, -1].flatMap(dy => DIRS.map(([dx, dz]) => feet.offset(dx, dy, dz))).find(p => canHold(bot, p))
+  const around = [0, 1, -1].flatMap(dy => DIRS.map(([dx, dz]) => feet.offset(dx, dy, dz)))
+  const vertical = bot.objectiveRun?.params?.stationAbove ? [feet.offset(0, 2, 0), feet.offset(0, -1, 0)] : []
+  return [...around, ...vertical].find(p => canHold(bot, p))
 }
 
 // Boxed in (1-wide tunnel): dig out a side wall at feet level.

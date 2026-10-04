@@ -154,6 +154,17 @@ test('checkCancelled: throws the stored reason only while the token is cancelled
   assert.throws(() => checkCancelled({ skillCancel: { cancelled: true, reason: 'timeout' } }), { reason: 'timeout' })
 })
 
+test('placeSpot: stationAbove adds the cell above the head and the one below the feet, after the horizontal ones', () => {
+  const feet = new Vec3(0, 10, 0)
+  const shaft = world({ '0,12,0': 'air', '0,9,0': 'air' })
+  const on = (w, stationAbove) => ({ ...w, objectiveRun: { params: { stationAbove } } })
+  assert.strictEqual(placeSpot(on(shaft, false), feet), undefined)
+  assert.strictEqual(placeSpot(shaft, feet), undefined)
+  assert.deepStrictEqual(placeSpot(on(shaft, true), feet), new Vec3(0, 12, 0))
+  assert.deepStrictEqual(placeSpot(on(world({ '0,9,0': 'air' }), true), feet), new Vec3(0, 9, 0))
+  assert.deepStrictEqual(placeSpot(on(world({ '1,10,0': 'air', '0,12,0': 'air' }), true), feet), new Vec3(1, 10, 0))
+})
+
 test('placeSpot: a spot without a floor is fine when it has any solid neighbour to place against', () => {
   const feet = new Vec3(0, 10, 0)
   const bot = world({ '1,10,0': 'air', '1,9,0': 'air' })

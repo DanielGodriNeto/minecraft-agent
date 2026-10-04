@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
-const { nextAction, DEFAULT_PARAMS, RESERVE } = require('../bot/planner.js')
+const { nextAction, DEFAULT_PARAMS, RESERVE, normalizeParams } = require('../bot/planner.js')
 
 const WOODS = ['oak', 'spruce', 'birch']
 const sum = (inv, names) => names.reduce((n, k) => n + (inv[k] ?? 0), 0)
@@ -582,6 +582,12 @@ test('lingerUnderground: needs a carried diamond; lingerHeldReturn only when it 
   assert.strictEqual(lingerHeldReturn(banked), false) // nothing wanted to return anyway
   const spent = { ...withDiamond, memory: { ...withDiamond.memory, ascentDelayMs: MAX_ASCENT_DELAY_MS } }
   assert.strictEqual(lingerUnderground(spent), false)
+})
+
+test('stationAbove: off by default (unless STATIONABOVE=1) and coerced to a boolean from an ARM value', () => {
+  if (process.env.STATIONABOVE !== '1') assert.strictEqual(DEFAULT_PARAMS.stationAbove, false)
+  assert.strictEqual(normalizeParams({ stationAbove: 1 }).stationAbove, true)
+  assert.strictEqual(normalizeParams({ stationAbove: 0 }).stationAbove, false)
 })
 
 test('pickFirst: off by default (unless PICKFIRST=1); on, a pickaxe-less bot with inputs crafts before the home trip', () => {

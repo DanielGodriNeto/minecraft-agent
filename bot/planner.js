@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1' }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1' }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -43,12 +43,13 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   BRANCHRELOCATE branchRelocate after many empty branch legs at depth, hop 40 blocks sideways to fresh ground
 //   GOUPLOOP   goUpLoop    go_up loops trail/path/pillar rounds with a no-progress watchdog and a 360 s cap for climbs over 60 blocks
 //   PICKFIRST  pickFirst (OFF by default; =1 enables) a bot with no pickaxe obtains/crafts one before any home trip, since go_up and dig need it
+//   STATIONABOVE stationAbove (OFF by default; =1 enables) craft's placeSpot also tries the cell above the head and the one below the feet, so a table fits in a shaft or 1-wide tunnel without a pickaxe dig (craft:no_tool endings)
 //   LOCALSURFACE localSurface (OFF by default; =1 enables, experiment 5 found no gain) open sky (or two failed climbs) below home's height makes that height the surface, so the bot stops climbing toward a hill it cannot reach
 //   HAZARDGRACE hazardGrace (ON by default since A/B 248-295: 37 vs 25 banked; =0 disables) an explore hazard does not count toward stuck while a hazard_up climb is pending
 //   WATCHDOG   watchdog (OFF by default; integer, 1 enables, 2-5 are variants, see watchdogWindow in skills.js) a path goal that moves the bot <1 block in 5 s is cancelled, its target blacklisted, and the skill fails as no_progress
 //   TRACELOG   traceLog (OFF by default; =1 enables) diagnostic only: one JSONL line per planner decision in logs/trace-<run>.jsonl, no behaviour change
 //   RECOVERY   recovery (OFF by default; =1 enables) before the stuck tracker ends a run, one named recovery routine per failure signature and life (recoveryFor)
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'hazardGrace', 'recovery', 'traceLog']
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'hazardGrace', 'recovery', 'traceLog']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 // watchdog is the one multi-value param (0 off, 1-5 variants), so it is coerced to an integer instead.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])), ...('watchdog' in params && { watchdog: Number(params.watchdog) || 0 }) })
