@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const path = require('node:path')
 const req = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))
-const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, pickInstances, heapGbFor, retry, skillLogPath, parseArm, assignArms, tpsFromLine } = req('./eval.js')
+const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, pickInstances, heapGbFor, memoryGuardAction, retry, skillLogPath, parseArm, assignArms, tpsFromLine } = req('./eval.js')
 const { instanceSpec, maxInstances, assertDiskSpace, withPort } = req('./server.js')
 
 const solid = (name) => ({ name, boundingBox: 'block' })
@@ -316,4 +316,17 @@ test('pickInstances: free RAM picks 4/3/2/1 instances, a number is only a cap, a
 test('heapGbFor: 3 GB from three instances up unless MC_HEAP_GB is set', () => {
   assert.deepStrictEqual([1, 2, 3, 4].map(n => heapGbFor(n, {})), [undefined, undefined, 3, 3])
   assert.strictEqual(heapGbFor(4, { MC_HEAP_GB: '5' }), undefined)
+})
+
+test('memoryGuardAction: low RAM kills the fattest instance (tie: the newest), one at a time, never the last', () => {
+  const inst = [{ id: 1, rssGB: 3, startedAt: 100 }, { id: 2, rssGB: 4, startedAt: 200 }, { id: 3, rssGB: 4, startedAt: 300 }]
+  const act = (free, list = inst, last = -Infinity, now = 1e6) => memoryGuardAction(free, list, last, now).kill
+  assert.strictEqual(act(2.4), 3)
+  assert.strictEqual(act(2.5), null)
+  assert.strictEqual(act(8), null)
+  assert.strictEqual(act(2, inst.slice(0, 2)), 2)
+  assert.strictEqual(act(2, [inst[0]]), null)
+  assert.strictEqual(act(2, []), null)
+  assert.strictEqual(act(2, inst, 1e6 - 59000), null)
+  assert.strictEqual(act(2, inst, 1e6 - 60000), 3)
 })

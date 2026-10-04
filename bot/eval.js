@@ -16,7 +16,7 @@ const { summarize, isInvalid, mulberry32 } = require('./metrics.js')
 const os = require('node:os')
 const { execSync } = require('node:child_process')
 const { botsPerProc, startMeter, runInProcs } = require('./worker.js')
-const { startServer, snapshot, restore, checkDiskFor, instanceSpec, maxInstances } = require('./server.js')
+const { startServer, rssGb, snapshot, restore, checkDiskFor, instanceSpec, maxInstances } = require('./server.js')
 
 const SLOTS = JSON.parse(fs.readFileSync(path.join(__dirname, 'slots.json'), 'utf8'))
 const RESULTS = path.join(__dirname, '..', 'logs', 'eval.jsonl')
@@ -160,6 +160,36 @@ function pickInstances(freeGb, requested = 'auto') {
 // Three or more instances run at 3 GB heap (validated); MC_HEAP_GB still wins. undefined = startServer's default.
 const heapGbFor = (total, env = process.env) => (env.MC_HEAP_GB || total < 3 ? undefined : 3)
 
+const GUARD_FREE_GB = 2.5
+const GUARD_COOLDOWN_MS = 60000
+
+// Memory guard: when free RAM is low, sacrifice exactly one instance (largest RSS, ties the newest), then wait out the cooldown.
+// instances: [{ id, rssGB, startedAt }]. The last instance is never stopped.
+function memoryGuardAction(freeGB, instances, lastKillAt, now) {
+  if (freeGB >= GUARD_FREE_GB || instances.length < 2 || now - lastKillAt < GUARD_COOLDOWN_MS) return { kill: null }
+  const victim = instances.reduce((a, b) => (b.rssGB > a.rssGB || (b.rssGB === a.rssGB && b.startedAt > a.startedAt) ? b : a))
+  return { kill: victim.id }
+}
+
+const liveInstances = new Map() // id -> { id, startedAt, pid, abort }
+const abortedInstances = new Set() // instance indexes whose runs are discarded (never written to eval.jsonl)
+const lostSlots = []
+
+function startMemoryGuard({ intervalMs = 10000, free = freeGb, now = Date.now, rss = rssGb } = {}) {
+  let lastKillAt = -Infinity
+  const timer = setInterval(() => {
+    const freeNow = free()
+    const instances = [...liveInstances.values()].map(i => ({ id: i.id, startedAt: i.startedAt, rssGB: rss(i.pid) }))
+    const { kill } = memoryGuardAction(freeNow, instances, lastKillAt, now())
+    if (kill === null) return
+    lastKillAt = now()
+    const lost = liveInstances.get(kill).abort()
+    console.log(`[memory_guard] free ${freeNow.toFixed(1)} GB: stopped instance ${kill}, lost slots ${lost.join(',')} (re-run them)`)
+  }, intervalMs)
+  timer.unref()
+  return () => clearInterval(timer)
+}
+
 const freeGb = () => os.freemem() / 2 ** 30
 
 // Skill logs stay skills-Bot<i>.jsonl for one instance (undefined = keep createBot's default); parallel instances would
@@ -204,6 +234,7 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
 }
 
 function emitRow(run, instance) {
+  if (abortedInstances.has(instance.index)) return run // stopped by the memory guard: the run is incomplete, its slot is re-run later
   fs.appendFileSync(RESULTS, JSON.stringify(run) + '\n')
   console.log(`${instance.total > 1 ? `[i${instance.index + 1}] ` : ''}${JSON.stringify(run)}`)
   return run
@@ -237,6 +268,19 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, in
     ? procRunner(server, slots, per, { port, instance, difficulty, minutes, arm })
     : localRunner(server, slots, port, minutes, difficulty, log, instance, arm)
   let stopWatching, midTimer, midTps = null
+  let aborted = false
+  liveInstances.set(instance.index + 1, {
+    id: instance.index + 1, startedAt: Date.now(), pid: server.pid,
+    abort() {
+      aborted = true
+      abortedInstances.add(instance.index)
+      const lost = slots.map(s => s.id)
+      lostSlots.push(...lost.map(slot => ({ slot, ...(arm && { arm }) })))
+      runner.close() // workers first, so no row is written for a half-finished run
+      server.kill()
+      return lost
+    },
+  })
   const tps = []
   try {
     await runner.ready()
@@ -244,8 +288,10 @@ async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, in
     stopWatching = onStart?.(server)
     tps.push(await sampleTps(server))
     midTimer = setTimeout(() => sampleTps(server).then(t => { midTps = t }), minutes * 30000)
-    return await runner.run(start)
+    const rows = await runner.run(start)
+    return aborted ? [] : rows
   } finally {
+    liveInstances.delete(instance.index + 1)
     stopWatching?.()
     clearTimeout(midTimer)
     tps.push(midTps, await sampleTps(server))
@@ -287,7 +333,11 @@ function procRunner(server, slots, per, init) {
 
 async function runShare(share, index, total, minutes, difficulty) {
   const runs = []
-  for (const { batch, arm } of share) {
+  for (const [k, { batch, arm }] of share.entries()) {
+    if (abortedInstances.has(index)) { // the guard stopped this instance: its remaining batches are lost, not run
+      lostSlots.push(...share.slice(k).flatMap(s => s.batch.map(x => ({ slot: x.id, ...(s.arm && { arm: s.arm }) }))))
+      break
+    }
     if (runs.length) console.log(`[i${index + 1}] free RAM ${freeGb().toFixed(1)} GB, fits ${pickInstances(freeGb())} instance(s), running ${total}`)
     runs.push(...await runBatch(batch, minutes, difficulty, { instance: { index, total }, arm }))
   }
@@ -307,9 +357,12 @@ async function main([first, last, bots = '10', minutes = '60', instances = 'auto
   const shares = assignArms(batches, arms, workers)
   checkDiskFor(shares.map((_, i) => instanceSpec(i, shares.length)))
   fs.mkdirSync(path.dirname(RESULTS), { recursive: true })
+  const stopGuard = startMemoryGuard()
   const runs = (await Promise.all(shares.map((share, i) => runShare(share, i, shares.length, Number(minutes), difficulty)))).flat()
+  stopGuard()
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
+  if (lostSlots.length) console.log(`memory_guard lost ${lostSlots.length} runs, re-run: ${JSON.stringify(lostSlots)}`)
 }
 
-module.exports = { harnessRow, newBot, once, withDeadline, tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, pickInstances, heapGbFor, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { harnessRow, newBot, once, withDeadline, tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, pickInstances, heapGbFor, memoryGuardAction, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })

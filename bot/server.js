@@ -3,7 +3,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const readline = require('node:readline')
-const { spawn } = require('node:child_process')
+const { spawn, execFileSync } = require('node:child_process')
 
 const SERVER_DIR = path.join(__dirname, '..', 'server')
 const WORLD = path.join(SERVER_DIR, 'diamonds')
@@ -61,6 +61,16 @@ function prepareInstance(dir, props, port) {
   fs.writeFileSync(path.join(dir, file), withPort(fs.readFileSync(path.join(SERVER_DIR, file), 'utf8'), port))
 }
 
+// Resident memory of a process in GB, 0 when unreadable.
+function rssGb(pid) {
+  try {
+    const out = process.platform === 'win32'
+      ? execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8' }).split('","')[4]?.replace(/[^\d]/g, '')
+      : execFileSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).trim()
+    return Number(out) / 2 ** 20 || 0 // both report KB
+  } catch { return 0 }
+}
+
 function waitForLine(lines, pattern, ms) {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => { lines.off('line', h); reject(new Error(`timeout waiting for ${pattern}`)) }, ms)
@@ -74,6 +84,7 @@ async function startServer(props = 'diamonds', { dir = SERVER_DIR, port = BASE_P
   const proc = spawn('java', [...javaArgs(heapGb), '--config', `${props}.properties`], { cwd: dir, stdio: ['pipe', 'pipe', 'inherit'] })
   const lines = readline.createInterface({ input: proc.stdout })
   const exited = new Promise(resolve => proc.once('exit', resolve))
+  proc.stdin.on('error', () => {}) // a killed server (memory guard) must not crash commands still in flight
   const kill = () => proc.kill()
   const onSigint = () => { kill(); process.exit(130) }
   process.on('exit', kill)
@@ -90,6 +101,8 @@ async function startServer(props = 'diamonds', { dir = SERVER_DIR, port = BASE_P
   }
   return {
     lines,
+    pid: proc.pid,
+    kill,
     // Sends a console command; with `reply`, resolves with the first output line matching it.
     command(cmd, reply, ms = 10000) {
       const answer = reply ? waitForLine(lines, reply, ms) : Promise.resolve(null)
@@ -128,4 +141,4 @@ function checkDiskFor(specs) {
   assertDiskSpace(freeBytes(SERVER_DIR), missing * pristineSize(), `${missing} new world copies`)
 }
 
-module.exports = { startServer, snapshot, restore, checkDiskFor, instanceSpec, maxInstances, assertDiskSpace, withPort, freeBytes, pristineSize, WORLD, PRISTINE }
+module.exports = { startServer, rssGb, snapshot, restore, checkDiskFor, instanceSpec, maxInstances, assertDiskSpace, withPort, freeBytes, pristineSize, WORLD, PRISTINE }
