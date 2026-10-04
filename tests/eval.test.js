@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const path = require('node:path')
 const req = require('node:module').createRequire(path.join(__dirname, '../bot/eval.js'))
-const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, retry, skillLogPath, parseArm, assignArms, tpsFromLine } = req('./eval.js')
+const { groundY, readDifficulty, assertSpawnSet, clearStandCommand, distribute, chunk, parseInstances, pickInstances, heapGbFor, retry, skillLogPath, parseArm, assignArms, tpsFromLine } = req('./eval.js')
 const { instanceSpec, maxInstances, assertDiskSpace, withPort } = req('./server.js')
 
 const solid = (name) => ({ name, boundingBox: 'block' })
@@ -300,4 +300,20 @@ test('reportRow: a rejected bot sends a harness row for itself only', async () =
 test('maxInstances: smaller heaps never exceed the 4-instance cap', () => {
   assert.strictEqual(maxInstances(32, 3), 4)
   assert.strictEqual(maxInstances(16, 3), 2)
+})
+
+test('pickInstances: free RAM picks 4/3/2/1 instances, a number is only a cap, auto and missing mean no cap', () => {
+  assert.deepStrictEqual([20, 16, 15.9, 11, 10.9, 7, 6.9, 0].map(g => pickInstances(g, 'auto')), [4, 4, 3, 3, 2, 2, 1, 1])
+  assert.strictEqual(pickInstances(20), 4)
+  assert.strictEqual(pickInstances(20, undefined), 4)
+  assert.strictEqual(pickInstances(20, '2'), 2)
+  assert.strictEqual(pickInstances(8, 4), 2)
+  assert.strictEqual(pickInstances(20, 9), 4)
+  assert.throws(() => pickInstances(20, '0'), /positive integer/)
+  assert.throws(() => pickInstances(20, 'x'), /positive integer/)
+})
+
+test('heapGbFor: 3 GB from three instances up unless MC_HEAP_GB is set', () => {
+  assert.deepStrictEqual([1, 2, 3, 4].map(n => heapGbFor(n, {})), [undefined, undefined, 3, 3])
+  assert.strictEqual(heapGbFor(4, { MC_HEAP_GB: '5' }), undefined)
 })

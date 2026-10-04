@@ -1,8 +1,9 @@
 // Phase 2.5 eval harness. Server must NOT be running; this script owns it.
 //   node eval.js snapshot                         save the pregenerated world as the pristine copy
-//   node eval.js <first> <last> [bots] [minutes] [instances]
+//   node eval.js <first> <last> [bots] [minutes] [instances|auto]
 //                                                 run slots first..last in batches, e.g. 100 199 10 60;
-//                                                 instances > 1 runs that many Paper servers in parallel
+//                                                 instances > 1 runs that many Paper servers in parallel; auto (default) or a number as
+//                                                 a cap picks 4/3/2/1 from free RAM >= 16/11/7 GB; FORCE_INSTANCES=n overrides; >= 3 uses MC_HEAP_GB=3
 //                                                 (server/run-<n>/, port 25565+n, ~14 GB world copy each)
 // A/B: ARM=shaft=0,reserve=0 overrides run params; ARMS="shaft=1;shaft=0" runs every batch once per arm, rotated across instances.
 // Results: logs/eval.jsonl (one line per run); summary printed at the end.
@@ -20,6 +21,7 @@ const { startServer, snapshot, restore, checkDiskFor, instanceSpec, maxInstances
 const SLOTS = JSON.parse(fs.readFileSync(path.join(__dirname, 'slots.json'), 'utf8'))
 const RESULTS = path.join(__dirname, '..', 'logs', 'eval.jsonl')
 const PROPS = path.join(__dirname, '..', 'server', 'diamonds.properties')
+const MAX_INSTANCES = 4
 const MAX_BOTS = 16 // Bot0..Bot15 are the whitelisted names
 const SPAWN_MS = 60000
 const SPAWN_REPLY = /Set spawn point|Unknown or incomplete|Incorrect argument|No player was found|No entity was found/
@@ -147,6 +149,19 @@ function parseInstances(arg, totalMemGb = os.totalmem() / 2 ** 30) {
   return n
 }
 
+// Instances the free RAM allows (4 at >= 16 GB, 3 at >= 11, 2 at >= 7, else 1); a number is a cap, 'auto' or nothing is no cap.
+function pickInstances(freeGb, requested = 'auto') {
+  const cap = requested === 'auto' ? MAX_INSTANCES : Number(requested)
+  if (!Number.isInteger(cap) || cap < 1) throw new Error(`instances must be 'auto' or a positive integer, got ${requested}`)
+  const fit = freeGb >= 16 ? 4 : freeGb >= 11 ? 3 : freeGb >= 7 ? 2 : 1
+  return Math.min(fit, cap, MAX_INSTANCES)
+}
+
+// Three or more instances run at 3 GB heap (validated); MC_HEAP_GB still wins. undefined = startServer's default.
+const heapGbFor = (total, env = process.env) => (env.MC_HEAP_GB || total < 3 ? undefined : 3)
+
+const freeGb = () => os.freemem() / 2 ** 30
+
 // Skill logs stay skills-Bot<i>.jsonl for one instance (undefined = keep createBot's default); parallel instances would
 // interleave, so they get skills-i<n>-Bot<i>.jsonl. bot.username is not set until login, so the name is passed in.
 const skillLogPath = ({ index, total }, name) => total > 1 ? path.join(__dirname, '..', 'logs', `skills-i${index + 1}-${name}.jsonl`) : undefined
@@ -215,7 +230,7 @@ const sampleTps = async (server) => {
 async function runBatch(slots, minutes, difficulty, { log = RESULTS, onStart, instance = { index: 0, total: 1 }, arm } = {}) {
   const { dir, port } = instanceSpec(instance.index, instance.total)
   restore(dir)
-  const server = await startServer('diamonds', { dir, port })
+  const server = await startServer('diamonds', { dir, port, heapGb: heapGbFor(instance.total) })
   await server.command('save-off', /Automatic saving is now disabled|already/i) // the world is restored from the snapshot every batch
   const per = botsPerProc()
   const runner = per > 0
@@ -272,23 +287,29 @@ function procRunner(server, slots, per, init) {
 
 async function runShare(share, index, total, minutes, difficulty) {
   const runs = []
-  for (const { batch, arm } of share) runs.push(...await runBatch(batch, minutes, difficulty, { instance: { index, total }, arm }))
+  for (const { batch, arm } of share) {
+    if (runs.length) console.log(`[i${index + 1}] free RAM ${freeGb().toFixed(1)} GB, fits ${pickInstances(freeGb())} instance(s), running ${total}`)
+    runs.push(...await runBatch(batch, minutes, difficulty, { instance: { index, total }, arm }))
+  }
   return runs
 }
 
-async function main([first, last, bots = '10', minutes = '60', instances = '1']) {
+async function main([first, last, bots = '10', minutes = '60', instances = 'auto']) {
   if (first === 'snapshot') return snapshot()
   if (Number(bots) > MAX_BOTS) throw new Error(`at most ${MAX_BOTS} bots (only Bot0..Bot${MAX_BOTS - 1} are whitelisted)`)
   const difficulty = readDifficulty()
   const slots = SLOTS.filter(s => s.id >= Number(first) && s.id <= Number(last))
   const arms = process.env.ARMS ? process.env.ARMS.split(';').map(a => a.trim()) : ['']
   const batches = chunk(slots, Number(bots))
-  const shares = assignArms(batches, arms, Math.min(parseInstances(instances), batches.length * arms.length))
+  const wanted = process.env.FORCE_INSTANCES ? parseInstances(process.env.FORCE_INSTANCES) : pickInstances(freeGb(), instances)
+  const workers = Math.min(wanted, batches.length * arms.length)
+  console.log(`instances: ${workers} (free RAM ${freeGb().toFixed(1)} GB, requested ${process.env.FORCE_INSTANCES ? `FORCE_INSTANCES=${process.env.FORCE_INSTANCES}` : instances})`)
+  const shares = assignArms(batches, arms, workers)
   checkDiskFor(shares.map((_, i) => instanceSpec(i, shares.length)))
   fs.mkdirSync(path.dirname(RESULTS), { recursive: true })
   const runs = (await Promise.all(shares.map((share, i) => runShare(share, i, shares.length, Number(minutes), difficulty)))).flat()
   console.log(JSON.stringify({ difficulty, ...summarize(runs) }, null, 1))
 }
 
-module.exports = { harnessRow, newBot, once, withDeadline, tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { harnessRow, newBot, once, withDeadline, tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, pickInstances, heapGbFor, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })
