@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1' }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1' }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -50,8 +50,9 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   WATCHDOG   watchdog (OFF by default; integer, 1 enables, 2-5 are variants, see watchdogWindow in skills.js) a path goal that moves the bot <1 block in 5 s is cancelled, its target blacklisted, and the skill fails as no_progress
 //   TRACELOG   traceLog (OFF by default; =1 enables) diagnostic only: one JSONL line per planner decision in logs/trace-<run>.jsonl, no behaviour change
 //   EARLYBANK  earlyBank (OFF by default; =1 enables) wantsReturn already banks the first diamond at once; this stops lingerUnderground (nightAscent) from delaying that first deposit
+//   SPAWNESCAPE spawnEscape (OFF by default; =1 enables) no wood and no pickaxe after 2 go_up:not_reached or failed surface searches: one 64-block surface walk in a fresh direction (max 3 per life) before the next log search
 //   RECOVERY   recovery (OFF by default; =1 enables) before the stuck tracker ends a run, one named recovery routine per failure signature and life (recoveryFor)
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank']
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 // watchdog is the one multi-value param (0 off, 1-5 variants), so it is coerced to an integer instead.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])), ...('watchdog' in params && { watchdog: Number(params.watchdog) || 0 }) })
@@ -105,6 +106,9 @@ const MAX_ASCENT_DELAY_MS = 20 * 60000 // per life, so lingering can never becom
 const BRANCH_MISSES = 12 // consecutive not_found diamond branch explores before one relocation
 const BRANCH_HOP_BLOCKS = 40
 const MAX_BRANCH_RELOCS = 2 // per life
+const ESCAPE_FAILS = 2 // go_up:not_reached failures or failed surface searches before a spawn escape
+const ESCAPE_BLOCKS = 64
+const MAX_ESCAPES = 3 // per life, each in a different direction
 
 // Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
 const BIGGEST_STACK = new Set(['planks', 'stone'])
@@ -154,6 +158,8 @@ function gather(s, item) {
   const source = SOURCES[item]
   if (s.visible[item]) return mineAct(item)
   if (source.find === 'surface') {
+    const escape = spawnEscape(s, source)
+    if (escape) return escape
     if (s.y < s.surfaceY - 8) return act('go_up', s.surfaceY)
     return act('explore', { target: source.blocks, mode: 'surface', dir: s.memory.surfaceDir, maxBlocks: surfaceReach(s.memory), maxAbove: source.maxAbove })
   }
@@ -165,7 +171,17 @@ function gather(s, item) {
   return act('explore', { target: source.blocks, mode: 'branch', ...branchLeg(s) })
 }
 
-const inputsOnHand = (s, item) => Object.entries(RECIPES[item].in).every(([input, n]) => count(s, input) >= n)
+// A bad spawn (water, a basin) with no wood and no tool keeps failing the same climb or search: walk far in a fresh direction instead.
+// The first escape goes opposite surfaceDir; later ones continue from escapeStart (set by agent.js), so no direction repeats.
+function spawnEscape(s, source) {
+  const { spawnEscapes = 0, escapeStart, surfaceDir = 0, surfaceLeg = 0, failSigs = {} } = s.memory
+  if (!s.params.spawnEscape || spawnEscapes >= MAX_ESCAPES || count(s, 'log') > 0 || count(s, 'planks') > 0 || pickaxeCount(s) > 0) return null
+  if ((failSigs['go_up:not_reached'] ?? 0) < ESCAPE_FAILS && surfaceLeg < ESCAPE_FAILS) return null
+  const dir = ((escapeStart ?? surfaceDir + 2) + spawnEscapes) % DIRS
+  return { ...act('explore', { target: source.blocks, mode: 'surface', dir, maxBlocks: ESCAPE_BLOCKS, maxAbove: source.maxAbove }), key: 'spawn_escape' }
+}
+
+const inputsOnHand =(s, item) => Object.entries(RECIPES[item].in).every(([input, n]) => count(s, input) >= n)
 
 // The dig failed for lack of a pickaxe tier: craft the best pickaxe above the one carried that needs nothing gathered.
 function pickaxeUpgrade(s) {

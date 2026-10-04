@@ -23,12 +23,12 @@ const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock i
 //   per-run:  baseDir, surfaceDir, relocations   (directions keep rotating so a new life does not retry the failed one)
 //   per-trip: restock, nightDigs, optionalFails, fightFails  (also reset by a successful deposit)
 //   per-life: localSurfaceY, goUpFails, goUpY, homeTimeouts, homePause, homeAdopt, leg, surfaceLeg, shelters, noShelter, drownings, mineDrownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
-//             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs, failSigs, recovered   (the respawn is at home: nothing of the old position applies)
+//             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs, failSigs, recovered, spawnEscapes, escapeStart   (the respawn is at home: nothing of the old position applies)
 //   hopsSinceDescent deliberately survives a deposit: it counts hops since the last real descent, and any descent zeroes it.
 const lifeMemory = () => ({
   leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, mineDrownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
   relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0,
-  failSigs: {}, recovered: {}, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, ...tripMemory(),
+  failSigs: {}, recovered: {}, spawnEscapes: 0, escapeStart: undefined, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, ...tripMemory(),
 })
 const tripMemory = () => ({ restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0 })
 
@@ -308,6 +308,15 @@ function remember(run, action, result) {
     run.memory.branchRelocs = (run.memory.branchRelocs ?? 0) + 1
     run.memory.branchMisses = 0
     run.memory.leg = 0 // serpentine restarts from the new ground
+    return
+  }
+  if (action.key === 'spawn_escape') {
+    run.memory.spawnEscapes = (run.memory.spawnEscapes ?? 0) + 1
+    run.memory.escapeStart ??= action.args[0].dir
+    if (result.ok) { // wood in view: the failure counters that triggered the escape start over
+      run.memory.surfaceLeg = 0
+      delete run.memory.failSigs['go_up:not_reached']
+    }
     return
   }
   if (action.skill === 'explore' && action.args[0].mode === 'branch' && action.args[0].target === SOURCES.diamond.blocks) {

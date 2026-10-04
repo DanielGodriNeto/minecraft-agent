@@ -444,6 +444,10 @@ Diagnostic only. One JSONL line per planner decision is appended to `logs/trace-
 
 Banking the first diamond at once already exists: `wantsReturn` is true whenever a diamond is held and `deposited === 0`, so `returnAt` is never consulted for the first deposit. The one thing that still delays it is `lingerUnderground` (nightAscent: keep mining while the surface arrival would be in the dark). earlyBank skips the linger while `deposited === 0`, so a carried first diamond starts the trip immediately. Later deposits are unchanged. Result: pending A/B.
 
+## spawnEscape (switch `SPAWNESCAPE=1`, off by default)
+
+23 of 58 zero-diamond stuck runs never got a stone pickaxe: they sat on a bad spawn (water, basin) looping `go_up:not_reached` / flee with no wood. With no log, planks or pickaxe held, and either 2 `go_up:not_reached` failures or 2 failed surface searches in this life, the log gather step becomes one 64-block surface `explore` (key `spawn_escape`) before the climb or the next search. The first escape heads opposite `surfaceDir`, later ones rotate from the first (`escapeStart`), so no direction repeats; at most 3 per life. A found log (explore ok) clears the two trigger counters. Water is not detected: the pathfinder's own refusal to cross it is what the hop retries sideways. Result: pending A/B.
+
 ## MINEY (env override of branchY, unset by default)
 
 `branchY` is drawn per slot from the seeded rand in `jitterParams` (-59..-56). `MINEY=-53` fixes it for every bot of that eval; the draw still happens, so the other jittered params are unchanged and arms stay paired. Env cannot differ per arm, so a two-arm run uses the param form, `ARMS="branchY=-58;branchY=-53"` (parseArm overrides the draw the same way). Result: branch level A/B: pending.

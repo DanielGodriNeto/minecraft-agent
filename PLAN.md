@@ -249,6 +249,7 @@ Gate threshold was ≥ 50% (needs lower CI > ~45%): passes.
 | exp12 | drownCap (`DROWNCAP=1`) | REJECTED 2026-10-04 (slots 200-247, 48 pairs: banked 37 vs 43, better 0 worse 6, dia 238 vs 202, deaths 8 vs 4): after 2 drownings in a life while mining, ban the ore area (radius 2); targets the slot 102 mine:drowning <-> go_up:ok loop |
 | exp13 | stationAbove (`STATIONABOVE=1`) | REJECTED 2026-10-04 (slots 248-295, 48 pairs: banked 33 vs 34, better 6 worse 7, dia 190 vs 209, deaths 3 vs 10 but timeouts 30 vs 17): placeSpot also tries above the head and below the feet; targets craft:no_tool endings (21 runs) |
 | exp14 | earlyBank (`EARLYBANK=1`) | pending A/B: the first diamond is banked at once already; this only stops the nightAscent linger from delaying the first deposit (targets diamond held but never deposited, 7% of runs) |
+| exp15 | spawnEscape (`SPAWNESCAPE=1`) | pending A/B: no wood/pickaxe after 2 go_up:not_reached or failed surface searches -> 64-block surface walk in a fresh direction, max 3 per life (targets 23 of 58 zero-diamond stuck runs with no stone pickaxe) |
 
 **Changed since `8a22930`:** shaft descent, per-life counter resets, per-run cancel token, climb loop, crowd flee,
 timed ascent, barren relocation, process-isolated bots with tick-rate metrics (5-minute smoke test: p10 ticks/s

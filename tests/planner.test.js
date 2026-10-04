@@ -596,6 +596,39 @@ test('earlyBank: off by default; on, the first diamond is never lingered on, lat
   assert.strictEqual(lingerUnderground(withParams(true, { deposited: 1, pickLeft: 1000 })), true)
 })
 
+test('spawnEscape: off by default; on, a wood-less tool-less bot walks 64 blocks in a new direction each time after 2 failures, capped at 3', () => {
+  const { remember } = require('../bot/agent.js')
+  if (process.env.SPAWNESCAPE !== '1') assert.strictEqual(DEFAULT_PARAMS.spawnEscape, false)
+  assert.strictEqual(normalizeParams({ spawnEscape: 1 }).spawnEscape, true)
+  const on = { ...DEFAULT_PARAMS, spawnEscape: true }
+  const memory = { leg: 0, baseDir: 0, surfaceDir: 1, surfaceLeg: 0, failSigs: {}, optionalFails: {}, restock: {} }
+  const run = { memory }
+  const bad = (over = {}) => state({ y: 60, params: on, memory, ...over })
+  assert.notStrictEqual(nextAction(bad()).key, 'spawn_escape') // no failures yet
+  const goUp = { skill: 'go_up', args: [70] }
+  remember(run, goUp, { ok: false, reason: 'not_reached' })
+  assert.notStrictEqual(nextAction(bad()).key, 'spawn_escape')
+  remember(run, goUp, { ok: false, reason: 'not_reached' })
+  assert.notStrictEqual(nextAction(bad({ params: DEFAULT_PARAMS })).key, 'spawn_escape') // off
+  assert.notStrictEqual(nextAction(bad({ inv: { oak_log: 1 } })).key, 'spawn_escape') // has wood
+  assert.notStrictEqual(nextAction(bad({ inv: { wooden_pickaxe: 1 } })).key, 'spawn_escape') // has a tool
+  const dirs = []
+  for (let i = 0; i < 5; i++) {
+    const action = nextAction(bad())
+    if (action.key !== 'spawn_escape') break
+    assert.strictEqual(action.args[0].maxBlocks, 64)
+    dirs.push(action.args[0].dir)
+    remember(run, action, { ok: false, reason: 'not_found' })
+  }
+  assert.deepStrictEqual(dirs, [3, 0, 1]) // opposite surfaceDir first, then rotating, never repeating
+  assert.notStrictEqual(nextAction(bad()).key, 'spawn_escape')
+  const fresh = { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 2, failSigs: {}, optionalFails: {}, restock: {} } // failed searches alone also trigger it
+  const found = nextAction(state({ y: 60, params: on, memory: fresh }))
+  assert.strictEqual(found.key, 'spawn_escape')
+  remember({ memory: fresh }, found, { ok: true })
+  assert.strictEqual(fresh.surfaceLeg, 0) // success clears the trigger counters
+})
+
 test('drownCap: off by default (unless DROWNCAP=1) and coerced to a boolean from an ARM value', () => {
   if (process.env.DROWNCAP !== '1') assert.strictEqual(DEFAULT_PARAMS.drownCap, false)
   assert.strictEqual(normalizeParams({ drownCap: 1 }).drownCap, true)
