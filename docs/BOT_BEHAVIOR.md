@@ -419,7 +419,7 @@ After the second drowning in a life while `mine` is running, the ore area (radiu
 
 ## stationAbove (switch `STATIONABOVE=1`, off by default)
 
-`placeSpot` (table/chest placement) also tries the cell two above the feet and the cell below the feet, after the horizontal neighbours. In a shaft or 1-wide tunnel none of those is free, so the bot tried to dig a side wall without a pickaxe and failed `craft:no_tool` (21 runs). Result: pending A/B.
+`placeSpot` (table/chest placement) also tries the cell two above the feet and the cell below the feet, after the horizontal neighbours. In a shaft or 1-wide tunnel none of those is free, so the bot tried to dig a side wall without a pickaxe and failed `craft:no_tool` (21 runs). Result: REJECTED 2026-10-04 (48 pairs, slots 248-295: banked 33 vs 34, better 6 worse 7; deaths 3 vs 10 but timeouts 30 vs 17). Stays off.
 
 ## hazardGrace (switch `HAZARDGRACE=1`, off by default)
 
