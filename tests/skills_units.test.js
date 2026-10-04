@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow, veinDir, veinTarget } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -1059,6 +1059,32 @@ test('mine: drownCap bans the target area after the second drowning in a life; o
   const off = drowned(false)
   for (let i = 0; i < 3; i++) await run(off, () => SKILLS.mine(off, 'stone'), false)
   assert.ok(!off.unreachable || off.unreachable.size === 0)
+})
+
+test('veinDir: heads along the longer horizontal axis to an ore a tunnel would expose, else null', () => {
+  const p = new Vec3(0, -50, 0)
+  assert.strictEqual(veinDir(p, new Vec3(10, -50, 3)), 0)
+  assert.strictEqual(veinDir(p, new Vec3(-10, -49, 3)), 2)
+  assert.strictEqual(veinDir(p, new Vec3(2, -52 + 3, 9)), 1)
+  assert.strictEqual(veinDir(p, new Vec3(1, -50, -9)), 3)
+  assert.strictEqual(veinDir(p, new Vec3(10, -53, 0)), null) // too deep below
+  assert.strictEqual(veinDir(p, new Vec3(10, -47, 0)), null) // too high above
+  assert.strictEqual(veinDir(p, new Vec3(0, -50, 0)), null)
+  assert.strictEqual(veinDir(p, new Vec3(30, -50, 3)), null) // beyond the detour limit
+})
+
+test('veinTarget: off by default; on only at depth, only diamond targets, skipping banned and unreachable ores', () => {
+  const ores = [new Vec3(5, -20, 0), new Vec3(40, -50, 0), new Vec3(6, -50, 0), new Vec3(0, -50, 7)]
+  const bot = (y, params) => ({
+    entity: { position: new Vec3(0.5, y, 0.5) }, objectiveRun: { params }, unreachable: new Set(['(0, -50, 7)']),
+    registry: { blocksByName: { diamond_ore: { id: 1 }, deepslate_diamond_ore: { id: 2 }, stone: { id: 3 } } },
+    findBlocks: () => ores,
+  })
+  const target = ['diamond_ore', 'deepslate_diamond_ore']
+  assert.strictEqual(veinTarget(bot(-50, { veinScan: false }), target), null)
+  assert.strictEqual(veinTarget(bot(-30, { veinScan: true }), target), null) // too shallow
+  assert.strictEqual(veinTarget(bot(-50, { veinScan: true }), ['stone']), null)
+  assert.deepStrictEqual(veinTarget(bot(-50, { veinScan: true }), target), new Vec3(6, -50, 0))
 })
 
 test('clearUnreachable: empties the blacklist and tolerates a bot without one', () => {

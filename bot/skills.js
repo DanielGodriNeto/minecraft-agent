@@ -770,6 +770,29 @@ async function surfaceHop(bot, p, dir) {
   throw failure
 }
 
+const VEIN_MAX_Y = -40 // veinScan only at mining depth
+const VEIN_RADIUS = 48
+const VEIN_REACH = 32 // horizontal blocks (|dx| + |dz|) worth a detour
+
+// Direction index along the longer horizontal axis toward an ore that a tunnel at p's height would expose (ore from 1 below the feet to 2 above them), else null.
+function veinDir(p, ore) {
+  const dx = ore.x - p.x
+  const dz = ore.z - p.z
+  const dy = ore.y - p.y
+  if (dy < -1 || dy > 2 || (dx === 0 && dz === 0) || Math.abs(dx) + Math.abs(dz) > VEIN_REACH) return null
+  if (dx !== 0 && Math.abs(dx) >= Math.abs(dz)) return dx > 0 ? 0 : 2
+  return dz > 0 ? 1 : 3
+}
+
+// params.veinScan: a buried diamond (not yet visible) within radius 48 pulls the tunnel toward it; findVisible then sees it once the tunnel exposes it.
+function veinTarget(bot, target) {
+  if (!bot.objectiveRun?.params?.veinScan || bot.entity.position.y > VEIN_MAX_Y || ![target].flat().includes('diamond_ore')) return null
+  const p = bot.entity.position.floored()
+  const matching = [target].flat().map(n => blockId(bot, n))
+  const banned = bot.unreachable ?? new Set()
+  return bot.findBlocks({ matching, maxDistance: VEIN_RADIUS, count: 4 }).find(o => !banned.has(o.toString()) && veinDir(p, o) !== null) ?? null
+}
+
 async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64, maxAbove = null }) {
   for (let moved = 0; moved < maxBlocks; moved += mode === 'surface' ? 8 : 1) {
     checkCancelled(bot)
@@ -779,10 +802,16 @@ async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64, 
       await surfaceHop(bot, p, dir)
       continue
     }
-    const cells = tunnelCells(p, DIRS[dir])
-    if (!tunnelSafe(bot, cells)) throw new Fail('hazard')
-    if (!await floored(bot, cells[1])) throw new Fail('no_floor')
-    await tunnelStep(bot, cells, cells[1])
+    const ore = veinTarget(bot, target)
+    const cells = tunnelCells(p, DIRS[ore ? veinDir(p, ore) : dir])
+    try {
+      if (!tunnelSafe(bot, cells)) throw new Fail('hazard')
+      if (!await floored(bot, cells[1])) throw new Fail('no_floor')
+      await tunnelStep(bot, cells, cells[1])
+    } catch (e) {
+      if (!ore || !(e instanceof Fail) || currentCancel(bot)?.cancelled) throw e
+      blacklistGoal(bot, ore) // a detour that failed once is not tried again: back to the branch direction
+    }
   }
   if (!findVisible(bot, target, maxAbove)) throw new Fail('not_found')
 }
@@ -1565,4 +1594,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow, veinDir, veinTarget }

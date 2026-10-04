@@ -250,13 +250,14 @@ Gate threshold was ≥ 50% (needs lower CI > ~45%): passes.
 | exp13 | stationAbove (`STATIONABOVE=1`) | REJECTED 2026-10-04 (slots 248-295, 48 pairs: banked 33 vs 34, better 6 worse 7, dia 190 vs 209, deaths 3 vs 10 but timeouts 30 vs 17): placeSpot also tries above the head and below the feet; targets craft:no_tool endings (21 runs) |
 | exp14 | earlyBank (`EARLYBANK=1`) | pending A/B: the first diamond is banked at once already; this only stops the nightAscent linger from delaying the first deposit (targets diamond held but never deposited, 7% of runs) |
 | exp15 | spawnEscape (`SPAWNESCAPE=1`) | pending A/B: no wood/pickaxe after 2 go_up:not_reached or failed surface searches -> 64-block surface walk in a fresh direction, max 3 per life (targets 23 of 58 zero-diamond stuck runs with no stone pickaxe) |
+| exp16 | veinScan (`VEINSCAN=1`) | pending A/B: at y <= -40 branch tunnel steps scan radius 48 for a buried diamond and tunnel toward it (nearest within -1..+2 y, 32 blocks horizontal); failed detours blacklist the ore (targets explore:not_found, ~16 min per success run) |
 
 **Changed since `8a22930`:** shaft descent, per-life counter resets, per-run cancel token, climb loop, crowd flee,
 timed ascent, barren relocation, process-isolated bots with tick-rate metrics (5-minute smoke test: p10 ticks/s
 14.4 -> 19.9, event-loop p99 440 -> 125 ms).
 
 **Paired A/B experiments:** behaviour changes sit behind env switches `SHAFT NIGHTSURF FOODGATE FIGHTGUARD RESERVE
-CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST STATIONABOVE DROWNCAP HAZARDGRACE WATCHDOG RECOVERY TRACELOG MINEY`. Run the same slots with `ARMS` (list of arms) or one arm
+CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST STATIONABOVE DROWNCAP HAZARDGRACE WATCHDOG RECOVERY TRACELOG MINEY EARLYBANK SPAWNESCAPE VEINSCAN`. Run the same slots with `ARMS` (list of arms) or one arm
 via `ARM`; `BOTS_PER_PROC` sets bots per process (default 3). One change per experiment.
 
 **Caveats:** results hold for this world seed and difficulty easy; dev slots were tuned on; stuck is still ~40–46% of

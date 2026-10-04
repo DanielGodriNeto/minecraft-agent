@@ -629,6 +629,12 @@ test('spawnEscape: off by default; on, a wood-less tool-less bot walks 64 blocks
   assert.strictEqual(fresh.surfaceLeg, 0) // success clears the trigger counters
 })
 
+test('veinScan: off by default (unless VEINSCAN=1) and coerced to a boolean from an ARM value', () => {
+  if (process.env.VEINSCAN !== '1') assert.strictEqual(DEFAULT_PARAMS.veinScan, false)
+  assert.strictEqual(normalizeParams({ veinScan: 1 }).veinScan, true)
+  assert.strictEqual(normalizeParams({ veinScan: 0 }).veinScan, false)
+})
+
 test('drownCap: off by default (unless DROWNCAP=1) and coerced to a boolean from an ARM value', () => {
   if (process.env.DROWNCAP !== '1') assert.strictEqual(DEFAULT_PARAMS.drownCap, false)
   assert.strictEqual(normalizeParams({ drownCap: 1 }).drownCap, true)
