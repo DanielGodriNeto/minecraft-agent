@@ -718,7 +718,9 @@ test('pickReady: a low iron pickaxe with no spare climbs to the iron level, craf
   const deep = { y: -40, surfaceY: 70, ironLeft: 20 }
   const up = nextAction(pr(deep))
   assert.deepStrictEqual([up.skill, up.args, up.key], ['go_up', [16], 'pick_up'])
-  assert.notStrictEqual(nextAction(pr({ ...deep, ironLeft: 100 })).key, 'pick_up') // 15% of 250 is 37
+  assert.notStrictEqual(nextAction(pr({ ...deep, ironLeft: 100 })).key, 'pick_up')
+  assert.strictEqual(nextAction(pr({ ...deep, ironLeft: 50 })).key, 'pick_up') // 80% used = 20% of 250 left
+  assert.notStrictEqual(nextAction(pr({ ...deep, ironLeft: 51 })).key, 'pick_up')
   assert.notStrictEqual(nextAction(pr({ ...deep, memory: mem({ pickUps: 2 }) })).key, 'pick_up')
   assert.notStrictEqual(nextAction(pr({ ...deep, inv: { iron_pickaxe: 2 } })).key, 'pick_up') // a spare is held
   const craft = nextAction(pr({ ...deep, inv: { iron_pickaxe: 1, iron_ingot: 3, stick: 2 }, tableNear: true }))

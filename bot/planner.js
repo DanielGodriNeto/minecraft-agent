@@ -53,7 +53,7 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   SPAWNESCAPE spawnEscape (OFF by default; =1 enables) no wood and no pickaxe after 2 go_up:not_reached or failed surface searches: one 64-block surface walk in a fresh direction (max 3 per life) before the next log search
 //   VEINSCAN   veinScan (OFF by default; =1 enables) at y <= -40 each branch tunnel step scans radius 48 for a buried diamond (visible needs an exposed face) and tunnels toward it; an ore whose detour fails is blacklisted (skills.js veinTarget)
 //   SPAWNWALK  spawnWalk (OFF by default; =1 enables) supersedes spawnEscape: on the same bad-spawn trigger the bot picks one heading (opposite surfaceDir) and keeps walking it in 56-block surface legs, sidestepping a blocked leg with a 16-block lateral leg then resuming, until a log is seen; cap 600 blocks or 10 min, then the old behaviour
-//   PICKREADY  pickReady (OFF by default; =1 enables) keeps a spare iron pickaxe (mines visible iron, smelts, crafts it before the final descent) and, with one low (<15% durability) or no iron pickaxe and no spare, climbs to the iron level (y16) and restocks instead of mining on until it breaks
+//   PICKREADY  pickReady (OFF by default; =1 enables) keeps a spare iron pickaxe (mines visible iron, smelts, crafts it before the final descent) and, with one low (<=20% durability left) or no iron pickaxe and no spare, climbs to the iron level (y16) and restocks instead of mining on until it breaks
 //   RECOVERY   recovery (OFF by default; =1 enables) before the stuck tracker ends a run, one named recovery routine per failure signature and life (recoveryFor)
 const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk', 'pickReady']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
@@ -120,7 +120,8 @@ const MAX_WALK_FAILS = 6 // consecutive failed legs (including sidesteps) before
 const IRON_PICKS = ['iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe']
 const IRON_LEVEL = 16 // SOURCES.raw_iron.y
 const IRON_DURABILITY = 250
-const LOW_IRON = Math.floor(IRON_DURABILITY * 0.15)
+const LOW_IRON_USED = 0.8 // restock once 80% of the pickaxe is used, i.e. 20% (50 uses) left
+const LOW_IRON = IRON_DURABILITY - Math.round(IRON_DURABILITY * LOW_IRON_USED)
 const SPARE_INGOTS = RECIPES.iron_pickaxe.in.iron_ingot
 const MAX_PICK_UPS = 2 // per life: climbs to the iron level to restock
 const PREP_MIN_MS = 20 * 60000 // closer to the deadline than this, no spare is prepared
@@ -429,7 +430,7 @@ function spareIronStep(s) {
 function pickReadyStep(s) {
   const picks = ironPickCount(s)
   if (!s.params.pickReady || s.ironLeft === undefined || picks >= 2 || s.hostileNear || s.msLeft < RETURN_BEFORE_MS || !restockOpen(s, 'pick_ready')) return null
-  const low = picks === 0 || s.ironLeft < LOW_IRON
+  const low = picks === 0 || s.ironLeft <= LOW_IRON
   const deep = s.y < IRON_LEVEL - 2
   if (!low) {
     const calm = !s.isNight && s.msLeft >= PREP_MIN_MS && s.y > s.params.branchY + 2
