@@ -415,7 +415,7 @@ A bot holding no pickaxe at all obtains or crafts one before any home trip, beca
 
 ## drownCap (switch `DROWNCAP=1`, off by default)
 
-After the second drowning in a life while `mine` is running, the ore area (radius 2 around the target) goes into `bot.unreachable` so the planner picks another target. The existing drowning counter resets on any other result, so a `mine:drowning` <-> `go_up:ok` loop (slot 102, y 58->62->58, no inventory change) never reached the cap or the stuck tracker. Result: pending A/B.
+After the second drowning in a life while `mine` is running, the ore area (radius 2 around the target) goes into `bot.unreachable` so the planner picks another target. The existing drowning counter resets on any other result, so a `mine:drowning` <-> `go_up:ok` loop (slot 102, y 58->62->58, no inventory change) never reached the cap or the stuck tracker. Result: REJECTED 2026-10-04 (48 pairs, slots 200-247: banked 37 vs 43, better 0 worse 6, deaths 8 vs 4; more diamonds but fewer banked). Stays off.
 
 ## stationAbove (switch `STATIONABOVE=1`, off by default)
 
