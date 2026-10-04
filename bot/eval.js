@@ -143,7 +143,7 @@ function parseInstances(arg, totalMemGb = os.totalmem() / 2 ** 30) {
   const n = Number(arg)
   if (!Number.isInteger(n) || n < 1) throw new Error(`instances must be a positive integer, got ${arg}`)
   const cap = maxInstances(totalMemGb)
-  if (n > cap) throw new Error(`at most ${cap} instances fit ${totalMemGb.toFixed(0)} GB RAM (6 GB heap each, 24 GB total)`)
+  if (n > cap) throw new Error(`at most ${cap} instances fit ${totalMemGb.toFixed(0)} GB RAM (max 4, 24 GB total heap)`)
   return n
 }
 

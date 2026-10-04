@@ -296,3 +296,8 @@ test('reportRow: a rejected bot sends a harness row for itself only', async () =
   assert.deepStrictEqual(sent.map(m => [m.t, m.i, m.row.reason]), [['row', 0, 'timeout'], ['row', 1, 'harness']])
   assert.strictEqual(sent[1].row.detail, 'boom')
 })
+
+test('maxInstances: smaller heaps never exceed the 4-instance cap', () => {
+  assert.strictEqual(maxInstances(32, 3), 4)
+  assert.strictEqual(maxInstances(16, 3), 2)
+})
