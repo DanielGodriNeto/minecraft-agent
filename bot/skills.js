@@ -793,13 +793,49 @@ function veinTarget(bot, target) {
   return bot.findBlocks({ matching, maxDistance: VEIN_RADIUS, count: 4 }).find(o => !banned.has(o.toString()) && veinDir(p, o) !== null) ?? null
 }
 
-async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64, maxAbove = null }) {
+// spawnWalk shore sidestep. Oceans, beaches and deserts have no trees, so a surface heading that meets water is bent along the shore (never into the water, never reversed).
+const WATER_BLOCKS = /^(water|lava|kelp|kelp_plant|seagrass|tall_seagrass|bubble_column)$/
+const BARREN_BLOCKS = /^(sand|red_sand|sandstone|red_sandstone|ice|packed_ice|blue_ice|terracotta|\w+_terracotta)$/
+const GREEN_BLOCKS = /^(grass_block|podzol|snow|snow_block|powder_snow|moss_block|\w+_leaves|\w+_log)$/
+const SHORE_SAMPLES = [8, 16] // blocks ahead whose surface is looked at
+
+// 'water' | 'barren' (no trees grow: sand, terracotta, ice) | 'green' (grass, leaves, logs, snow: spruce hills) | 'other'.
+function surfaceClass(name) {
+  if (WATER_BLOCKS.test(name)) return 'water'
+  if (BARREN_BLOCKS.test(name)) return 'barren'
+  return GREEN_BLOCKS.test(name) ? 'green' : 'other'
+}
+
+// The hop direction: the heading unless water lies ahead of it, else the side (dir+1 or dir+3) without water ahead that looks greener.
+// classesAhead(d) lists the surface classes in direction d; all three ways wet keeps the heading (surfaceHop's own sidestep).
+function shoreHop(dir, classesAhead) {
+  const wet = (d) => classesAhead(d).includes('water')
+  if (!wet(dir)) return dir
+  const score = (d) => classesAhead(d).reduce((n, c) => n + (c === 'green' ? 2 : c === 'barren' ? -1 : 0), 0)
+  const dry = [(dir + 1) % 4, (dir + 3) % 4].filter(d => !wet(d))
+  return dry.sort((a, b) => score(b) - score(a))[0] ?? dir
+}
+
+// Surface classes of the top blocks 8 and 16 blocks from p along dir (unloaded chunks are skipped).
+function surfaceAhead(bot, p, dir) {
+  const [dx, dz] = DIRS[dir]
+  return SHORE_SAMPLES.flatMap(dist => {
+    for (let y = p.y + 6; y >= p.y - 10; y--) {
+      const block = bot.blockAt(p.offset(dx * dist, y - p.y, dz * dist))
+      if (!block) return []
+      if (block.name !== 'air' && block.name !== 'cave_air') return [surfaceClass(block.name)]
+    }
+    return []
+  })
+}
+
+async function explore(bot, { target, mode = 'branch', dir = 0, maxBlocks = 64, maxAbove = null, shore = false }) {
   for (let moved = 0; moved < maxBlocks; moved += mode === 'surface' ? 8 : 1) {
     checkCancelled(bot)
     if (findVisible(bot, target, maxAbove)) return
     const p = bot.entity.position.floored()
     if (mode === 'surface') {
-      await surfaceHop(bot, p, dir)
+      await surfaceHop(bot, p, shore ? shoreHop(dir, (d) => surfaceAhead(bot, p, d)) : dir)
       continue
     }
     const ore = veinTarget(bot, target)
@@ -1594,4 +1630,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow, veinDir, veinTarget }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow, veinDir, veinTarget, surfaceClass, shoreHop }

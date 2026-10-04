@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert')
 const { Vec3 } = require('../bot/node_modules/vec3')
 const { EventEmitter } = require('node:events')
-const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow, veinDir, veinTarget } = require('../bot/skills.js')
+const { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, runSkill, SKILLS, bestWeapon, nearestAnimal, SHELTER_WAITS, clearUnreachable, FIGHT_MIN_HEALTH, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow, veinDir, veinTarget, surfaceClass, shoreHop } = require('../bot/skills.js')
 
 const item = (name) => ({ name, type: name.length })
 const canHarvestWith = (...names) => ({ canHarvest: (type) => names.some(n => n.length === type) })
@@ -1292,4 +1292,21 @@ test('dig_down: refusal reasons of skipped shaft steps are counted in the result
   const bot = shaftBot({ stone: 7 })
   const result = await run(bot, () => SKILLS.dig_down(bot, 19), false)
   assert.ok(result.refusals.no_blocks >= 1, JSON.stringify(result.refusals))
+})
+
+test('surfaceClass: water, barren (no trees) and green (grass, leaves, snow) surfaces', () => {
+  for (const n of ['water', 'seagrass', 'kelp', 'lava']) assert.strictEqual(surfaceClass(n), 'water')
+  for (const n of ['sand', 'red_sand', 'sandstone', 'terracotta', 'orange_terracotta', 'packed_ice']) assert.strictEqual(surfaceClass(n), 'barren')
+  for (const n of ['grass_block', 'oak_leaves', 'spruce_leaves', 'spruce_log', 'snow', 'snow_block', 'podzol']) assert.strictEqual(surfaceClass(n), 'green')
+  for (const n of ['stone', 'dirt', 'gravel']) assert.strictEqual(surfaceClass(n), 'other')
+})
+
+test('shoreHop: the heading is kept unless water lies ahead; then the dry, greener side, never a reversal', () => {
+  const ahead = (map) => (d) => map[d] ?? []
+  assert.strictEqual(shoreHop(0, ahead({ 0: ['barren', 'barren'], 1: ['water'] })), 0) // sand ahead: keep walking
+  assert.strictEqual(shoreHop(0, ahead({ 0: ['green', 'water'] })), 1) // water ahead: sidestep (side 1 first on a tie)
+  assert.strictEqual(shoreHop(0, ahead({ 0: ['water'], 1: ['barren'], 3: ['green'] })), 3) // greener side wins
+  assert.strictEqual(shoreHop(0, ahead({ 0: ['water'], 1: ['water'], 3: ['green'] })), 3) // wet side skipped
+  assert.strictEqual(shoreHop(0, ahead({ 0: ['water'], 1: ['water'], 3: ['water'], 2: [] })), 0) // all wet: keep the heading, never turn back
+  assert.strictEqual(shoreHop(3, ahead({ 3: ['water'] })), 0) // wraps: sides of 3 are 0 and 2
 })

@@ -648,6 +648,7 @@ test('spawnWalk: off by default; on, one heading is kept in 56-block legs, sides
   const leg = (result) => {
     const action = nextAction(bad())
     assert.strictEqual(action.key, 'spawn_walk')
+    assert.strictEqual(action.args[0].shore, true) // skills.js bends hops along a shore
     dirs.push([action.args[0].dir, action.args[0].maxBlocks])
     remember(run, action, result)
   }

@@ -212,7 +212,7 @@ function spawnWalk(s, source) {
   if (w.blocks >= WALK_CAP_BLOCKS || w.fails >= MAX_WALK_FAILS || (w.startedAt !== undefined && s.now !== undefined && s.now - w.startedAt >= WALK_CAP_MS)) return null
   const dir = (w.dir + (w.detour ?? 0)) % DIRS
   const maxBlocks = w.detour ? WALK_SIDE_BLOCKS : WALK_BLOCKS
-  return { ...act('explore', { target: source.blocks, mode: 'surface', dir, maxBlocks, maxAbove: source.maxAbove }), key: 'spawn_walk' }
+  return { ...act('explore', { target: source.blocks, mode: 'surface', dir, maxBlocks, maxAbove: source.maxAbove, shore: true }), key: 'spawn_walk' }
 }
 
 // Walk state after a leg (pure). ok = a log is in view: the walk is over. not_found = the leg was walked in full.
