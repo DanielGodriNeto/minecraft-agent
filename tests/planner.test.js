@@ -740,6 +740,53 @@ test('pickReady: no iron pickaxe deep underground climbs to the iron level; at t
   assert.notStrictEqual(nextAction(pr({ inv: { stone_pickaxe: 1 }, ironLeft: 0 })).key, 'pick_up') // at the surface
 })
 
+test('spareAlways: off by default (unless SPAREALWAYS=1), coerced to a boolean, and inert without pickReady', () => {
+  if (process.env.SPAREALWAYS !== '1') assert.strictEqual(DEFAULT_PARAMS.spareAlways, false)
+  assert.strictEqual(normalizeParams({ spareAlways: 1 }).spareAlways, true)
+  const always = { ...DEFAULT_PARAMS, pickReady: false, spareAlways: true }
+  assert.strictEqual(nextAction(pr({ params: always, y: 30 })).skill, 'dig_down') // no pickReady: the old path
+})
+
+test('spareAlways: goes to the iron level and mines, smelts, crafts sticks and the spare; bounded by time, depth, fuel and its own budget', () => {
+  const on = { ...ready, spareAlways: true, reserve: false }
+  const wood = { iron_pickaxe: 1, stone_pickaxe: 1, oak_log: 4 }
+  const a = (over = {}) => nextAction(pr({ params: on, inv: wood, now: 0, ...over }))
+  const down = a({ y: 70 })
+  assert.deepStrictEqual([down.skill, down.restock], ['dig_down', 'spare_always']) // nothing in view: descends to the iron level, not further
+  assert.strictEqual(down.args[0], 16)
+  assert.strictEqual(a({ y: 16, visible: { raw_iron: true } }).skill, 'mine')
+  assert.deepStrictEqual([a({ y: 16 }).skill, a({ y: 16 }).restock], ['explore', 'spare_always']) // at y16, searches
+  const smelt = a({ y: 16, inv: { ...wood, raw_iron: 3 }, furnaceNear: true, tableNear: true })
+  assert.deepStrictEqual([smelt.skill, smelt.args[0]], ['smelt', 'iron_ingot'])
+  const sticks = a({ y: 16, inv: { ...wood, iron_ingot: 3, oak_planks: 2 } })
+  assert.deepStrictEqual([sticks.skill, sticks.args[0]], ['craft', 'stick'])
+  const craft = a({ y: 16, inv: { ...wood, iron_ingot: 3, stick: 4 }, tableNear: true })
+  assert.deepStrictEqual([craft.skill, craft.args[0]], ['craft', 'iron_pickaxe'])
+  // bounds: each falls back to the opportunistic path (dig_down here, nothing visible)
+  const bounded = (over) => assert.notStrictEqual(a({ y: 16, ...over })?.restock, 'spare_always')
+  bounded({ memory: mem({ spareSince: 0 }), now: 8 * 60000 }) // time budget spent
+  bounded({ y: -5 }) // final descent under way
+  bounded({ msLeft: 19 * 60000 }) // too close to the deadline
+  bounded({ isNight: true })
+  bounded({ inv: { iron_pickaxe: 1, stone_pickaxe: 1, oak_log: 1 } }) // fuel for 3 smelts missing: no wood fetch
+  bounded({ memory: mem({ restock: { spare_always: { steps: 40, fails: 0 } } }) })
+  bounded({ inv: { iron_pickaxe: 2, oak_log: 4 } }) // spare held
+  assert.strictEqual(a({ y: 16, memory: mem({ spareSince: 0 }), now: 7 * 60000 }).restock, 'spare_always') // still inside the budget
+  assert.deepStrictEqual(a({ y: 16, inv: { ...wood, oak_log: 1, coal: 1 }, visible: { raw_iron: true } }).skill, 'mine') // coal counts as fuel
+})
+
+test('spareAlways: the first step starts the clock; the spare pickaxe is never tossed as junk', () => {
+  const { remember } = require('../bot/agent.js')
+  const run = { memory: mem({ failSigs: {}, optionalFails: {}, restock: {} }) }
+  remember(run, { skill: 'dig_down', args: [16], restock: 'spare_always' }, { ok: true })
+  const since = run.memory.spareSince
+  assert.strictEqual(typeof since, 'number')
+  remember(run, { skill: 'mine', args: [], restock: 'spare_always' }, { ok: true })
+  assert.strictEqual(run.memory.spareSince, since)
+  const full = nextAction(state({ freeSlots: 0, inv: { iron_pickaxe: 2, stone_pickaxe: 1, dirt: 20 } }))
+  assert.deepStrictEqual([full.skill, full.args[0]], ['toss', ['dirt', 'gravel', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']])
+})
+
 test('veinScan: off by default (unless VEINSCAN=1) and coerced to a boolean from an ARM value', () => {
   if (process.env.VEINSCAN !== '1') assert.strictEqual(DEFAULT_PARAMS.veinScan, false)
   assert.strictEqual(normalizeParams({ veinScan: 1 }).veinScan, true)

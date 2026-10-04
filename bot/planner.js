@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1', veinScan: process.env.VEINSCAN === '1', spawnWalk: process.env.SPAWNWALK === '1', pickReady: process.env.PICKREADY === '1' }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1', veinScan: process.env.VEINSCAN === '1', spawnWalk: process.env.SPAWNWALK === '1', pickReady: process.env.PICKREADY === '1', spareAlways: process.env.SPAREALWAYS === '1' }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -55,7 +55,8 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   SPAWNWALK  spawnWalk (OFF by default; =1 enables) supersedes spawnEscape: on the same bad-spawn trigger the bot picks one heading (opposite surfaceDir) and keeps walking it in 56-block surface legs, sidestepping a blocked leg with a 16-block lateral leg then resuming, until a log is seen; cap 600 blocks or 10 min, then the old behaviour
 //   PICKREADY  pickReady (OFF by default; =1 enables) keeps a spare iron pickaxe (mines visible iron, smelts, crafts it before the final descent) and, with one low (<=20% durability left) or no iron pickaxe and no spare, climbs to the iron level (y16) and restocks instead of mining on until it breaks
 //   RECOVERY   recovery (OFF by default; =1 enables) before the stuck tracker ends a run, one named recovery routine per failure signature and life (recoveryFor)
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk', 'pickReady']
+//   SPAREALWAYS  spareAlways (OFF by default; =1 enables, needs pickReady) makes the spare iron pickaxe deliberate: after the first iron pickaxe and above y0 the bot goes to the iron band (y16), mines 3 iron, smelts, crafts sticks and the spare, within an 8 minute budget and only with 20+ minutes left and fuel on hand
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk', 'pickReady', 'spareAlways']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 // watchdog is the one multi-value param (0 off, 1-5 variants), so it is coerced to an integer instead.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])), ...('watchdog' in params && { watchdog: Number(params.watchdog) || 0 }) })
@@ -124,6 +125,9 @@ const LOW_IRON_USED = 0.8 // restock once 80% of the pickaxe is used, i.e. 20% (
 const LOW_IRON = IRON_DURABILITY - Math.round(IRON_DURABILITY * LOW_IRON_USED)
 const SPARE_INGOTS = RECIPES.iron_pickaxe.in.iron_ingot
 const MAX_PICK_UPS = 2 // per life: climbs to the iron level to restock
+const SPARE_BUDGET_MS = 8 * 60000 // spareAlways: from its first step, then the descent goes on without a spare
+const SPARE_MAX_STEPS = 40 // own restock budget (pick_ready's 12 is too few for a descent plus mining)
+const SPARE_MIN_Y = 0 // spareAlways stops below this: the final descent has started
 const PREP_MIN_MS = 20 * 60000 // closer to the deadline than this, no spare is prepared
 
 // Recipes take one plank/stone type (recipe data is per type), so those mean the biggest single stack.
@@ -387,11 +391,11 @@ function takeCover(s) {
 }
 
 // Failures across all items are capped too, so a run of different failed restocks cannot look like a stuck bot.
-const restockOpen = (s, item) => {
+const restockOpen = (s, item, maxSteps = MAX_RESTOCK_STEPS) => {
   const totalFails = Object.values(s.memory.restock ?? {}).reduce((sum, c) => sum + (c.fails ?? 0), 0)
   if (totalFails >= MAX_RESTOCK_FAILS) return false
   const { steps = 0, fails = 0 } = s.memory.restock?.[item] ?? {}
-  return steps < MAX_RESTOCK_STEPS && fails < MAX_RESTOCK_FAILS
+  return steps < maxSteps && fails < MAX_RESTOCK_FAILS
 }
 
 // With the iron pickaxe and a calm surface, top the reserve up from what is in view, most valuable first:
@@ -424,6 +428,27 @@ function spareIronStep(s) {
   return tableReady(s) ? obtain(s, 'iron_pickaxe', count(s, 'iron_pickaxe') + 1) : null
 }
 
+// Fuel for the 3 smelts (about 0.4 coal or 2 logs) is on hand, so smelting never sends the bot to fetch wood.
+const spareFuelOk = (s) => count(s, 'coal') + count(s, 'charcoal') > 0 || count(s, 'log') >= 2
+
+// params.spareAlways: the spare is deliberate, not opportunistic: gather() goes to the iron level and searches for iron there. Bounded by SPARE_BUDGET_MS since its first step (agent.js sets memory.spareSince).
+function spareAlwaysStep(s) {
+  const since = s.memory.spareSince
+  const expired = since !== undefined && s.now !== undefined && s.now - since >= SPARE_BUDGET_MS
+  if (!s.params.spareAlways || expired || s.y < SPARE_MIN_Y || !spareFuelOk(s) || !restockOpen(s, 'spare_always', SPARE_MAX_STEPS)) return null
+  const ingots = count(s, 'iron_ingot')
+  const step = count(s, 'raw_iron') + ingots < SPARE_INGOTS ? gather(s, 'raw_iron')
+    : ingots < SPARE_INGOTS ? obtain(s, 'iron_ingot', SPARE_INGOTS)
+    : spareCraftStep(s)
+  return step ? { ...step, restock: 'spare_always' } : null
+}
+
+// Sticks come from carried wood and the table from a carried log; neither is fetched.
+function spareCraftStep(s) {
+  if ((s.inv.stick ?? 0) < RECIPES.iron_pickaxe.in.stick) return count(s, 'planks') >= 2 || has(s, 'log') ? obtain(s, 'stick', RECIPES.iron_pickaxe.in.stick) : null
+  return tableReady(s) || has(s, 'log') ? obtain(s, 'iron_pickaxe', count(s, 'iron_pickaxe') + 1) : null
+}
+
 // params.pickReady. Before the final descent: prepare a spare iron pickaxe. With one low or no iron pickaxe and no spare (s.ironLeft = durability left on the best one):
 // craft a replacement if its materials are on hand, else climb to the iron level (y16) to find iron there, instead of mining on until the pick breaks.
 // Restock steps and failures use the shared restock budgets, so it can never loop; MAX_PICK_UPS bounds the climbs.
@@ -434,7 +459,7 @@ function pickReadyStep(s) {
   const deep = s.y < IRON_LEVEL - 2
   if (!low) {
     const calm = !s.isNight && s.msLeft >= PREP_MIN_MS && s.y > s.params.branchY + 2
-    return calm ? tagged(spareIronStep(s)) : null
+    return calm ? (spareAlwaysStep(s) ?? tagged(spareIronStep(s))) : null
   }
   const craftsNow = inputsOnHand(s, 'iron_pickaxe') && tableReady(s)
   if (deep && !craftsNow) return !s.visible.raw_iron && (s.memory.pickUps ?? 0) < MAX_PICK_UPS ? { ...act('go_up', IRON_LEVEL), key: 'pick_up' } : null

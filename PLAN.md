@@ -253,13 +253,14 @@ Gate threshold was ≥ 50% (needs lower CI > ~45%): passes.
 | exp16 | veinScan (`VEINSCAN=1`) | pending A/B: at y <= -40 branch tunnel steps scan radius 48 for a buried diamond and tunnel toward it (nearest within -1..+2 y, 32 blocks horizontal); failed detours blacklist the ore (targets explore:not_found, ~16 min per success run) |
 | exp17 | spawnWalk (`SPAWNWALK=1`) | pending A/B: supersedes spawnEscape (which was rejected as a bounded 64-block walk): same bad-spawn trigger, but one heading (opposite surfaceDir) is kept in 56-block surface legs, a blocked leg sidestepped by a 16-block lateral leg, until a log is seen; cap 600 blocks / 10 min / 6 failed legs in a row, then the old behaviour |
 | exp18 | pickReady (`PICKREADY=1`) | pending A/B: targets pickaxe loss (98 of 246 successful runs ended with no pickaxe, 35 of 58 stuck runs had none): before the final descent a spare iron pickaxe is prepared from nearby iron (mine visible iron, smelt, craft); with one iron pickaxe at 80% used (<=20% left), or none, and no spare, the bot crafts a replacement if it holds the materials, else climbs to y16 (max 2 per life) to restock instead of mining on |
+| exp19 | spareAlways (`SPAREALWAYS=1`, needs `PICKREADY=1`) | pending A/B, arms `pickReady=1,spareAlways=0` vs `pickReady=1,spareAlways=1`: the spare iron pickaxe is deliberate instead of opportunistic: after the first iron pickaxe and above y0 the bot goes to the iron band (y16, stone iron mines faster than deepslate), mines 3 iron, smelts, crafts sticks and the spare; 8 minute budget, only with 20+ minutes left and fuel (coal or 2 logs) on hand, no wood fetch. An iron pickaxe has 250 uses, so a spare is about 500 blocks |
 
 **Changed since `8a22930`:** shaft descent, per-life counter resets, per-run cancel token, climb loop, crowd flee,
 timed ascent, barren relocation, process-isolated bots with tick-rate metrics (5-minute smoke test: p10 ticks/s
 14.4 -> 19.9, event-loop p99 440 -> 125 ms).
 
 **Paired A/B experiments:** behaviour changes sit behind env switches `SHAFT NIGHTSURF FOODGATE FIGHTGUARD RESERVE
-CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST STATIONABOVE DROWNCAP HAZARDGRACE WATCHDOG RECOVERY TRACELOG MINEY EARLYBANK SPAWNESCAPE VEINSCAN SPAWNWALK PICKREADY`. Run the same slots with `ARMS` (list of arms) or one arm
+CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST STATIONABOVE DROWNCAP HAZARDGRACE WATCHDOG RECOVERY TRACELOG MINEY EARLYBANK SPAWNESCAPE VEINSCAN SPAWNWALK PICKREADY SPAREALWAYS`. Run the same slots with `ARMS` (list of arms) or one arm
 via `ARM`; `BOTS_PER_PROC` sets bots per process (default 3). One change per experiment.
 
 **Caveats:** results hold for this world seed and difficulty easy; dev slots were tuned on; stuck is still ~40–46% of
