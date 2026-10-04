@@ -2,7 +2,7 @@
 const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, clearUnreachable, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
 const fs = require('node:fs')
 const path = require('node:path')
-const { nextAction, lingerHeldReturn, recoveryFor, GROUPS, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
+const { nextAction, walkAfter, lingerHeldReturn, recoveryFor, GROUPS, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
 
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
@@ -23,12 +23,12 @@ const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock i
 //   per-run:  baseDir, surfaceDir, relocations   (directions keep rotating so a new life does not retry the failed one)
 //   per-trip: restock, nightDigs, optionalFails, fightFails  (also reset by a successful deposit)
 //   per-life: localSurfaceY, goUpFails, goUpY, homeTimeouts, homePause, homeAdopt, leg, surfaceLeg, shelters, noShelter, drownings, mineDrownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
-//             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs, failSigs, recovered, spawnEscapes, escapeStart   (the respawn is at home: nothing of the old position applies)
+//             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs, failSigs, recovered, spawnEscapes, escapeStart, walk, pickUps, spareSince   (the respawn is at home: nothing of the old position applies)
 //   hopsSinceDescent deliberately survives a deposit: it counts hops since the last real descent, and any descent zeroes it.
 const lifeMemory = () => ({
   leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, mineDrownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
   relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0,
-  failSigs: {}, recovered: {}, spawnEscapes: 0, escapeStart: undefined, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, ...tripMemory(),
+  failSigs: {}, recovered: {}, spawnEscapes: 0, escapeStart: undefined, walk: undefined, pickUps: 0, spareSince: undefined, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, ...tripMemory(),
 })
 const tripMemory = () => ({ restock: {}, nightDigs: 0, optionalFails: {}, fightFails: 0 })
 
@@ -142,6 +142,14 @@ function pickLeft(bot) {
   return pick ? pick.maxDurability - pick.durabilityUsed : 0
 }
 
+const IRON_PICKS = ['iron_pickaxe', 'diamond_pickaxe', 'netherite_pickaxe']
+
+// Uses left on the best iron-tier (or better) pickaxe carried; undefined when none is carried.
+function ironLeft(bot) {
+  const left = bot.inventory.items().filter(i => IRON_PICKS.includes(i.name) && i.maxDurability).map(i => i.maxDurability - (i.durabilityUsed ?? 0))
+  return left.length ? Math.max(...left) : undefined
+}
+
 const CROWD_RANGE = 8
 const countHostiles = (bot) => Object.values(bot.entities).filter(e => e.type === 'hostile' && e.position.distanceTo(bot.entity.position) <= CROWD_RANGE).length
 
@@ -174,6 +182,8 @@ function observe(bot, run) {
     furnaceNear: near('furnace', STATION_NEAR),
     freeSlots: bot.inventory.emptySlotCount(),
     pickLeft: pickLeft(bot),
+    ironLeft: ironLeft(bot),
+    now: Date.now(),
     home: run.home,
     distHome: pos.distanceTo(pos.clone().set(run.home.x, run.home.y, run.home.z)),
     objective: run.objective,
@@ -290,6 +300,7 @@ async function tryRecovery(bot, run, action, result, exec = runSkill) {
 function remember(run, action, result) {
   if (!result.ok) countFailure(run.memory, action, result)
   if (action.restock) trackRestock(run.memory, action, result)
+  if (action.restock === 'spare_always') run.memory.spareSince ??= Date.now()
   trackShelter(run.memory, action)
   trackGoUp(run, action, result)
   trackHomeTrip(run.memory, action, result)
@@ -310,6 +321,15 @@ function remember(run, action, result) {
     run.memory.leg = 0 // serpentine restarts from the new ground
     return
   }
+  if (action.key === 'spawn_walk') {
+    run.memory.walk = walkAfter(run.memory.walk, action.args[0], result)
+    if (result.ok) { // wood in view: the walk is over and the trigger counters start over
+      run.memory.surfaceLeg = 0
+      delete run.memory.failSigs['go_up:not_reached']
+    }
+    return
+  }
+  if (action.key === 'pick_up') run.memory.pickUps = (run.memory.pickUps ?? 0) + 1
   if (action.key === 'spawn_escape') {
     run.memory.spawnEscapes = (run.memory.spawnEscapes ?? 0) + 1
     run.memory.escapeStart ??= action.args[0].dir

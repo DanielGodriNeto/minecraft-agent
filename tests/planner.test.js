@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
-const { nextAction, DEFAULT_PARAMS, RESERVE, normalizeParams } = require('../bot/planner.js')
+const { nextAction, DEFAULT_PARAMS, RESERVE, normalizeParams, walkAfter } = require('../bot/planner.js')
 
 const WOODS = ['oak', 'spruce', 'birch']
 const sum = (inv, names) => names.reduce((n, k) => n + (inv[k] ?? 0), 0)
@@ -627,6 +627,165 @@ test('spawnEscape: off by default; on, a wood-less tool-less bot walks 64 blocks
   assert.strictEqual(found.key, 'spawn_escape')
   remember({ memory: fresh }, found, { ok: true })
   assert.strictEqual(fresh.surfaceLeg, 0) // success clears the trigger counters
+})
+
+test('spawnWalk: off by default; on, one heading is kept in 56-block legs, sidestepping a blocked leg, until a log is seen or a cap is hit', () => {
+  const { remember } = require('../bot/agent.js')
+  if (process.env.SPAWNWALK !== '1') assert.strictEqual(DEFAULT_PARAMS.spawnWalk, false)
+  assert.strictEqual(normalizeParams({ spawnWalk: 1 }).spawnWalk, true)
+  const on = { ...DEFAULT_PARAMS, spawnWalk: true }
+  const memory = { leg: 0, baseDir: 0, surfaceDir: 1, surfaceLeg: 0, failSigs: {}, optionalFails: {}, restock: {} }
+  const run = { memory }
+  const bad = (over = {}) => state({ y: 60, params: on, memory, now: 0, ...over })
+  const goUp = { skill: 'go_up', args: [70] }
+  remember(run, goUp, { ok: false, reason: 'not_reached' })
+  assert.notStrictEqual(nextAction(bad()).key, 'spawn_walk') // one failure is not enough
+  remember(run, goUp, { ok: false, reason: 'not_reached' })
+  assert.notStrictEqual(nextAction(bad({ params: DEFAULT_PARAMS })).key, 'spawn_walk') // off
+  assert.notStrictEqual(nextAction(bad({ inv: { oak_log: 1 } })).key, 'spawn_walk')
+  assert.notStrictEqual(nextAction(bad({ inv: { wooden_pickaxe: 1 } })).key, 'spawn_walk')
+  const dirs = []
+  const leg = (result) => {
+    const action = nextAction(bad())
+    assert.strictEqual(action.key, 'spawn_walk')
+    assert.strictEqual(action.args[0].shore, true) // skills.js bends hops along a shore
+    dirs.push([action.args[0].dir, action.args[0].maxBlocks])
+    remember(run, action, result)
+  }
+  leg({ ok: false, reason: 'not_found' })
+  leg({ ok: false, reason: 'not_found' })
+  leg({ ok: false, reason: 'no_path' }) // blocked: sidestep one side, then resume
+  leg({ ok: false, reason: 'not_found' })
+  leg({ ok: false, reason: 'no_path' })
+  leg({ ok: false, reason: 'no_path' }) // the sidestep failed too: the other side
+  leg({ ok: false, reason: 'not_found' })
+  leg({ ok: false, reason: 'not_found' })
+  assert.deepStrictEqual(dirs, [[3, 56], [3, 56], [3, 56], [0, 16], [3, 56], [0, 16], [2, 16], [3, 56]]) // sidesteps alternate sides, the heading (3) always resumes
+  assert.strictEqual(run.memory.walk.blocks, 56 * 3 + 16 * 2)
+  remember(run, nextAction(bad()), { ok: true })
+  assert.strictEqual(run.memory.walk, undefined) // a log was seen: cleared
+  assert.strictEqual(run.memory.surfaceLeg, 0)
+})
+
+test('walkAfter / spawnWalk caps: 600 blocks, 10 minutes, or 6 failed legs in a row fall back to the old behaviour', () => {
+  const on = { ...DEFAULT_PARAMS, spawnWalk: true }
+  const mem = (walk) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, failSigs: {}, optionalFails: {}, restock: {}, walk })
+  const at = (walk, now = 0) => nextAction(state({ y: 70, params: on, memory: mem(walk), now })).key
+  const w = { dir: 2, blocks: 0, fails: 0, detour: 0, startedAt: 0 }
+  assert.strictEqual(at(w), 'spawn_walk')
+  assert.notStrictEqual(at({ ...w, blocks: 600 }), 'spawn_walk')
+  assert.notStrictEqual(at({ ...w, fails: 6 }), 'spawn_walk')
+  assert.notStrictEqual(at(w, 10 * 60000), 'spawn_walk')
+  assert.deepStrictEqual(walkAfter(undefined, { dir: 2, maxBlocks: 56 }, { ok: false, reason: 'not_found' }, 5), { dir: 2, blocks: 56, fails: 0, detour: 0, startedAt: 5 })
+  assert.strictEqual(walkAfter(w, { dir: 2, maxBlocks: 56 }, { ok: true }), undefined)
+  assert.strictEqual(walkAfter(w, { dir: 2, maxBlocks: 56 }, { ok: false, reason: 'timeout' }).detour, 1)
+})
+
+test('pickReady: off by default (unless PICKREADY=1) and coerced to a boolean from an ARM value', () => {
+  if (process.env.PICKREADY !== '1') assert.strictEqual(DEFAULT_PARAMS.pickReady, false)
+  assert.strictEqual(normalizeParams({ pickReady: 1 }).pickReady, true)
+})
+
+// pickReady: a spare iron pickaxe is prepared from what is near, and a low or lost one restocks instead of mining on.
+const ready = { ...DEFAULT_PARAMS, pickReady: true }
+const pr = (over = {}) => state({ params: ready, inv: { iron_pickaxe: 1, stone_pickaxe: 1 }, ironLeft: 250, msLeft: 3600000, foodCount: 6, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0 }, ...over })
+const mem = (extra = {}) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, ...extra })
+
+test('pickReady: before the descent visible iron is mined, smelted, then crafted into a spare pickaxe', () => {
+  assert.strictEqual(nextAction(pr({ visible: { raw_iron: true }, params: DEFAULT_PARAMS })).skill, 'dig_down') // off
+  const mine = nextAction(pr({ visible: { raw_iron: true } }))
+  assert.deepStrictEqual([mine.skill, mine.restock], ['mine', 'pick_ready'])
+  assert.strictEqual(nextAction(pr()).skill, 'dig_down') // nothing near: no search for iron
+  const smelt = nextAction(pr({ inv: { iron_pickaxe: 1, stone_pickaxe: 1, raw_iron: 3, coal: 2 }, tableNear: true, furnaceNear: true }))
+  assert.deepStrictEqual([smelt.skill, smelt.args[0]], ['smelt', 'iron_ingot'])
+  const sticks = nextAction(pr({ inv: { iron_pickaxe: 1, stone_pickaxe: 1, iron_ingot: 3, oak_planks: 2 }, tableNear: true }))
+  assert.deepStrictEqual([sticks.skill, sticks.args[0]], ['craft', 'stick'])
+  const craft = nextAction(pr({ inv: { iron_pickaxe: 1, stone_pickaxe: 1, iron_ingot: 3, stick: 8 }, tableNear: true }))
+  assert.deepStrictEqual([craft.skill, craft.args[0]], ['craft', 'iron_pickaxe'])
+  const noTable = nextAction(pr({ inv: { iron_pickaxe: 1, stone_pickaxe: 1, iron_ingot: 3, stick: 8 } }))
+  assert.strictEqual(noTable.skill, 'dig_down') // materials kept, no wood fetched for a table
+})
+
+test('pickReady: no preparing with a spare, at night, near the deadline, at diamond depth, after the restock budget', () => {
+  const visible = { raw_iron: true }
+  assert.strictEqual(nextAction(pr({ visible, inv: { iron_pickaxe: 2 } })).skill, 'dig_down')
+  assert.notStrictEqual(nextAction(pr({ visible, isNight: true }))?.restock, 'pick_ready')
+  assert.notStrictEqual(nextAction(pr({ visible, msLeft: 15 * 60000 }))?.restock, 'pick_ready')
+  assert.notStrictEqual(nextAction(pr({ visible, y: DEFAULT_PARAMS.branchY, surfaceY: 70 }))?.restock, 'pick_ready')
+  assert.notStrictEqual(nextAction(pr({ visible, memory: mem({ restock: { pick_ready: { steps: 12, fails: 0 } } }) }))?.restock, 'pick_ready')
+})
+
+test('pickReady: a low iron pickaxe with no spare climbs to the iron level, crafts at once when it can, and is bounded', () => {
+  const deep = { y: -40, surfaceY: 70, ironLeft: 20 }
+  const up = nextAction(pr(deep))
+  assert.deepStrictEqual([up.skill, up.args, up.key], ['go_up', [16], 'pick_up'])
+  assert.notStrictEqual(nextAction(pr({ ...deep, ironLeft: 100 })).key, 'pick_up')
+  assert.strictEqual(nextAction(pr({ ...deep, ironLeft: 50 })).key, 'pick_up') // 80% used = 20% of 250 left
+  assert.notStrictEqual(nextAction(pr({ ...deep, ironLeft: 51 })).key, 'pick_up')
+  assert.notStrictEqual(nextAction(pr({ ...deep, memory: mem({ pickUps: 2 }) })).key, 'pick_up')
+  assert.notStrictEqual(nextAction(pr({ ...deep, inv: { iron_pickaxe: 2 } })).key, 'pick_up') // a spare is held
+  const craft = nextAction(pr({ ...deep, inv: { iron_pickaxe: 1, iron_ingot: 3, stick: 2 }, tableNear: true }))
+  assert.deepStrictEqual([craft.skill, craft.args[0]], ['craft', 'iron_pickaxe'])
+  const atIron = nextAction(pr({ y: 14, surfaceY: 70, ironLeft: 20, visible: { raw_iron: true } }))
+  assert.deepStrictEqual([atIron.skill, atIron.restock], ['mine', 'pick_ready'])
+  const { remember } = require('../bot/agent.js')
+  const run = { memory: mem({ failSigs: {}, optionalFails: {}, restock: {} }) }
+  remember(run, up, { ok: true })
+  assert.strictEqual(run.memory.pickUps, 1)
+})
+
+test('pickReady: no iron pickaxe deep underground climbs to the iron level; at the surface the normal tech tree runs', () => {
+  assert.notStrictEqual(nextAction(pr({ inv: { stone_pickaxe: 1 }, ironLeft: undefined, y: -40 })).key, 'pick_up') // durability unknown keeps the old path
+  const broken = nextAction(pr({ inv: { stone_pickaxe: 1 }, ironLeft: 0, y: -40 }))
+  assert.deepStrictEqual([broken.skill, broken.key], ['go_up', 'pick_up'])
+  assert.notStrictEqual(nextAction(pr({ inv: { stone_pickaxe: 1 }, ironLeft: 0 })).key, 'pick_up') // at the surface
+})
+
+test('spareAlways: off by default (unless SPAREALWAYS=1), coerced to a boolean, and inert without pickReady', () => {
+  if (process.env.SPAREALWAYS !== '1') assert.strictEqual(DEFAULT_PARAMS.spareAlways, false)
+  assert.strictEqual(normalizeParams({ spareAlways: 1 }).spareAlways, true)
+  const always = { ...DEFAULT_PARAMS, pickReady: false, spareAlways: true }
+  assert.strictEqual(nextAction(pr({ params: always, y: 30 })).skill, 'dig_down') // no pickReady: the old path
+})
+
+test('spareAlways: goes to the iron level and mines, smelts, crafts sticks and the spare; bounded by time, depth, fuel and its own budget', () => {
+  const on = { ...ready, spareAlways: true, reserve: false }
+  const wood = { iron_pickaxe: 1, stone_pickaxe: 1, oak_log: 4 }
+  const a = (over = {}) => nextAction(pr({ params: on, inv: wood, now: 0, ...over }))
+  const down = a({ y: 70 })
+  assert.deepStrictEqual([down.skill, down.restock], ['dig_down', 'spare_always']) // nothing in view: descends to the iron level, not further
+  assert.strictEqual(down.args[0], 16)
+  assert.strictEqual(a({ y: 16, visible: { raw_iron: true } }).skill, 'mine')
+  assert.deepStrictEqual([a({ y: 16 }).skill, a({ y: 16 }).restock], ['explore', 'spare_always']) // at y16, searches
+  const smelt = a({ y: 16, inv: { ...wood, raw_iron: 3 }, furnaceNear: true, tableNear: true })
+  assert.deepStrictEqual([smelt.skill, smelt.args[0]], ['smelt', 'iron_ingot'])
+  const sticks = a({ y: 16, inv: { ...wood, iron_ingot: 3, oak_planks: 2 } })
+  assert.deepStrictEqual([sticks.skill, sticks.args[0]], ['craft', 'stick'])
+  const craft = a({ y: 16, inv: { ...wood, iron_ingot: 3, stick: 4 }, tableNear: true })
+  assert.deepStrictEqual([craft.skill, craft.args[0]], ['craft', 'iron_pickaxe'])
+  // bounds: each falls back to the opportunistic path (dig_down here, nothing visible)
+  const bounded = (over) => assert.notStrictEqual(a({ y: 16, ...over })?.restock, 'spare_always')
+  bounded({ memory: mem({ spareSince: 0 }), now: 8 * 60000 }) // time budget spent
+  bounded({ y: -5 }) // final descent under way
+  bounded({ msLeft: 19 * 60000 }) // too close to the deadline
+  bounded({ isNight: true })
+  bounded({ inv: { iron_pickaxe: 1, stone_pickaxe: 1, oak_log: 1 } }) // fuel for 3 smelts missing: no wood fetch
+  bounded({ memory: mem({ restock: { spare_always: { steps: 40, fails: 0 } } }) })
+  bounded({ inv: { iron_pickaxe: 2, oak_log: 4 } }) // spare held
+  assert.strictEqual(a({ y: 16, memory: mem({ spareSince: 0 }), now: 7 * 60000 }).restock, 'spare_always') // still inside the budget
+  assert.deepStrictEqual(a({ y: 16, inv: { ...wood, oak_log: 1, coal: 1 }, visible: { raw_iron: true } }).skill, 'mine') // coal counts as fuel
+})
+
+test('spareAlways: the first step starts the clock; the spare pickaxe is never tossed as junk', () => {
+  const { remember } = require('../bot/agent.js')
+  const run = { memory: mem({ failSigs: {}, optionalFails: {}, restock: {} }) }
+  remember(run, { skill: 'dig_down', args: [16], restock: 'spare_always' }, { ok: true })
+  const since = run.memory.spareSince
+  assert.strictEqual(typeof since, 'number')
+  remember(run, { skill: 'mine', args: [], restock: 'spare_always' }, { ok: true })
+  assert.strictEqual(run.memory.spareSince, since)
+  const full = nextAction(state({ freeSlots: 0, inv: { iron_pickaxe: 2, stone_pickaxe: 1, dirt: 20 } }))
+  assert.deepStrictEqual([full.skill, full.args[0]], ['toss', ['dirt', 'gravel', 'andesite', 'diorite', 'granite', 'tuff', 'netherrack']])
 })
 
 test('veinScan: off by default (unless VEINSCAN=1) and coerced to a boolean from an ARM value', () => {
