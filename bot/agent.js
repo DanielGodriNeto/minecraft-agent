@@ -22,11 +22,11 @@ const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock i
 // Run memory: which fields belong to one life (reset on death) and which to the whole run.
 //   per-run:  baseDir, surfaceDir, relocations   (directions keep rotating so a new life does not retry the failed one)
 //   per-trip: restock, nightDigs, optionalFails, fightFails  (also reset by a successful deposit)
-//   per-life: localSurfaceY, goUpFails, goUpY, homeTimeouts, homePause, homeAdopt, leg, surfaceLeg, shelters, noShelter, drownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
+//   per-life: localSurfaceY, goUpFails, goUpY, homeTimeouts, homePause, homeAdopt, leg, surfaceLeg, shelters, noShelter, drownings, mineDrownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
 //             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs, failSigs, recovered   (the respawn is at home: nothing of the old position applies)
 //   hopsSinceDescent deliberately survives a deposit: it counts hops since the last real descent, and any descent zeroes it.
 const lifeMemory = () => ({
-  leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
+  leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, mineDrownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
   relocFailed: false, homeFails: 0, hopsSinceDescent: 0, burnUps: 0, crowdFlees: 0, relocHazards: 0, ascentDelayMs: 0, branchMisses: 0, branchRelocs: 0,
   failSigs: {}, recovered: {}, localSurfaceY: undefined, goUpFails: 0, goUpY: undefined, homeTimeouts: 0, homePause: 0, homeAdopt: false, ...tripMemory(),
 })

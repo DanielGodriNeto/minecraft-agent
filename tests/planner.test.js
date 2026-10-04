@@ -584,6 +584,12 @@ test('lingerUnderground: needs a carried diamond; lingerHeldReturn only when it 
   assert.strictEqual(lingerUnderground(spent), false)
 })
 
+test('drownCap: off by default (unless DROWNCAP=1) and coerced to a boolean from an ARM value', () => {
+  if (process.env.DROWNCAP !== '1') assert.strictEqual(DEFAULT_PARAMS.drownCap, false)
+  assert.strictEqual(normalizeParams({ drownCap: 1 }).drownCap, true)
+  assert.strictEqual(normalizeParams({ drownCap: 0 }).drownCap, false)
+})
+
 test('stationAbove: off by default (unless STATIONABOVE=1) and coerced to a boolean from an ARM value', () => {
   if (process.env.STATIONABOVE !== '1') assert.strictEqual(DEFAULT_PARAMS.stationAbove, false)
   assert.strictEqual(normalizeParams({ stationAbove: 1 }).stationAbove, true)

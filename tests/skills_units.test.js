@@ -1045,6 +1045,22 @@ test('mine: a genuine unreachable outcome blacklists the block, an interruption 
   assert.ok(!hit.unreachable || hit.unreachable.size === 0)
 })
 
+test('mine: drownCap bans the target area after the second drowning in a life; off, never', async () => {
+  const drowned = (drownCap) => {
+    const bot = mineBot(async () => { bot.skillCancel.cancelled = true; bot.skillCancel.reason = 'drowning'; throw new Fail('timeout') })
+    bot.objectiveRun = { params: { drownCap }, memory: { mineDrownings: 0 } }
+    return bot
+  }
+  const on = drowned(true)
+  assert.strictEqual((await run(on, () => SKILLS.mine(on, 'stone'), false)).reason, 'drowning')
+  assert.ok(!on.unreachable || on.unreachable.size === 0)
+  await run(on, () => SKILLS.mine(on, 'stone'), false)
+  assert.ok(on.unreachable.has('(3, 10, 0)') && on.unreachable.has('(4, 11, 2)') && !on.unreachable.has('(6, 10, 0)'))
+  const off = drowned(false)
+  for (let i = 0; i < 3; i++) await run(off, () => SKILLS.mine(off, 'stone'), false)
+  assert.ok(!off.unreachable || off.unreachable.size === 0)
+})
+
 test('clearUnreachable: empties the blacklist and tolerates a bot without one', () => {
   const bot = { unreachable: new Set(['a']) }
   clearUnreachable(bot)

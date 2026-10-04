@@ -792,6 +792,21 @@ async function approach(bot, target) {
   await goto(bot, new goals.GoalNear(pos.x, pos.y, pos.z, 3))
 }
 
+const DROWN_BAN_AFTER = 2 // drownings per life while mining before the ore area is banned
+const DROWN_BAN_RADIUS = 2
+
+// params.drownCap: mine <-> go_up loops never reach the stuck tracker (the climb succeeds), so the ore area that keeps drowning the bot is banned.
+function noteMineDrowning(bot, block) {
+  const run = bot.objectiveRun
+  if (!run?.params?.drownCap || currentCancel(bot)?.reason !== 'drowning') return
+  const memory = run.memory ??= {}
+  memory.mineDrownings = (memory.mineDrownings ?? 0) + 1
+  if (memory.mineDrownings < DROWN_BAN_AFTER) return
+  const banned = bot.unreachable ??= new Set()
+  const { x, y, z } = block.position
+  for (let dx = -DROWN_BAN_RADIUS; dx <= DROWN_BAN_RADIUS; dx++) for (let dy = -DROWN_BAN_RADIUS; dy <= DROWN_BAN_RADIUS; dy++) for (let dz = -DROWN_BAN_RADIUS; dz <= DROWN_BAN_RADIUS; dz++) banned.add(`(${x + dx}, ${y + dy}, ${z + dz})`)
+}
+
 const DIG_REASONS = new Set(['no_tool', 'undiggable', 'dig_failed'])
 
 // A genuine failure blacklists the block, or the planner keeps choosing the same one (e.g. a high log).
@@ -803,6 +818,7 @@ async function mine(bot, name, maxAbove = null) {
     try {
       await step()
     } catch (e) {
+      noteMineDrowning(bot, block)
       if (!currentCancel(bot)?.cancelled) bot.unreachable = (bot.unreachable ?? new Set()).add(block.position.toString())
       throw e instanceof Fail && DIG_REASONS.has(e.reason) ? e : new Fail(reason)
     }
