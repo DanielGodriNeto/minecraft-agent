@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1' }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1' }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -49,8 +49,9 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   HAZARDGRACE hazardGrace (ON by default since A/B 248-295: 37 vs 25 banked; =0 disables) an explore hazard does not count toward stuck while a hazard_up climb is pending
 //   WATCHDOG   watchdog (OFF by default; integer, 1 enables, 2-5 are variants, see watchdogWindow in skills.js) a path goal that moves the bot <1 block in 5 s is cancelled, its target blacklisted, and the skill fails as no_progress
 //   TRACELOG   traceLog (OFF by default; =1 enables) diagnostic only: one JSONL line per planner decision in logs/trace-<run>.jsonl, no behaviour change
+//   EARLYBANK  earlyBank (OFF by default; =1 enables) wantsReturn already banks the first diamond at once; this stops lingerUnderground (nightAscent) from delaying that first deposit
 //   RECOVERY   recovery (OFF by default; =1 enables) before the stuck tracker ends a run, one named recovery routine per failure signature and life (recoveryFor)
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog']
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 // watchdog is the one multi-value param (0 off, 1-5 variants), so it is coerced to an integer instead.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])), ...('watchdog' in params && { watchdog: Number(params.watchdog) || 0 }) })
@@ -226,6 +227,7 @@ const timeOfDayAt = (s, ms) => (s.timeOfDay + ms / 50) % 24000 // 20 ticks per s
 // Deep, healthy and fed with a diamond in the pack: climbing now would reach the surface in the dark, so mine on until it would not.
 function lingerUnderground(s) {
   if (!s.params.nightAscent || s.timeOfDay === undefined || !has(s, 'iron_pickaxe') || count(s, 'diamond') === 0) return false
+  if (s.params.earlyBank && s.deposited === 0) return false // the first diamond is banked now, never held for dawn
   if (s.surfaceY - s.y < ASCENT_DEEP || s.msLeft < ascentMs(s) + ASCENT_MARGIN_MS) return false
   if ((s.memory.ascentDelayMs ?? 0) >= MAX_ASCENT_DELAY_MS) return false
   if (s.hostileNear || s.recentlyAttacked || s.health < WEAK_HEALTH || (s.food <= 6 && !s.hasFood) || s.freeSlots <= 1) return false

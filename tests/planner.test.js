@@ -584,6 +584,18 @@ test('lingerUnderground: needs a carried diamond; lingerHeldReturn only when it 
   assert.strictEqual(lingerUnderground(spent), false)
 })
 
+test('earlyBank: off by default; on, the first diamond is never lingered on, later ones still are', () => {
+  const { lingerUnderground } = require('../bot/planner.js')
+  if (process.env.EARLYBANK !== '1') assert.strictEqual(DEFAULT_PARAMS.earlyBank, false)
+  assert.strictEqual(normalizeParams({ earlyBank: 1 }).earlyBank, true)
+  const dark = { y: 20, surfaceY: 70, timeOfDay: 10000, msLeft: 40 * 60000, canShelter: false, inv: { iron_pickaxe: 1, diamond: 1 } }
+  const withParams = (earlyBank, over = {}) => state({ ...dark, ...over, params: { ...DEFAULT_PARAMS, earlyBank } })
+  assert.strictEqual(lingerUnderground(withParams(false)), true)
+  assert.strictEqual(lingerUnderground(withParams(true)), false)
+  assert.notStrictEqual(nextAction(withParams(true))?.skill, 'mine')
+  assert.strictEqual(lingerUnderground(withParams(true, { deposited: 1, pickLeft: 1000 })), true)
+})
+
 test('drownCap: off by default (unless DROWNCAP=1) and coerced to a boolean from an ARM value', () => {
   if (process.env.DROWNCAP !== '1') assert.strictEqual(DEFAULT_PARAMS.drownCap, false)
   assert.strictEqual(normalizeParams({ drownCap: 1 }).drownCap, true)
