@@ -4,7 +4,9 @@ const { pathfinder } = require('mineflayer-pathfinder')
 const { parseCommand, isOwner } = require('./commands.js')
 const { trackRecipeBook, runSkill, skillMovements } = require('./skills.js')
 const { runObjective, stopObjective } = require('./agent.js')
-const { keepHitboxOutOfBlocks } = require('./physicsfix.js')
+const { keepHitboxOutOfBlocks, patchItemEnchants } = require('./physicsfix.js')
+
+patchItemEnchants()
 
 const authFromEnv = () => ({
   ownerName: process.env.OWNER || 'Owner',

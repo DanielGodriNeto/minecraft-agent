@@ -18,4 +18,28 @@ function keepHitboxOutOfBlocks(bot) {
   bot.on('physicsTick', () => nudgeOffEdges(bot.entity.position, bot.entity.width / 2))
 }
 
-module.exports = { nudgeOffEdges, keepHitboxOutOfBlocks }
+// On 1.20.5+ prismarine-item returns the raw component ({enchantments:[{id,level}]}), but mineflayer's dig-time
+// code concatenates and iterates it as [{name,lvl}], so digging with an enchanted tool throws.
+function normalizeEnchants(data, registry) {
+  if (Array.isArray(data)) return data
+  return (data?.enchantments ?? []).map(e => ({ name: registry.enchantments[e.id]?.name ?? null, lvl: e.level }))
+}
+
+function patchItemEnchants() {
+  const path = require.resolve('prismarine-item')
+  const original = require(path)
+  const patched = registryOrVersion => {
+    const Item = original(registryOrVersion)
+    const registry = typeof registryOrVersion === 'string' ? require('prismarine-registry')(registryOrVersion) : registryOrVersion
+    const getter = Object.getOwnPropertyDescriptor(Item.prototype, 'enchants')
+    Object.defineProperty(Item.prototype, 'enchants', {
+      ...getter,
+      get() { return normalizeEnchants(getter.get.call(this), registry) },
+    })
+    return Item
+  }
+  Object.assign(patched, original)
+  require.cache[path].exports = patched
+}
+
+module.exports = { nudgeOffEdges, keepHitboxOutOfBlocks, normalizeEnchants, patchItemEnchants }
