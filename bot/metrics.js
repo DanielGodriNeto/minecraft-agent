@@ -24,12 +24,12 @@ function bootstrapCI(values, rand = mulberry32(1)) {
 const isInvalid = (r) => r.reason === 'harness' || r.reason === 'disconnected'
 
 // runs: [{ deposited, deaths, reason, minutes, invalid? }]; invalid rows are counted apart, not in any rate.
-// LONGRUN rows: mean diamonds banked per run after minute BANKED_AFTER_MIN, from the per-deposit events; null without such rows.
+// LONGRUN rows that lasted past minute BANKED_AFTER_MIN: mean diamonds banked from that minute on (deposit minutes share the eval deadline's clock), and how many rows that is.
 const BANKED_AFTER_MIN = 60
 function banked60to(runs) {
-  const long = runs.filter(r => r.longrun)
-  if (long.length === 0) return null
-  return mean(long.map(r => (r.deposits ?? []).reduce((n, d) => (d.minute >= BANKED_AFTER_MIN ? n + d.count : n), 0)))
+  const long = runs.filter(r => r.longrun && r.minutes > BANKED_AFTER_MIN)
+  const banked = (r) => (r.deposits ?? []).reduce((n, d) => (d.minute >= BANKED_AFTER_MIN ? n + d.count : n), 0)
+  return { value: long.length ? mean(long.map(banked)) : null, n: long.length }
 }
 
 function summarize(all) {
@@ -46,7 +46,7 @@ function summarize(all) {
     deathsPerHour: runs.reduce((n, r) => n + r.deaths, 0) / hours,
     stuckRate: mean(runs.map(r => (r.reason === 'stuck' ? 1 : 0))),
     invalidRuns,
-    ...(runs.some(r => r.longrun) && { diamondsBanked60to: banked60to(runs) }),
+    ...(runs.some(r => r.longrun) && (({ value, n }) => ({ diamondsBanked60to: value, diamondsBanked60toRuns: n }))(banked60to(runs))),
   }
 }
 

@@ -221,7 +221,7 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
     } else {
       const running = agent.runObjective(bot, {
         objective: { item: 'diamond', count: 'max' }, home, params: { ...jitterParams(rand), ...parseArm(armText) },
-        deadline: start + minutes * 60000, rand,
+        deadline: start + minutes * 60000, rand, startedAt: start,
       })
       running.catch(() => {}) // a run abandoned on disconnect may still reject later
       result = await Promise.race([running, disconnected])

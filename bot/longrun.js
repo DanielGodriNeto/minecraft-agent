@@ -21,15 +21,21 @@ function stuckEscalation(history, snapshot) {
   return { level, history: { count, last: snapshot, total: history.total + 1, levels } }
 }
 
-const LOOP_COUNTERS = ['digFails', 'relocations', 'hazards', 'surfaceLeg', 'shelters', 'noShelter', 'drownings', 'homeFails', 'nightDigs']
+const KEEP_ON_CLEAR = new Set(['baseDir', 'surfaceDir', 'relocations']) // per-run: rotating directions and the relocation budget
 
-// The planner memory that drives a failure loop, back to its fresh-life value (directions and trip budgets elsewhere are kept).
-function clearLoopMemory(memory) {
-  for (const k of LOOP_COUNTERS) memory[k] = 0
-  memory.relocFailed = false
-  memory.hazardUp = false
-  memory.optionalFails = {}
-  memory.recovered = {}
+// Every per-life/per-trip planner memory field back to its fresh value; fresh = lifeMemory() result (a new object, so nothing is shared).
+function clearLoopMemory(memory, fresh) {
+  for (const [k, v] of Object.entries(fresh)) if (!KEEP_ON_CLEAR.has(k)) memory[k] = v
+}
+
+const DEATH_LIMIT = 6 // deaths in a row with nothing banked or found between them end the run
+const DEATH_WINDOW_MIN = 30
+
+// log: [{ t, banked, found }] one entry per death (found = diamonds ever seen in the inventory). True when the last DEATH_LIMIT deaths fit the window and made no progress.
+function fruitlessDeaths(log) {
+  if (log.length < DEATH_LIMIT) return false
+  const [first, last] = [log.at(-DEATH_LIMIT), log.at(-1)]
+  return last.t - first.t <= DEATH_WINDOW_MIN * 60000 && last.banked === first.banked && last.found === first.found
 }
 
 const ARMOR = { // [helmet, chestplate, leggings, boots]
@@ -73,4 +79,4 @@ function longrunFields(run) {
   return { longrun: true, stuckResets: { count: history.total, levels: history.levels }, gear, deposits }
 }
 
-module.exports = { stuckEscalation, newHistory, clearLoopMemory, armorPoints, gearSnapshot, longrunFields, MAX_ESCALATIONS, PROGRESS_MOVE, GEAR_INTERVAL_MIN, HOP_BLOCKS, SURFACE_BLOCKS }
+module.exports = { fruitlessDeaths, DEATH_LIMIT, DEATH_WINDOW_MIN, stuckEscalation, newHistory, clearLoopMemory, armorPoints, gearSnapshot, longrunFields, MAX_ESCALATIONS, PROGRESS_MOVE, GEAR_INTERVAL_MIN, HOP_BLOCKS, SURFACE_BLOCKS }

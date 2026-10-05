@@ -1,7 +1,8 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
-const { stuckEscalation, newHistory, clearLoopMemory, armorPoints, gearSnapshot, longrunFields, MAX_ESCALATIONS, PROGRESS_MOVE } = require('../bot/longrun.js')
-const { escalate, forceEscape, trackLongrun, finish } = require('../bot/agent.js')
+const { stuckEscalation, newHistory, clearLoopMemory, fruitlessDeaths, DEATH_LIMIT, armorPoints, gearSnapshot, longrunFields, MAX_ESCALATIONS, PROGRESS_MOVE } = require('../bot/longrun.js')
+const { escalate, forceEscape, trackLongrun, finish, runObjective, resetLife, handleDeath } = require('../bot/agent.js')
+const { EventEmitter } = require('node:events')
 const { DEFAULT_PARAMS, normalizeParams } = require('../bot/planner.js')
 const { summarize } = require('../bot/metrics.js')
 
@@ -46,10 +47,10 @@ test('stuckEscalation: does not mutate the history it is given', () => {
   assert.deepStrictEqual(h, newHistory())
 })
 
-test('clearLoopMemory: resets the loop counters, keeps directions and unrelated memory', () => {
-  const m = { digFails: 3, relocations: 4, hazards: 2, surfaceLeg: 5, shelters: 1, noShelter: 3, drownings: 2, homeFails: 2, nightDigs: 1, relocFailed: true, hazardUp: true, optionalFails: { a: 2 }, recovered: { x: true }, baseDir: 2, surfaceDir: 1, failSigs: { s: 2 } }
-  clearLoopMemory(m)
-  assert.deepStrictEqual(m, { digFails: 0, relocations: 0, hazards: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, homeFails: 0, nightDigs: 0, relocFailed: false, hazardUp: false, optionalFails: {}, recovered: {}, baseDir: 2, surfaceDir: 1, failSigs: { s: 2 } })
+test('clearLoopMemory: resets every life/trip field, keeps directions and the relocation budget', () => {
+  const dirty = { ...resetLife({}), baseDir: 2, surfaceDir: 1, relocations: 4, digFails: 3, goUpFails: 2, goUpY: 60, homeTimeouts: 1, homePause: 5, branchMisses: 2, branchRelocs: 1, relocHazards: 2, failSigs: { s: 2 }, hazards: 2, optionalFails: { a: 2 }, recovered: { x: true }, nightDigs: 1 }
+  clearLoopMemory(dirty, resetLife({}))
+  assert.deepStrictEqual(dirty, { ...resetLife({}), baseDir: 2, surfaceDir: 1, relocations: 4 })
 })
 
 test('armorPoints: sums known pieces, ignores the rest', () => {
@@ -64,7 +65,7 @@ test('gearSnapshot: reads tiers, shield, bucket, bed, food and diamonds', () => 
 })
 
 test('LONGRUN is off by default, an arm param turns it on, and an off run adds nothing to its result', () => {
-  assert.strictEqual(DEFAULT_PARAMS.longrun, false)
+  assert.ok(!DEFAULT_PARAMS.longrun)
   assert.strictEqual(normalizeParams({ longrun: 1 }).longrun, true)
   assert.deepStrictEqual(longrunFields({ params: { longrun: false } }), {})
   const row = finish({ deposited: 0, deaths: 0, decisions: 0, params: { longrun: false }, recoveries: [] }, 'stuck')
@@ -80,8 +81,8 @@ function fakeBot(y = 70, items = []) {
 }
 const fakeRun = () => ({
   surfaceY: 64, deposited: 0, params: { longrun: true, recovery: false }, recoveries: [],
-  memory: { digFails: 3, baseDir: 0, surfaceDir: 0, leg: 2, recovered: {}, failSigs: {}, optionalFails: {} },
-  longrun: { history: newHistory(), gear: [], deposits: [], startedAt: 0, nextGearMin: 15 },
+  memory: { ...resetLife({}), digFails: 3, baseDir: 0, surfaceDir: 0, leg: 2, recovered: {}, failSigs: {}, optionalFails: {} },
+  longrun: { history: newHistory(), gear: [], deposits: [], startedAt: 0, nextGearMin: 15, deathLog: [], diamondsFound: 0, hopeless: false },
 })
 
 test('escalate: level 1 without an applicable routine clears memory; level 3 forces a surface escape above y=0', async () => {
@@ -144,10 +145,105 @@ test('summarize: diamondsBanked60to only appears with longrun rows and counts de
   const plain = { deposited: 2, deaths: 0, reason: 'timeout', minutes: 60 }
   assert.ok(!('diamondsBanked60to' in summarize([plain])))
   const long = { ...plain, longrun: true, deposited: 5, minutes: 240, deposits: [{ minute: 30, count: 2 }, { minute: 60, count: 1 }, { minute: 200, count: 2 }] }
-  assert.strictEqual(summarize([plain, long]).diamondsBanked60to, 3)
+  const sum = summarize([plain, long, { ...long, minutes: 50 }])
+  assert.strictEqual(sum.diamondsBanked60to, 3)
+  assert.strictEqual(sum.diamondsBanked60toRuns, 1)
 })
 
-test('LONGRUN deaths are not terminal: the loop only checks maxDeaths when longrun is off', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../bot/agent.js'), 'utf8')
-  assert.match(src, /run\.deaths >= maxDeaths && !run\.params\.longrun/)
+test('escalate: the 1-2-3-1-2-3 cycle on the surface ends the run, because the escape itself is not progress', async () => {
+  const pos = { x: 0, y: 70, z: 0 }
+  const bot = { entity: { position: { clone: () => ({ ...pos }), y: 70 } }, inventory: { items: () => [] }, registry: {} }
+  const exec = async (_b, skill) => { if (skill === 'explore') pos.x += 64 }
+  const run = fakeRun()
+  const levels = []
+  let alive = true
+  for (let i = 0; i <= MAX_ESCALATIONS && alive; i++) {
+    alive = await escalate(bot, run, { skill: 'dig_down', args: [] }, { ok: false, reason: 'blocked' }, exec)
+    levels.push(run.longrun.history.count)
+  }
+  assert.strictEqual(alive, false)
+  assert.strictEqual(levels.at(-1), MAX_ESCALATIONS + 1)
+})
+
+test('escalate: a change made by the escalation itself (recovery) is not progress; later movement is', async () => {
+  const pos = { x: 0, y: 70, z: 0 }
+  const bot = { entity: { position: { clone: () => ({ ...pos }), y: 70 } }, inventory: { items: () => [] }, registry: {} }
+  const run = fakeRun()
+  run.memory.failSigs = { 'explore:hazard': 2 }
+  const hazard = { ok: false, reason: 'hazard' }
+  await escalate(bot, run, { skill: 'explore', args: [] }, hazard, async () => { pos.x = 100 })
+  assert.deepStrictEqual(run.longrun.history.last.pos, { x: 100, y: 70, z: 0 })
+  await escalate(bot, run, { skill: 'dig_down', args: [] }, { ok: false, reason: 'blocked' }, async () => {})
+  assert.strictEqual(run.longrun.history.count, 2)
+  pos.x = 140
+  await escalate(bot, run, { skill: 'dig_down', args: [] }, { ok: false, reason: 'blocked' }, async () => {})
+  assert.strictEqual(run.longrun.history.count, 1)
+})
+
+test('fruitlessDeaths: DEATH_LIMIT deaths inside the window with nothing banked or found', () => {
+  const log = (f) => Array.from({ length: DEATH_LIMIT }, (_, i) => ({ t: i * 60000, banked: 0, found: 0, ...f(i) }))
+  assert.strictEqual(fruitlessDeaths(log(() => ({}))), true)
+  assert.strictEqual(fruitlessDeaths(log(() => ({})).slice(1)), false)
+  assert.strictEqual(fruitlessDeaths(log(i => ({ banked: i >= 5 ? 1 : 0 }))), false)
+  assert.strictEqual(fruitlessDeaths(log(i => ({ found: i >= 3 ? 1 : 0 }))), false)
+  assert.strictEqual(fruitlessDeaths(log(i => ({ t: i * 10 * 60000 }))), false)
+})
+
+// A fake bot and skill runner driving the real loop.
+function loopBot() {
+  const bot = new EventEmitter()
+  const pos = { x: 0, y: 70, z: 0 }
+  Object.assign(bot, {
+    entity: { position: { clone: () => ({ ...pos }), y: 70 } }, health: 20, trail: [], pathfinder: { setGoal() {} }, clearControlStates() {},
+    inventory: { items: () => [] }, registry: { foodsByName: {} }, pos,
+  })
+  return bot
+}
+const loopDeps = (bot, exec) => ({
+  runSkill: exec,
+  observe: () => ({ params: { longrun: true }, memory: {} }),
+  nextAction: () => ({ skill: 'dig_down', args: [] }),
+})
+const loopRun = (bot, exec, extra = {}) => runObjective(bot, {
+  objective: { item: 'diamond', count: 'max' }, home: { x: 0, y: 70, z: 0 }, params: { longrun: true }, deadline: Date.now() + 5000, deps: loopDeps(bot, exec), ...extra,
+})
+const blocked = { ok: false, reason: 'blocked' }
+
+test('loop: LONGRUN repeated stuck ends as stuck only after the no-progress escalations', async () => {
+  const bot = loopBot()
+  let calls = 0
+  const row = await loopRun(bot, async (_b, skill) => { if (skill === 'dig_down') calls++; return blocked })
+  assert.strictEqual(row.reason, 'stuck')
+  assert.strictEqual(row.stuckResets.count, MAX_ESCALATIONS)
+  assert.ok(calls > MAX_ESCALATIONS)
+})
+
+test('loop: LONGRUN deaths do not end the run (beyond maxDeaths) and the stuck check skips the skill that died', async () => {
+  const bot = loopBot()
+  let n = 0
+  let diamonds = 0
+  bot.inventory.items = () => (diamonds ? [{ name: 'diamond', count: diamonds }] : [])
+  const row = await loopRun(bot, async () => {
+    n++
+    diamonds++ // diamonds keep turning up, so these deaths are not fruitless
+    bot.emit('death') // every skill call dies and fails: a stuck check on them would escalate
+    return blocked
+  }, { maxDeaths: 2, deadline: Date.now() + 200 })
+  assert.strictEqual(row.reason, 'timeout')
+  assert.ok(row.deaths > 2)
+  assert.strictEqual(row.stuckResets.count, 0)
+})
+
+test('loop: LONGRUN ends as deaths after DEATH_LIMIT fruitless deaths', async () => {
+  const bot = loopBot()
+  const row = await loopRun(bot, async () => { bot.emit('death'); return { ok: true } })
+  assert.strictEqual(row.reason, 'deaths')
+  assert.strictEqual(row.deaths, DEATH_LIMIT)
+})
+
+test('loop: without LONGRUN, maxDeaths still ends the run', async () => {
+  const bot = loopBot()
+  const row = await loopRun(bot, async () => { bot.emit('death'); return { ok: true } }, { params: {}, maxDeaths: 2 })
+  assert.strictEqual(row.reason, 'deaths')
+  assert.strictEqual(row.deaths, 2)
 })
