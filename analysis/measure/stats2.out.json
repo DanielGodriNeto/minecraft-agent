@@ -1,0 +1,89 @@
+{
+ "n": 1956,
+ "secAll": {
+  "n": 1956,
+  "min": 29.7,
+  "q1": 218.13,
+  "med": 290.46,
+  "q3": 392.54,
+  "max": 3351.51
+ },
+ "secIronCalls": {
+  "n": 1956,
+  "min": 0,
+  "q1": 42.73,
+  "med": 87.69,
+  "q3": 171.15,
+  "max": 1433.73
+ },
+ "secSmelt": {
+  "n": 1956,
+  "min": 7.31,
+  "q1": 38.26,
+  "med": 39.24,
+  "q3": 40.81,
+  "max": 145.08
+ },
+ "ironCallsN": {
+  "n": 1956,
+  "min": 0,
+  "q1": 4,
+  "med": 6,
+  "q3": 10,
+  "max": 350
+ },
+ "rawGained": {
+  "n": 1956,
+  "min": 0,
+  "q1": 3,
+  "med": 3,
+  "q3": 3,
+  "max": 7
+ },
+ "shareIronCalls": 0.368,
+ "shareSmelt": 0.117,
+ "secPerRawIron_pooled": 41,
+ "gainedLt3": 74,
+ "full60": {
+  "runs": 998,
+  "bankedAny": 882,
+  "share": {
+   "20": 0.041,
+   "30": 0.611,
+   "45": 0.805,
+   "60": 0.884
+  },
+  "firstBankMin": {
+   "n": 882,
+   "min": 7.64,
+   "q1": 22.11,
+   "med": 23.65,
+   "q3": 40.85,
+   "max": 59.77
+  }
+ },
+ "ironToFirstBank": {
+  "n": 1394,
+  "min": 2.99,
+  "q1": 14.15,
+  "med": 16.54,
+  "q3": 21.5,
+  "max": 52.07
+ },
+ "startToIronBankedRuns": {
+  "n": 1394,
+  "min": 3.9,
+  "q1": 5.74,
+  "med": 7.25,
+  "q3": 9.74,
+  "max": 44.41
+ },
+ "ironPickRate_allRuns": 0.814,
+ "bankedWithIron": 1394,
+ "traceDeaths": {
+  "runs": 1341,
+  "traceMaxDeaths": 1025,
+  "evalDeaths": 1272,
+  "undercount": 0.194
+ }
+}

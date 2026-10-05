@@ -1,0 +1,338 @@
+{
+ "depositCheck": {
+  "banked": 1394,
+  "exact": 1394,
+  "noDepositSkill": 0
+ },
+ "ironRuns": {
+  "gotIronPick": 1956,
+  "withStoneTimestamp": 1956
+ },
+ "iron_all": {
+  "runs": 1956,
+  "minutes": {
+   "n": 1956,
+   "min": 0.49,
+   "q1": 3.64,
+   "med": 4.84,
+   "q3": 6.54,
+   "max": 55.86
+  },
+  "ingots": {
+   "n": 1956,
+   "min": 1,
+   "q1": 3,
+   "med": 3,
+   "q3": 3,
+   "max": 3
+  },
+  "smeltCalls": {
+   "n": 1956,
+   "min": 1,
+   "q1": 3,
+   "med": 3,
+   "q3": 3,
+   "max": 8
+  },
+  "mineCalls": {
+   "n": 1956,
+   "min": 0,
+   "q1": 3,
+   "med": 4,
+   "q3": 5,
+   "max": 23
+  },
+  "craftCalls": {
+   "n": 1956,
+   "min": 1,
+   "q1": 8,
+   "med": 8,
+   "q3": 9,
+   "max": 21
+  },
+  "allCalls": {
+   "n": 1956,
+   "min": 6,
+   "q1": 17,
+   "med": 21,
+   "q3": 28,
+   "max": 521
+  },
+  "perRunRate": {
+   "n": 1956,
+   "min": 0.05,
+   "q1": 0.46,
+   "med": 0.62,
+   "q3": 0.82,
+   "max": 2.68
+  },
+  "pooledIngotsPerMin": 0.525,
+  "pooledMinPerIngot": 1.9,
+  "zeroIngotRuns": 0
+ },
+ "iron_noDeathInPhase": {
+  "runs": 1955,
+  "minutes": {
+   "n": 1955,
+   "min": 0.49,
+   "q1": 3.64,
+   "med": 4.84,
+   "q3": 6.54,
+   "max": 55.86
+  },
+  "ingots": {
+   "n": 1955,
+   "min": 1,
+   "q1": 3,
+   "med": 3,
+   "q3": 3,
+   "max": 3
+  },
+  "smeltCalls": {
+   "n": 1955,
+   "min": 1,
+   "q1": 3,
+   "med": 3,
+   "q3": 3,
+   "max": 8
+  },
+  "mineCalls": {
+   "n": 1955,
+   "min": 0,
+   "q1": 3,
+   "med": 4,
+   "q3": 5,
+   "max": 23
+  },
+  "craftCalls": {
+   "n": 1955,
+   "min": 1,
+   "q1": 8,
+   "med": 8,
+   "q3": 9,
+   "max": 21
+  },
+  "allCalls": {
+   "n": 1955,
+   "min": 6,
+   "q1": 17,
+   "med": 21,
+   "q3": 28,
+   "max": 521
+  },
+  "perRunRate": {
+   "n": 1955,
+   "min": 0.05,
+   "q1": 0.46,
+   "med": 0.62,
+   "q3": 0.82,
+   "max": 2.68
+  },
+  "pooledIngotsPerMin": 0.525,
+  "pooledMinPerIngot": 1.9,
+  "zeroIngotRuns": 0
+ },
+ "extrapolation_min_per_ingot_pooled_noDeath": {
+  "3": 5.7,
+  "6": 11.4,
+  "15": 28.5
+ },
+ "extrapolation_min_via_median_rate": {
+  "3": 4.8,
+  "6": 9.7,
+  "15": 24.2
+ },
+ "t_runstart_to_stone": {
+  "n": 1956,
+  "min": 0.73,
+  "q1": 1.76,
+  "med": 2.1,
+  "q3": 2.89,
+  "max": 45.55
+ },
+ "t_runstart_to_iron": {
+  "n": 1956,
+  "min": 3.9,
+  "q1": 5.94,
+  "med": 7.57,
+  "q3": 10.13,
+  "max": 57.47
+ },
+ "leave": {
+  "runsWithLeave": 1952,
+  "ironInventoryAtIronCraft": {
+   "n": 1956,
+   "min": 0,
+   "q1": 0,
+   "med": 0,
+   "q3": 0,
+   "max": 0
+  },
+  "spare_ingot_ge1": 0.001,
+  "spare_ingot_ge3": 0,
+  "spare_ingot_ge6": 0,
+  "spare_ingot_ge15": 0,
+  "spare_ingot_or_raw_ge3": 0.006,
+  "spare_ingot_or_raw_ge6": 0,
+  "ingot": {
+   "n": 1952,
+   "min": 0,
+   "q1": 0,
+   "med": 0,
+   "q3": 0,
+   "max": 1
+  },
+  "raw_iron": {
+   "n": 1952,
+   "min": 0,
+   "q1": 0,
+   "med": 0,
+   "q3": 0,
+   "max": 4
+  },
+  "coal": {
+   "n": 1952,
+   "min": 0,
+   "q1": 0,
+   "med": 0,
+   "q3": 0,
+   "max": 16
+  },
+  "logsPlanks": {
+   "n": 1952,
+   "min": 0,
+   "q1": 5,
+   "med": 7,
+   "q3": 9,
+   "max": 18
+  },
+  "leaveY": {
+   "n": 1952,
+   "min": 0,
+   "q1": 15,
+   "med": 16,
+   "q3": 17,
+   "max": 164
+  },
+  "coal_ge1": 0.179,
+  "coal_ge8": 0.012,
+  "coal_ge16": 0.001
+ },
+ "firstBank": {
+  "bankedRuns": 1394,
+  "minutes": {
+   "n": 1394,
+   "min": 7.58,
+   "q1": 22.06,
+   "med": 23.27,
+   "q3": 31.27,
+   "max": 59.77
+  },
+  "share": {
+   "10": 0.012,
+   "15": 0.041,
+   "20": 0.067,
+   "30": 0.733,
+   "45": 0.928,
+   "60": 1
+  },
+  "shareOfAllRuns": {
+   "20": 0.039,
+   "30": 0.425,
+   "45": 0.538,
+   "60": 0.58
+  },
+  "allRuns": 2402
+ },
+ "runLengthBuckets": {
+  "10": 3,
+  "15": 4,
+  "20": 11,
+  "25": 22,
+  "30": 30,
+  "35": 32,
+  "40": 58,
+  "45": 93,
+  "50": 74,
+  "55": 138,
+  "60": 929
+ },
+ "steady_timeout": {
+  "runs": 863,
+  "rate": {
+   "n": 863,
+   "min": 0,
+   "q1": 0,
+   "med": 4.13,
+   "q3": 10.58,
+   "max": 68.06
+  },
+  "hoursAfterFirst": {
+   "n": 863,
+   "min": 0.01,
+   "q1": 0.32,
+   "med": 0.61,
+   "q3": 0.64,
+   "max": 0.88
+  },
+  "zeroLater": 326,
+  "pooled": 7
+ },
+ "steady_other": {
+  "runs": 531,
+  "rate": {
+   "n": 531,
+   "min": 0,
+   "q1": 0,
+   "med": 0,
+   "q3": 9.81,
+   "max": 64.65
+  },
+  "hoursAfterFirst": {
+   "n": 531,
+   "min": 0,
+   "q1": 0.2,
+   "med": 0.36,
+   "q3": 0.52,
+   "max": 0.83
+  },
+  "zeroLater": 311,
+  "pooled": 7.06
+ },
+ "steady_timeout_longEnough": {
+  "runs": 639,
+  "rate": {
+   "n": 639,
+   "min": 0,
+   "q1": 0,
+   "med": 6.19,
+   "q3": 11.3,
+   "max": 68.06
+  },
+  "hoursAfterFirst": {
+   "n": 639,
+   "min": 0.35,
+   "q1": 0.59,
+   "med": 0.63,
+   "q3": 0.64,
+   "max": 0.88
+  },
+  "zeroLater": 190,
+  "pooled": 7.36
+ },
+ "reasonsBanked": {
+  "stuck": 384,
+  "timeout": 863,
+  "lost": 14,
+  "deaths": 131,
+  "disconnected": 2
+ },
+ "minutesOfTimeouts": {
+  "n": 1156,
+  "min": 5,
+  "q1": 60.03,
+  "med": 60.22,
+  "q3": 60.5,
+  "max": 60.52
+ }
+}
