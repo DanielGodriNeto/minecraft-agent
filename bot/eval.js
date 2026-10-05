@@ -12,6 +12,7 @@ const path = require('node:path')
 const { createBot } = require('./bot.js')
 const agent = require('./agent.js')
 const { stopObjective, jitterParams } = agent
+const { longrunFields } = require('./longrun.js')
 const { summarize, isInvalid, mulberry32 } = require('./metrics.js')
 const os = require('node:os')
 const { execSync } = require('node:child_process')
@@ -105,7 +106,7 @@ async function placeAtSlot(server, bot, slot) {
 // A run that ends abnormally still reports what the objective had achieved so far.
 function partial(bot, reason, detail) {
   const run = bot.objectiveRun
-  return { reason, detail, deposited: run?.deposited ?? 0, deaths: run?.deaths ?? 0, decisions: run?.decisions ?? 0 }
+  return { reason, detail, deposited: run?.deposited ?? 0, deaths: run?.deaths ?? 0, decisions: run?.decisions ?? 0, ...(run && longrunFields(run)) }
 }
 
 // Round-robin: batch i goes to worker i % workers. Batches all last the same time, so shares stay balanced.
@@ -132,7 +133,7 @@ function assignArms(batches, arms, workers) {
 const commitHash = () => {
   try { return execSync('git rev-parse --short HEAD', { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() } catch { return undefined }
 }
-const SWITCHES = ['SHAFT', 'NIGHTSURF', 'FOODGATE', 'FIGHTGUARD', 'RESERVE', 'CROWDFLEE', 'NIGHTASCENT', 'BRANCHRELOCATE', 'GOUPLOOP', 'LOCALSURFACE', 'PICKFIRST', 'STATIONABOVE', 'DROWNCAP', 'HAZARDGRACE', 'WATCHDOG', 'RECOVERY', 'TRACELOG', 'MINEY', 'EARLYBANK', 'SPAWNESCAPE', 'VEINSCAN', 'SPAWNWALK', 'PICKREADY', 'SPAREALWAYS']
+const SWITCHES = ['SHAFT', 'NIGHTSURF', 'FOODGATE', 'FIGHTGUARD', 'RESERVE', 'CROWDFLEE', 'NIGHTASCENT', 'BRANCHRELOCATE', 'GOUPLOOP', 'LOCALSURFACE', 'PICKFIRST', 'STATIONABOVE', 'DROWNCAP', 'HAZARDGRACE', 'WATCHDOG', 'RECOVERY', 'TRACELOG', 'MINEY', 'EARLYBANK', 'SPAWNESCAPE', 'VEINSCAN', 'SPAWNWALK', 'PICKREADY', 'SPAREALWAYS', 'LONGRUN']
 const switchesInEffect = () => Object.fromEntries(SWITCHES.filter(k => process.env[k] !== undefined).map(k => [k, process.env[k]]))
 
 function chunk(items, size) {

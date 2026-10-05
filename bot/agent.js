@@ -2,6 +2,7 @@
 const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, clearUnreachable, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
 const fs = require('node:fs')
 const path = require('node:path')
+const { stuckEscalation, newHistory, clearLoopMemory, gearSnapshot, longrunFields, GEAR_INTERVAL_MIN, HOP_BLOCKS, SURFACE_BLOCKS } = require('./longrun.js')
 const { nextAction, walkAfter, lingerHeldReturn, recoveryFor, GROUPS, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
 
 const STUCK_FAILURES = 3
@@ -282,8 +283,8 @@ function countFailure(memory, action, result) {
 // Before the run is called stuck: one named routine for this failure's signature (recoveryFor), once per signature per life.
 // The skill log records the routine as skill 'recover'; run.recoveries lists them for the result.
 // Resolves whether a routine ran; the caller then gives the stuck tracker a fresh start.
-async function tryRecovery(bot, run, action, result, exec = runSkill) {
-  if (!run.params.recovery || result.ok) return false
+async function tryRecovery(bot, run, action, result, exec = runSkill, force = false) {
+  if ((!run.params.recovery && !force) || result.ok) return false
   const sig = signature(action, result)
   const routine = recoveryFor(sig, { inv: inventoryCounts(bot), memory: run.memory })
   if (!routine) return false
@@ -295,6 +296,50 @@ async function tryRecovery(bot, run, action, result, exec = runSkill) {
     run.memory.leg = 0
   }
   return true
+}
+
+// LONGRUN level 3: one forced move out of the loop. Above y=0: climb, then a surface walk in a rotated direction; underground: one tunnel hop in a new direction.
+async function forceEscape(bot, run, exec = runSkill) {
+  const { memory } = run
+  if (Math.floor(bot.entity.position.y) > 0) {
+    await exec(bot, 'go_up', run.surfaceY)
+    memory.surfaceDir = (memory.surfaceDir + 1) % 4
+    await exec(bot, 'explore', { target: SOURCES.log.blocks, mode: 'surface', dir: memory.surfaceDir, maxBlocks: SURFACE_BLOCKS, maxAbove: SOURCES.log.maxAbove })
+    return
+  }
+  memory.baseDir = (memory.baseDir + 1) % 4
+  memory.leg = 0
+  await exec(bot, 'explore', { target: SOURCES.diamond.blocks, mode: 'branch', dir: memory.baseDir, maxBlocks: HOP_BLOCKS })
+}
+
+// LONGRUN: an escalating answer to a stuck detection. Resolves false when the run should end as stuck.
+// Level 1 runs the recovery routine for the failure when one applies (else falls through to level 2); level 2 clears the loop memory; level 3 also forces an escape.
+async function escalate(bot, run, action, result, exec = runSkill) {
+  const inv = JSON.stringify(Object.fromEntries(Object.entries(inventoryCounts(bot)).sort()))
+  const step = stuckEscalation(run.longrun.history, { pos: bot.entity.position.clone(), inv })
+  run.longrun.history = step.history
+  if (step.end) return false
+  if (step.level === 1 && await tryRecovery(bot, run, action, result, exec, true)) return true
+  clearLoopMemory(run.memory)
+  if (step.level === 3) await forceEscape(bot, run, exec)
+  return true
+}
+
+// LONGRUN telemetry: per-deposit events and a gear snapshot every GEAR_INTERVAL_MIN minutes (inventory reads only).
+function trackLongrun(bot, run, banked, now = Date.now()) {
+  const lr = run.longrun
+  const minute = Math.floor((now - lr.startedAt) / 60000)
+  if (banked > 0) lr.deposits.push({ minute, count: banked })
+  if (minute < lr.nextGearMin) return
+  lr.nextGearMin = (Math.floor(minute / GEAR_INTERVAL_MIN) + 1) * GEAR_INTERVAL_MIN
+  const items = bot.inventory.items()
+  const counts = inventoryCounts(bot)
+  lr.gear.push(gearSnapshot({
+    counts, minute, deposited: run.deposited,
+    worn: [5, 6, 7, 8].map(i => bot.inventory.slots[i]?.name).filter(Boolean),
+    offhand: bot.inventory.slots[45]?.name,
+    foodCount: items.reduce((n, i) => n + (bot.registry.foodsByName[i.name] ? i.count : 0), 0),
+  }))
 }
 
 function remember(run, action, result) {
@@ -460,6 +505,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
     objective, home, surfaceY: home.y, params: normalizeParams(params), deadline, deposited: 0, recentlyAttacked: false, recentlyBurned: false, deaths: 0, decisions: 0, stopped: false, recoveries: [],
     memory: { ...lifeMemory(), baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), relocations: 0 },
   }
+  if (run.params.longrun) run.longrun = { history: newHistory(), gear: [], deposits: [], startedAt: Date.now(), nextGearMin: GEAR_INTERVAL_MIN }
   bot.objectiveRun = run
   bot.runDeadline = deadline
   const onDeath = () => handleDeath(bot, run)
@@ -474,7 +520,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
     for (;;) {
       if (run.stopped) return finish(run, 'stopped')
       if (run.lost) return finish(run, 'lost')
-      if (run.deaths >= maxDeaths) return finish(run, 'deaths')
+      if (run.deaths >= maxDeaths && !run.params.longrun) return finish(run, 'deaths')
       if (Date.now() >= deadline) return finish(run, 'timeout')
       if (!bot.entity || bot.health <= 0) {
         await new Promise(r => bot.once('spawn', r))
@@ -489,17 +535,21 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       const deathsBefore = run.deaths
       const invBefore = inventoryCounts(bot)
       const diamondsBefore = invBefore.diamond ?? 0
+      const depositedBefore = run.deposited
       const yBefore = bot.entity?.position.y
       const result = { ...await runSkill(bot, action.skill, ...action.args), descended: bot.entity?.position.y < yBefore - 1, y: Math.floor(bot.entity?.position.y) }
       run.decisions++
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
       if (action.skill === 'deposit' && result.ok) startNewTrip(bot, run)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
+      if (run.longrun) trackLongrun(bot, run, run.deposited - depositedBefore)
       afterSkill(run, action, result, deathsBefore)
       chargeLinger(run, state, Date.now() - startedAt)
       resetTrail(bot, run.home)
       if (run.recentlyAttacked || run.recentlyBurned || IDLE_EXEMPT.has(action.skill) || relocHazardExempt(run.memory, action, result, state.params) || !isStuck(result, action, invBefore)) continue
-      if (!await tryRecovery(bot, run, action, result)) return finish(run, 'stuck')
+      if (run.longrun) {
+        if (!await escalate(bot, run, action, result)) return finish(run, 'stuck')
+      } else if (!await tryRecovery(bot, run, action, result)) return finish(run, 'stuck')
       isStuck = stuckTracker(bot)
     }
   } finally {
@@ -512,7 +562,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
 }
 
 function finish(run, reason) {
-  return { reason, deposited: run.deposited, deaths: run.deaths, decisions: run.decisions, params: run.params, ...(run.recoveries.length && { recoveries: run.recoveries }) }
+  return { reason, deposited: run.deposited, deaths: run.deaths, decisions: run.decisions, params: run.params, ...(run.recoveries.length && { recoveries: run.recoveries }), ...longrunFields(run) }
 }
 
 function stopObjective(bot) {
@@ -523,4 +573,4 @@ function stopObjective(bot) {
   return true
 }
 
-module.exports = { effectiveSurface, trackLocalSurface, chargeLinger, runObjective, relocHazardExempt, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, tryRecovery, traceLine, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }
+module.exports = { effectiveSurface, trackLocalSurface, chargeLinger, runObjective, relocHazardExempt, stuckTracker, stopObjective, jitterParams, observe, createStuckTracker, finish, tryRecovery, escalate, forceEscape, trackLongrun, traceLine, pickLeft, remember, afterSkill, isLost, resetLife, resetTrip, handleDeath, startNewTrip }

@@ -3,7 +3,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test": "node --test ../tests/commands.test.js ../tests/skill_log.test.js ../tests/pregen.test.js ../tests/planner.test.js ../tests/metrics.test.js ../tests/physics.test.js ../tests/eval.test.js ../tests/bench.test.js ../tests/agent.test.js ../tests/skills_units.test.js",
+    "test": "node --test ../tests/commands.test.js ../tests/skill_log.test.js ../tests/pregen.test.js ../tests/planner.test.js ../tests/metrics.test.js ../tests/physics.test.js ../tests/eval.test.js ../tests/bench.test.js ../tests/agent.test.js ../tests/skills_units.test.js ../tests/longrun.test.js",
     "gate": "node --test ../tests/phase0_gate.test.js",
     "test:live": "node --test --test-concurrency=1 ../tests/skills.test.js"
   },

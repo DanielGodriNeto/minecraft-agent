@@ -260,7 +260,7 @@ timed ascent, barren relocation, process-isolated bots with tick-rate metrics (5
 14.4 -> 19.9, event-loop p99 440 -> 125 ms).
 
 **Paired A/B experiments:** behaviour changes sit behind env switches `SHAFT NIGHTSURF FOODGATE FIGHTGUARD RESERVE
-CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST STATIONABOVE DROWNCAP HAZARDGRACE WATCHDOG RECOVERY TRACELOG MINEY EARLYBANK SPAWNESCAPE VEINSCAN SPAWNWALK PICKREADY SPAREALWAYS`. Run the same slots with `ARMS` (list of arms) or one arm
+CROWDFLEE NIGHTASCENT BRANCHRELOCATE GOUPLOOP LOCALSURFACE PICKFIRST STATIONABOVE DROWNCAP HAZARDGRACE WATCHDOG RECOVERY TRACELOG MINEY EARLYBANK SPAWNESCAPE VEINSCAN SPAWNWALK PICKREADY SPAREALWAYS LONGRUN`. Run the same slots with `ARMS` (list of arms) or one arm
 via `ARM`; `BOTS_PER_PROC` sets bots per process (default 3). One change per experiment.
 
 **Caveats:** results hold for this world seed and difficulty easy; dev slots were tuned on; stuck is still ~40–46% of
