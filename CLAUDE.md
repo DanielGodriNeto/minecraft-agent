@@ -13,3 +13,4 @@ Mineflayer bot that mines and deposits diamonds. Read `docs/BOT_BEHAVIOR.md` fir
 - The main session delegates work to sub-agents (sonnet for code, haiku for log scanning) and stays lean.
 - One change per commit and per eval round; put behaviour changes behind a param/env switch for A/B. Success is measured on paired slots; 24 runs alone cannot show a change smaller than ~25 points.
 - Commits are local only, Conventional Commits, no AI attribution.
+- Investigations: when asked for feedback, research or a better approach for an algorithm that is not working, follow the global `big-task-workflow` first: research alternatives (researcher agents, paraphrased queries), plan, have a fresh critic check the plan, and return a scored report before changing code. This takes precedence over the execute-and-measure loop.
