@@ -165,7 +165,7 @@ async function workerMain(proc = process) {
   proc.send({ t: 'spawned' })
   await placing
   const homes = []
-  for (const [k, { slot }] of init.members.entries()) homes.push(await ev.retry(() => ev.placeAtSlot(server, bots[k], slot), 2, 5000).catch(e => e))
+  for (const [k, { slot }] of init.members.entries()) homes.push(await ev.retry(() => ev.placeAtSlot(server, bots[k], slot, ev.giftOf(init.arm)), 2, 5000).catch(e => e))
   proc.send({ t: 'placed' })
   const { start } = await started
   const meter = startMeter(bots)

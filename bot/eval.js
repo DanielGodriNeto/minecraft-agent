@@ -13,6 +13,7 @@ const { createBot } = require('./bot.js')
 const agent = require('./agent.js')
 const { stopObjective, jitterParams } = agent
 const { longrunFields } = require('./longrun.js')
+const { giveCommands, equipGift, wornPoints } = require('./gift.js')
 const { summarize, isInvalid, mulberry32 } = require('./metrics.js')
 const os = require('node:os')
 const { execSync } = require('node:child_process')
@@ -85,7 +86,7 @@ async function teleport(server, bot, x, y, z) {
 
 // Empty inventory, full health, standing on true ground with a storage chest beside it.
 // slot.y can be a tree canopy, so the ground is found by scanning the loaded column.
-async function placeAtSlot(server, bot, slot) {
+async function placeAtSlot(server, bot, slot, gift) {
   const name = bot.username
   const blockAt = (x, y, z) => bot.blockAt(bot.entity.position.clone().set(x, y, z))
   await teleport(server, bot, slot.x + 0.5, slot.y, slot.z + 0.5)
@@ -100,6 +101,7 @@ async function placeAtSlot(server, bot, slot) {
   assertSpawnSet(await server.command(`spawnpoint ${name} ${stand.x} ${stand.y} ${stand.z}`, SPAWN_REPLY))
   await server.command(`setblock ${chest.x} ${chest.y} ${chest.z} chest`, /Changed the block/)
   await poll(() => bot.health === 20 && bot.food === 20, 10000)
+  if (gift) for (const cmd of giveCommands(name, gift)) await server.command(cmd)
   return chest
 }
 
@@ -115,6 +117,9 @@ function distribute(batches, workers) {
   batches.forEach((batch, i) => shares[i % workers].push(batch))
   return shares
 }
+
+// The gift preset of an arm (ARM env and arm text are merged like runOne does); undefined without one.
+const giftOf = (arm = '') => parseArm([process.env.ARM, arm].filter(Boolean).join(',')).gift
 
 // "shaft=0,reserve=0" -> { shaft: 0, reserve: 0 }: numbers and booleans are parsed, the rest stays a string.
 function parseArm(text = '') {
@@ -208,6 +213,7 @@ function newBot(i, port, instance) {
 async function runOne(bot, slot, home, start, minutes, difficulty, log, instance, arm = '', meter) {
   const rand = mulberry32(slot.id)
   const armText = [process.env.ARM, arm].filter(Boolean).join(',')
+  const gift = giftOf(arm)
   bot.runTag = `slot${slot.id}-${start}`
   const disconnected = new Promise(resolve => {
     const done = () => resolve(partial(bot, 'disconnected'))
@@ -219,8 +225,10 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
     if (home instanceof Error) {
       result = partial(bot, 'harness', home.message) // placement failed: the bot never ran
     } else {
+      const params = { ...jitterParams(rand), ...parseArm(armText) }
+      if (params.gift) await equipGift(bot, params.gift)
       const running = agent.runObjective(bot, {
-        objective: { item: 'diamond', count: 'max' }, home, params: { ...jitterParams(rand), ...parseArm(armText) },
+        objective: { item: 'diamond', count: 'max' }, home, params,
         deadline: start + minutes * 60000, rand, startedAt: start,
       })
       running.catch(() => {}) // a run abandoned on disconnect may still reject later
@@ -230,7 +238,7 @@ async function runOne(bot, slot, home, start, minutes, difficulty, log, instance
   } catch (e) {
     result = partial(bot, 'error', e.message) // the bot's own code threw: a failed run, not a harness fault
   }
-  const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, ...(isInvalid(result) && { invalid: true }), minutes: (Date.now() - start) / 60000, difficulty, commit: commitHash(), env: switchesInEffect(), ...(armText && { arm: armText }), ...(instance.total > 1 && { instance: instance.index + 1 }), ...meter?.read(bot) }
+  const run = { slot: slot.id, bot: bot.username, run: bot.runTag, ...result, ...(isInvalid(result) && { invalid: true }), minutes: (Date.now() - start) / 60000, difficulty, commit: commitHash(), env: switchesInEffect(), ...(armText && { arm: armText }), ...(gift && { gift, armorPointsEnd: wornPoints(bot) }), ...(instance.total > 1 && { instance: instance.index + 1 }), ...meter?.read(bot) }
   return emitRow(run, instance)
 }
 
@@ -311,7 +319,7 @@ function localRunner(server, slots, port, minutes, difficulty, log, instance, ar
       await Promise.all(bots.map(b => withDeadline(once(b, 'spawn'), SPAWN_MS, `${b.username} spawn`)))
       await server.command('time set 0')
       this.homes = []
-      for (const [i, slot] of slots.entries()) this.homes.push(await retry(() => placeAtSlot(server, bots[i], slot), 2, 5000).catch(e => e))
+      for (const [i, slot] of slots.entries()) this.homes.push(await retry(() => placeAtSlot(server, bots[i], slot, giftOf(arm)), 2, 5000).catch(e => e))
     },
     run(start) {
       meter = startMeter(bots)
@@ -365,5 +373,5 @@ async function main([first, last, bots = '10', minutes = '60', instances = 'auto
   if (lostSlots.length) console.log(`memory_guard lost ${lostSlots.length} runs, re-run: ${JSON.stringify(lostSlots)}`)
 }
 
-module.exports = { harnessRow, newBot, once, withDeadline, tpsFromLine, parseArm, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, pickInstances, heapGbFor, memoryGuardAction, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
+module.exports = { harnessRow, newBot, once, withDeadline, tpsFromLine, parseArm, giftOf, assignArms, retry, skillLogPath, distribute, chunk, parseInstances, pickInstances, heapGbFor, memoryGuardAction, placeAtSlot, runOne, clearStandCommand, groundY, readDifficulty, assertSpawnSet, runBatch, SLOTS, MAX_BOTS }
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e); process.exit(1) })
