@@ -1,0 +1,14 @@
+     0m explore    pos 7168,167,-13312 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m 
+   0.4m explore    pos 7220,183,-13315 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+   0.8m explore    pos 7220,203,-13243 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+   1.5m go_up      pos 7118,158,-13246 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[170] FAIL explore:not_found
+   1.5m explore    pos 7130,170,-13244 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+     2m mine       pos 7130,115,-13358 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_lo FAIL explore:not_found
+   2.2m mine       pos 7120,118,-13385 hp20 food20 pick W0/S0/I0/D0 cobble0 wood1 dia0 d0 args=[["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_lo FAIL explore:not_found
+   2.3m craft      pos 7121,118,-13384 hp20 food20 pick W0/S0/I0/D0 cobble0 wood2 dia0 d0 args=["oak_planks",4] FAIL explore:not_found
+   2.3m craft      pos 7121,118,-13384 hp20 food20 pick W0/S0/I0/D0 cobble0 wood5 dia0 d0 args=["stick",4] FAIL explore:not_found
+   2.3m craft      pos 7121,118,-13384 hp20 food20 pick W0/S0/I0/D0 cobble0 wood3 dia0 d0 args=["oak_planks",4] FAIL explore:not_found
+   2.4m craft      pos 7121,118,-13384 hp20 food20 pick W0/S0/I0/D0 cobble0 wood6 dia0 d0 args=["crafting_table",1] FAIL explore:not_found
+   2.4m go_up      pos 7121,118,-13384 hp20 food20 pick W0/S0/I0/D0 cobble0 wood2 dia0 d0 args=[170] FAIL explore:not_found
+   2.5m go_up      pos 7120,119,-13387 hp20 food20 pick W0/S0/I0/D0 cobble0 wood2 dia0 d0 args=[170] FAIL go_up:not_reached
+   2.5m go_up      pos 7120,119,-13387 hp20 food20 pick W0/S0/I0/D0 cobble0 wood2 dia0 d0 args=[170] FAIL go_up:not_reached

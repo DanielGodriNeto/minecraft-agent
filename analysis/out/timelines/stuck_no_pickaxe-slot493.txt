@@ -1,0 +1,12 @@
+     0m explore    pos 15360,89,12288 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m 
+   0.4m go_up      pos 15360,80,12240 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[92] FAIL explore:not_found
+   0.7m explore    pos 15348,85,12249 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL go_up:not_reached
+   0.9m explore    pos 15421,67,12248 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+     1m explore    pos 15408,68,12241 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+   1.1m explore    pos 15402,70,12241 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+   1.2m explore    pos 15408,68,12241 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+   1.4m explore    pos 15402,70,12241 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+   1.6m explore    pos 15408,68,12241 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+   1.8m explore    pos 15402,70,12241 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+     2m explore    pos 15408,68,12241 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
+   2.2m explore    pos 15402,70,12241 hp20 food20 pick W0/S0/I0/D0 cobble0 wood0 dia0 d0 args=[{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","m FAIL explore:not_found
