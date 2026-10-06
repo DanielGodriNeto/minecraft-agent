@@ -279,7 +279,7 @@ async function planScenario(name, opts) {
 for (const hp of [12, 20]) {
   for (const dist of [8, 5]) {
     for (const earlySeal of [false, true]) {
-      const name = `PLAN earlySeal=${earlySeal ? 'on' : 'off'} (${hp}hp, zombie ${dist} away)`
+      const name = `PLAN earlySeal=${earlySeal ? 'on' : 'off'} (${hp}hp${hp >= 20 ? ' NO-TRIGGER CONTROL' : ''}, zombie ${dist} away)`
       test(name, () => planScenario(name, { hp, dist, earlySeal }))
     }
   }

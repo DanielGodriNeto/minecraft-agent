@@ -215,13 +215,15 @@ Cause per unsealed run: a_slow = no placement failed (too slow, or a cell never 
 
 Ends at zombie dead, death, 35 s after the seal closed (off digs out at 30 s, on holds up to 90 s) or 75 s. Start hp is set with hunger drained (no regen), no food carried; 16 cobblestone + iron pickaxe.
 
+How to read these rows: the 20 hp rows are a no-trigger control (earlySeal never fires at 20 hp, both arms fight; the differences are noise at n=10, no inference). The 12 hp rows are biased: the off arm already seals through the existing threatened branch, and the hp-lost gap comes from the end rule (off digs out at 30 s inside the 35 s window, on holds 90 s), not from a better decision. They show only that the hold works; they are NOT evidence of fewer deaths. Only the paired 90-minute A/B decides. Limitation: no equal-window comparison that continues past the off arm's dig-out was run.
+
 | scenario | n | survived | sealed | mean ticks to seal | mean hp lost | dug out | zombie killed | first action |
 |---|---|---|---|---|---|---|---|---|
 | PLAN earlySeal=off (12hp, zombie 8 away) | 10 | 10/10 | 10/10 | 70.3 | 2.8 | 10 | 0 | shelterx10 |
 | PLAN earlySeal=on (12hp, zombie 8 away) | 10 | 10/10 | 10/10 | 83.9 | 0.0 | 0 | 0 | early_sealx10 |
 | PLAN earlySeal=off (12hp, zombie 5 away) | 10 | 10/10 | 10/10 | 71.6 | 2.2 | 10 | 0 | shelterx10 |
 | PLAN earlySeal=on (12hp, zombie 5 away) | 10 | 10/10 | 10/10 | 84.0 | 0.0 | 0 | 0 | early_sealx10 |
-| PLAN earlySeal=off (20hp, zombie 8 away) | 10 | 6/10 | 0/10 | - | 10.2 | 0 | 6 | fightx10 |
-| PLAN earlySeal=on (20hp, zombie 8 away) | 10 | 8/10 | 0/10 | - | 7.1 | 0 | 8 | fightx10 |
-| PLAN earlySeal=off (20hp, zombie 5 away) | 10 | 6/10 | 0/10 | - | 9.1 | 0 | 6 | fightx9 nonex1 |
-| PLAN earlySeal=on (20hp, zombie 5 away) | 10 | 5/10 | 0/10 | - | 10.8 | 0 | 5 | fightx10 |
+| PLAN earlySeal=off (20hp NO-TRIGGER CONTROL, zombie 8 away) | 10 | 6/10 | 0/10 | - | 10.2 | 0 | 6 | fightx10 |
+| PLAN earlySeal=on (20hp NO-TRIGGER CONTROL, zombie 8 away) | 10 | 8/10 | 0/10 | - | 7.1 | 0 | 8 | fightx10 |
+| PLAN earlySeal=off (20hp NO-TRIGGER CONTROL, zombie 5 away) | 10 | 6/10 | 0/10 | - | 9.1 | 0 | 6 | fightx9 nonex1 |
+| PLAN earlySeal=on (20hp NO-TRIGGER CONTROL, zombie 5 away) | 10 | 5/10 | 0/10 | - | 10.8 | 0 | 5 | fightx10 |
