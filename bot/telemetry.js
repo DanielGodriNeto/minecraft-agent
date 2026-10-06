@@ -7,6 +7,9 @@ const SEAL_FAILS_MAX = 20
 const round1 = (n) => Math.round(n * 10) / 10
 const isPickaxe = (item) => item?.name?.endsWith('_pickaxe') === true
 
+// Telemetry must never throw into control flow: runs fn, returns fallback if it throws.
+const safe = (fn, fallback = null) => { try { return fn() } catch { return fallback } }
+
 const telemetryOn = (bot) => bot.objectiveRun?.params?.telemetry === true
 
 // Name, enchantments and durability of one item; null when there is none.
@@ -61,4 +64,4 @@ const stuckRow = ({ now, level, end, recent, picks }) => ({ t: now, level, end, 
 
 const telemetryFields = (run) => run.telemetry ? { telemetry: { stuck: run.telemetry.stuck } } : {}
 
-module.exports = { telemetryOn, itemInfo, pickList, damageFields, occupant, noteSealFail, lostPicks, pushRecent, stuckRow, telemetryFields, isPickaxe, RECENT_MAX, SEAL_FAILS_MAX }
+module.exports = { safe, telemetryOn, itemInfo, pickList, damageFields, occupant, noteSealFail, lostPicks, pushRecent, stuckRow, telemetryFields, isPickaxe, RECENT_MAX, SEAL_FAILS_MAX }

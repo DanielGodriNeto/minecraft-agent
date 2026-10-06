@@ -318,7 +318,8 @@ async function run(bot, skill, interruptible, escaping = false, capMs = skillCap
     lastHealth = bot.health
     if (lost <= 0) return
     const entry = damageEntry(bot)
-    damage.push(T.telemetryOn(bot) ? { ...entry, ...T.damageFields({ now: Date.now(), tick: ticks, lost, mob: attacker(bot), pos: bot.entity.position, health: bot.health, food: bot.food }) } : entry)
+    const extra = T.telemetryOn(bot) ? T.safe(() => T.damageFields({ now: Date.now(), tick: ticks, lost, mob: attacker(bot), pos: bot.entity.position, health: bot.health, food: bot.food }), {}) : {}
+    damage.push({ ...entry, ...extra })
     if (damage.length > DAMAGE_LOG_MAX) damage.shift()
     if (entry.cause === 'drowning') return escaping ? undefined : abort('drowning')
     if (BURNING.has(entry.cause)) return escaping ? undefined : abort('burning')
@@ -1401,7 +1402,7 @@ async function seal(bot, spot) {
     if (!placed) sealFailed(bot, spot, 'not_placed')
     return placed
   } catch (e) {
-    return sealFailed(bot, spot, e.message)
+    return sealFailed(bot, spot, e?.message)
   }
 }
 
@@ -1409,9 +1410,11 @@ async function seal(bot, spot) {
 function sealFailed(bot, spot, error) {
   const tele = bot.skillTele
   if (!tele) return false
-  const feet = bot.entity.position.floored()
-  const sealedCount = [...shelterCells(feet), feet.offset(0, 2, 0)].filter(c => isSolid(bot.blockAt(c))).length
-  tele.sealFails = T.noteSealFail(tele.sealFails, { cell: spot, error, occupied: T.occupant(bot.entities, spot, bot.entity.id), sealedCount, ticks: tele.tick?.() ?? null })
+  T.safe(() => {
+    const feet = bot.entity.position.floored()
+    const sealedCount = [...shelterCells(feet), feet.offset(0, 2, 0)].filter(c => isSolid(bot.blockAt(c))).length
+    tele.sealFails = T.noteSealFail(tele.sealFails, { cell: spot, error, occupied: T.occupant(bot.entities, spot, bot.entity.id), sealedCount, ticks: tele.tick?.() ?? null })
+  })
   return false
 }
 
@@ -1656,8 +1659,15 @@ function beginTelemetry(bot, name, before) {
 }
 
 function endTelemetry(bot, name, tele) {
-  bot.inventory.off('updateSlot', tele.onSlot)
   bot.skillTele = null
+  try {
+    return collectTelemetry(bot, name, tele)
+  } finally {
+    bot.inventory.off('updateSlot', tele.onSlot)
+  }
+}
+
+function collectTelemetry(bot, name, tele) {
   const out = {}
   if ('hostileDist' in tele) Object.assign(out, { hostileDist: tele.hostileDist, startHealth: tele.start.health, startFood: tele.start.food })
   if (tele.sealFails.length) out.sealFails = tele.sealFails
@@ -1671,9 +1681,9 @@ function endTelemetry(bot, name, tele) {
 
 async function runSkill(bot, name, ...args) {
   const before = snapshot(bot)
-  const tele = beginTelemetry(bot, name, before)
+  const tele = T.safe(() => beginTelemetry(bot, name, before))
   const { damage, ...result } = await run(bot, () => SKILLS[name](bot, ...args), !NON_INTERRUPTIBLE.has(name), ESCAPES.has(name), skillCapFor(bot, name, args))
-  const telemetry = tele && endTelemetry(bot, name, tele)
+  const telemetry = tele && T.safe(() => endTelemetry(bot, name, tele))
   if (result.reason === 'suffocating') await freeHead(bot)
   logSkill(bot, { t: Date.now(), bot: bot.username, run: bot.runTag ?? null, skill: name, args: args.map(logArg), result, ...(damage && { damage }), ...(telemetry && { telemetry }), before, after: snapshot(bot) })
   return result

@@ -325,7 +325,7 @@ async function escalate(bot, run, action, result, exec = runSkill) {
   const snapshot = run.stuckSnapshot ?? (() => stuckSnapshot(bot))
   const step = stuckEscalation(run.longrun.history, snapshot())
   run.longrun.history = step.history
-  if (run.telemetry) run.telemetry.stuck.push(T.stuckRow({ now: Date.now(), level: step.level ?? null, end: Boolean(step.end), recent: run.telemetry.recent, picks: T.pickList(bot.inventory.items(), bot.registry) }))
+  if (run.telemetry) T.safe(() => run.telemetry.stuck.push(T.stuckRow({ now: Date.now(), level: step.level ?? null, end: Boolean(step.end), recent: run.telemetry.recent, picks: T.pickList(bot.inventory.items(), bot.registry) })))
   if (step.end) return false
   if (step.level !== 1 || !await tryRecovery(bot, run, action, result, exec, true)) {
     clearLoopMemory(run.memory, lifeMemory())
@@ -565,7 +565,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       const yBefore = bot.entity?.position.y
       const result = { ...await exec(bot, action.skill, ...action.args), descended: bot.entity?.position.y < yBefore - 1, y: Math.floor(bot.entity?.position.y) }
       run.decisions++
-      if (run.telemetry) T.pushRecent(run.telemetry.recent, action, result)
+      if (run.telemetry) T.safe(() => T.pushRecent(run.telemetry.recent, action, result))
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
       if (action.skill === 'deposit' && result.ok) startNewTrip(bot, run)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
