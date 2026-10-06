@@ -585,3 +585,30 @@ test('remember: early seals neither count toward the shelter pause nor reset it,
   remember(run, { skill: 'shelter', args: [0] }, { ok: true })
   assert.strictEqual(memory.noShelter, 5) // the second ordinary shelter still triggers the pause
 })
+
+const BASE = { inv: {}, food: 20, hasFood: false, isNight: false, animalNear: false, visible: {}, tableNear: false, furnaceNear: false, freeSlots: 30, pickLeft: 0,
+  home: { x: 0, y: 70, z: 0 }, distHome: 0, objective: { item: 'diamond', count: 'max' }, deposited: 0 }
+
+test('remember: a failed early hold locks early_seal out for 5 minutes; a successful one does not; three failures never reach the stuck count', () => {
+  const ok = { memory: { optionalFails: {} } }
+  remember(ok, { skill: 'shelter', args: [0, 'early', 'ranged'], key: 'early_seal' }, { ok: true })
+  assert.strictEqual(ok.memory.earlyLockUntil ?? 0, 0)
+  const before = Date.now()
+  const run = { memory: { optionalFails: {} }, params: { ...DEFAULT_PARAMS, earlySeal: true } }
+  const snap = { pos: { x: 0, y: -58, z: 0 }, inv: 'a' }
+  const track = createStuckTracker()
+  const cover = { hostileNear: true, hostileDist: 8, hostileCount: 1, hostileRanged: true, canShelter: true, health: 20, y: -58, surfaceY: 70 }
+  let stuck = false
+  let early = 0
+  for (let i = 0; i < 3; i++) {
+    const action = nextAction({ ...BASE, ...cover, params: run.params, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, ...run.memory }, now: Date.now() })
+    if (action.key !== 'early_seal') continue
+    early++
+    const result = { ok: false, reason: 'hostile_waiting' }
+    remember(run, action, result)
+    stuck ||= track(result, snap)
+  }
+  assert.strictEqual(early, 1)
+  assert.strictEqual(stuck, false)
+  assert.ok(run.memory.earlyLockUntil >= before + 300000)
+})

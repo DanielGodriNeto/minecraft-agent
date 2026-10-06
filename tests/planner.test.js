@@ -859,11 +859,20 @@ test('earlySeal on: never starts with a hostile within 3 blocks, without blocks,
   assert.notStrictEqual(early({ health: 10, hostileDist: undefined })?.key, 'early_seal')
 })
 
-test('earlySeal on: at most 6 early seals in 10 minutes', () => {
+test('earlySeal on: at most 2 early seals in 10 minutes', () => {
   const stamps = (n, ago) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, earlySeals: Array(n).fill(1e6 - ago) })
-  assert.strictEqual(early({ health: 10, memory: stamps(5, 1000) }).key, 'early_seal')
-  assert.notStrictEqual(early({ health: 10, memory: stamps(6, 1000) })?.key, 'early_seal')
-  assert.strictEqual(early({ health: 10, memory: stamps(6, 600001) }).key, 'early_seal')
+  assert.strictEqual(early({ health: 10, memory: stamps(1, 1000) }).key, 'early_seal')
+  assert.notStrictEqual(early({ health: 10, memory: stamps(2, 1000) })?.key, 'early_seal')
+  assert.strictEqual(early({ health: 10, memory: stamps(2, 600001) }).key, 'early_seal')
+})
+
+test('earlySeal on: after a failed hold the lockout blocks every reason (incl. ranged) for 5 minutes, then expires', () => {
+  const lock = (ahead) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, earlyLockUntil: 1e6 + ahead })
+  for (const over of [{ health: 10 }, { hostileCount: 3 }, { hostileRanged: true }]) {
+    assert.notStrictEqual(early({ ...over, memory: lock(1) })?.key, 'early_seal')
+    assert.strictEqual(early({ ...over, memory: lock(0) }).key, 'early_seal')
+    assert.strictEqual(early({ ...over, memory: lock(-1) }).key, 'early_seal')
+  }
 })
 
 test('earlySeal on: ignores the noShelter pause that follows ordinary shelters', () => {

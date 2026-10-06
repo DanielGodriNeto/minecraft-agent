@@ -5,6 +5,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { stuckEscalation, newHistory, fruitlessDeaths, clearLoopMemory, gearSnapshot, longrunFields, GEAR_INTERVAL_MIN, HOP_BLOCKS, SURFACE_BLOCKS } = require('./longrun.js')
 const { nextAction, walkAfter, lingerHeldReturn, recoveryFor, GROUPS, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams, EARLY_SEAL_WINDOW_MS } = require('./planner.js')
+const EARLY_SEAL_LOCK_MS = 300000 // after a failed early hold (hostile_waiting, not_sealed) no early_seal for this long; per run like earlySeals (not reset on death)
 
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
@@ -212,11 +213,12 @@ function observe(bot, run) {
 }
 
 // Sheltering again and again next to a hostile that never leaves achieves nothing: after a few in a row the planner fights instead.
-function trackShelter(memory, action) {
+function trackShelter(memory, action, result) {
   if (memory.noShelter > 0) memory.noShelter--
   if (action.key === 'early_seal') {
     const now = Date.now()
     memory.earlySeals = [...(memory.earlySeals ?? []).filter(t => now - t < EARLY_SEAL_WINDOW_MS), now]
+    if (!result.ok) memory.earlyLockUntil = now + EARLY_SEAL_LOCK_MS
     return
   }
   if (action.skill !== 'shelter' || action.key) {
@@ -369,7 +371,7 @@ function remember(run, action, result) {
   if (!result.ok) countFailure(run.memory, action, result)
   if (action.restock) trackRestock(run.memory, action, result)
   if (action.restock === 'spare_always') run.memory.spareSince ??= Date.now()
-  trackShelter(run.memory, action)
+  trackShelter(run.memory, action, result)
   trackGoUp(run, action, result)
   trackHomeTrip(run.memory, action, result)
   trackDigging(run.memory, action, result)

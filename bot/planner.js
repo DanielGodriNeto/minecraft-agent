@@ -56,7 +56,7 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   PICKREADY  pickReady (OFF by default; =1 enables) keeps a spare iron pickaxe (mines visible iron, smelts, crafts it before the final descent) and, with one low (<=20% durability left) or no iron pickaxe and no spare, climbs to the iron level (y16) and restocks instead of mining on until it breaks
 //   RECOVERY   recovery (OFF by default; =1 enables) before the stuck tracker ends a run, one named recovery routine per failure signature and life (recoveryFor)
 //   SPAREALWAYS  spareAlways (OFF by default; =1 enables, needs pickReady) makes the spare iron pickaxe deliberate: after the first iron pickaxe and above y0 the bot goes to the iron band (y16), mines 3 iron, smelts, crafts sticks and the spare, within an 8 minute budget and only with 20+ minutes left and fuel on hand
-//   EARLYSEAL  earlySeal (OFF by default; =1 enables) a hostile 3+ blocks away with health < 14, 2+ hostiles or a skeleton in sight starts the shelter before the fight branch; the cell holds up to 90 s (no dig-out near a hostile or below 14 hp) and eats inside; max 6 per 10 min, exempt from the shelter pause
+//   EARLYSEAL  earlySeal (OFF by default; =1 enables) a hostile 3+ blocks away with health < 14, 2+ hostiles or a skeleton in sight starts the shelter before the fight branch; the cell holds up to 90 s (no dig-out near a hostile or below 14 hp) and eats inside; max 2 per 10 min, 5 min lockout after a hold that fails, exempt from the shelter pause
 //   LONGRUN    longrun (OFF by default; =1 enables) hours-long runs: deaths are not terminal, a stuck detection escalates (recover, clear loop memory, forced escape) and only 6 no-progress escalations in a row end the run; adds gear/deposit telemetry to the row (longrun.js)
 //   TELEMETRY  telemetry (OFF by default; =1 enables) observation only: detailed damage, seal-failure, pickaxe/ore, pickaxe-loss and stuck-context fields in the skill log and result row (telemetry.js); no decision changes
 const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk', 'pickReady', 'spareAlways', 'earlySeal', 'longrun', 'telemetry']
@@ -89,7 +89,7 @@ const FIGHT_HEALTH = 8 // keep equal to FIGHT_MIN_HEALTH in skills.js (fight giv
 const MAX_FIGHT_FAILS = 4 // consecutive failed fights per trip; then the mob counts as unreachable (behind a wall) and is ignored
 const EARLY_SEAL_HEALTH = 14 // = fleeHealth; below it a hostile that is still 3+ blocks away is sealed out
 const EARLY_MIN_DIST = 3
-const EARLY_SEAL_MAX = 6
+const EARLY_SEAL_MAX = 2
 const EARLY_SEAL_WINDOW_MS = 600000
 const MAX_CROWD_FLEES = 3 // per life: flights from a crowd of hostiles when there is nothing to seal in with
 const MAX_BURN_UPS = 2 // per life: climbs after a burning abort
@@ -491,6 +491,7 @@ const crowdedOut = (s) => s.params.crowdFlee && s.hostileClose && (s.hostileCoun
 // params.earlySeal: why to wall in now, while the hostile is still 3+ blocks away (placing needs ~66 ticks and fails once a mob stands in a wall cell).
 function earlySealReason(s) {
   if (!s.params.earlySeal || !s.canShelter || s.cellUnsafe || !(s.hostileDist >= EARLY_MIN_DIST)) return null
+  if ((s.now ?? 0) < (s.memory.earlyLockUntil ?? 0)) return null // the last hold ended in hostile_waiting: the hostile stays near, sealing again only repeats it
   const recent = (s.memory.earlySeals ?? []).filter(t => (s.now ?? 0) - t < EARLY_SEAL_WINDOW_MS)
   if (recent.length >= EARLY_SEAL_MAX) return null
   if (s.hostileRanged) return 'ranged'
