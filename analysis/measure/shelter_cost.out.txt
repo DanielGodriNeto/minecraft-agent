@@ -1,0 +1,48 @@
+== C. shelter cost, gift runs (n=120 runs, 153.7 run-hours, 1113 shelter calls)
+duration = wall time since previous skill log ended (includes planner overhead); ticks/20 s in brackets (undercounts when tps<20)
+mode|result | calls | calls/h | median min | p90 min | total min | share of run time | [median ticks/20 s]
+ALL                        1113 7.2 0.53 2.52 1044.3 11.3% [31.8]
+dawn|ALL                   612 4.0 2.20 2.52 921.5 10.0% [131.7]
+dawn|hostile_waiting       30 0.2 1.23 2.28 37.7 0.4% [73.8]
+dawn|no_tool               28 0.2 0.73 2.16 29.5 0.3% [44.0]
+dawn|not_sealed            151 1.0 0.01 0.03 1.8 0.0% [0.0]
+dawn|ok                    403 2.6 2.50 2.53 852.4 9.2% [150.3]
+rest|ALL                   8 0.1 0.03 1.04 1.2 0.0% [0.6]
+rest|hostile_waiting       1 0.0 1.04 1.04 1.0 0.0% [62.5]
+rest|no_tool               1 0.0 0.05 0.05 0.0 0.0% [1.2]
+rest|not_sealed            4 0.0 0.00 0.00 0.0 0.0% [0.0]
+rest|suffocating           2 0.0 0.06 0.07 0.1 0.0% [1.8]
+threat|ALL                 493 3.2 0.11 0.58 121.5 1.3% [5.5]
+threat|error               1 0.0 0.53 0.53 0.5 0.0% [31.1]
+threat|hostile_waiting     146 0.9 0.55 0.60 80.6 0.9% [33.2]
+threat|no_tool             35 0.2 0.51 0.58 14.2 0.2% [30.4]
+threat|not_sealed          255 1.7 0.05 0.12 13.1 0.1% [2.8]
+threat|ok                  47 0.3 0.23 0.48 12.6 0.1% [13.7]
+threat|suffocating         9 0.1 0.04 0.10 0.5 0.0% [1.5]
+per-run share of run time in shelter: median 10.7% p90 21.2% max 30.0%
+
+== D. shelter death rate by start health (all skills logs: 14270 shelter calls in 2014 runs). death = an hp<=0 damage entry inside the call.
+bucket|stratum | calls | deaths | death rate | median min
+[0,4)|ALL                          991 170 17.2% 0.07
+[0,4)|near4-proxy                  271 134 49.4% 0.09
+[0,4)|no-recent-near4-hit          720 36 5.0% 0.05
+[12,16)|ALL                        1591 53 3.3% 0.11
+[12,16)|near4-proxy                184 6 3.3% 0.08
+[12,16)|no-recent-near4-hit        1407 47 3.3% 0.13
+[16,20]|ALL                        7337 34 0.5% 0.94
+[16,20]|near4-proxy                100 4 4.0% 0.09
+[16,20]|no-recent-near4-hit        7237 30 0.4% 0.98
+[4,8)|ALL                          1882 440 23.4% 0.10
+[4,8)|near4-proxy                  818 407 49.8% 0.10
+[4,8)|no-recent-near4-hit          1064 33 3.1% 0.10
+[8,12)|ALL                         2469 31 1.3% 0.06
+[8,12)|near4-proxy                 265 18 6.8% 0.10
+[8,12)|no-recent-near4-hit         2204 13 0.6% 0.03
+
+-- by mode and proxy (all health):
+dawn|near4-proxy                   21 0 0.0%
+dawn|no-recent-near4-hit           5993 10 0.2%
+rest|near4-proxy                   2 0 0.0%
+rest|no-recent-near4-hit           178 4 2.2%
+threat|near4-proxy                 1615 569 35.2%
+threat|no-recent-near4-hit         6461 145 2.2%

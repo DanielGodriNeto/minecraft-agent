@@ -1,0 +1,481 @@
+
+######## gift=base: stuck runs=7 of 24; minutes median=68.4; deaths>0: 2
+
+-- slot101-1791209001486 slot 101 min=25.8 deaths=0 deposited=2 decisions=79 stuckResets={"1":1,"2":1,"3":4} armorEnd=0 recoveries=["craft:no_tool>table_spot"] skillCalls=84
+   +25.7m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=3097,-31,7167 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.8m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=3097,-31,7167 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.8m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=3097,-31,7167 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.8m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=3097,-31,7167 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.8m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=3097,-31,7167 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.8m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=3097,-31,7167 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.8m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=3097,-31,7167 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.8m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=3097,-31,7167 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #57 of 84 (+23.2m, craft); the next call that ended without one: dig_down([-59]) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1,"stone_pickaxe":1} calls without a pickaxe before end: 26
+   pickaxe-less from +23.2m; current life started at +0.0m; run ended +25.8m; calls: {"dig_down":1,"craft":20,"recover":1,"explore":4}
+   final inv (materials): {"stone_sword":1,"crafting_table":1,"raw_iron":1,"pale_oak_log":1,"cobblestone":112,"coal":6,"redstone":10,"pale_oak_planks":2,"stick":9,"cobbled_deepslate":445}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+-- slot105-1791209001486 slot 105 min=25.8 deaths=0 deposited=0 decisions=72 stuckResets={"1":1,"2":1,"3":4} armorEnd=0 recoveries=["go_up:not_reached>pillar_out"] skillCalls=77
+   +24.5m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-5105,-25,7156 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +24.6m go_up([70]) ok=false reason=not_reached ticks=207 pos=-5105,-25,7156 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +24.9m go_up([70]) ok=false reason=not_reached ticks=306 pos=-5105,-25,7156 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.1m go_up([70]) ok=false reason=not_reached ticks=307 pos=-5105,-25,7156 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.1m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-5105,-25,7156 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.3m go_up([70]) ok=false reason=not_reached ticks=206 pos=-5105,-25,7156 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.6m go_up([70]) ok=false reason=not_reached ticks=308 pos=-5105,-25,7156 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.8m go_up([70]) ok=false reason=not_reached ticks=305 pos=-5105,-25,7156 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #50 of 77 (+19.4m, shelter); the next call that ended without one: go_up([70]) not_reached; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 26
+   pickaxe-less from +19.4m; current life started at +0.0m; run ended +25.8m; calls: {"go_up":21,"recover":1,"explore":4}
+   final inv (materials): {"stick":3,"stone_sword":1,"cobbled_deepslate":606,"redstone":29,"crafting_table":1,"diamond":6,"spruce_log":2,"cobblestone":6,"spruce_planks":2}
+   last-12 histogram: go_up:not_reachedx9 explore:no_toolx3
+
+-- slot107-1791209001486 slot 107 min=21.6 deaths=0 deposited=0 decisions=41 stuckResets={"1":2,"2":2,"3":7} armorEnd=0 recoveries=["go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=50
+   +20.6m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7145,-17,7172 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +20.8m go_up([70]) ok=false reason=not_reached ticks=206 pos=-7145,-17,7172 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +20.9m go_up([70]) ok=false reason=not_reached ticks=204 pos=-7145,-17,7172 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +21.1m go_up([70]) ok=false reason=not_reached ticks=149 pos=-7145,-17,7172 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +21.1m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7145,-17,7172 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +21.3m go_up([70]) ok=false reason=not_reached ticks=244 pos=-7145,-17,7172 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +21.4m go_up([70]) ok=false reason=not_reached ticks=228 pos=-7145,-17,7172 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +21.6m go_up([70]) ok=false reason=not_reached ticks=157 pos=-7145,-17,7172 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   last snapshot WITH a pickaxe: call #1 of 50 (+3.4m, dig_down); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 48
+   pickaxe-less from +3.4m; current life started at +0.0m; run ended +21.6m; calls: {"explore":8,"go_up":37,"shelter":1,"recover":2}
+   final inv (materials): {"cobbled_deepslate":117,"cobblestone":43,"raw_iron":2}
+   last-12 histogram: go_up:not_reachedx9 explore:no_toolx3
+
+-- slot109-1791209001486 slot 109 min=68.4 deaths=1 deposited=4 decisions=225 stuckResets={"1":2,"2":1,"3":4} armorEnd=0 recoveries=["craft:no_tool>table_spot"] skillCalls=230
+   +68.4m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7157,-14,4093 moved=0.0 hp=16 food=15 pick=none table=1 night=false
+   +68.4m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7157,-14,4093 moved=0.0 hp=16 food=15 pick=none table=1 night=false
+   +68.4m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7157,-14,4093 moved=0.0 hp=16 food=15 pick=none table=1 night=false
+   +68.4m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7157,-14,4093 moved=0.0 hp=16 food=15 pick=none table=1 night=false
+   +68.4m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7157,-14,4093 moved=0.0 hp=16 food=15 pick=none table=1 night=false
+   +68.4m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7157,-14,4093 moved=0.0 hp=16 food=15 pick=none table=1 night=false
+   +68.4m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7157,-14,4093 moved=0.0 hp=16 food=15 pick=none table=1 night=false
+   +68.4m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7157,-14,4093 moved=0.0 hp=16 food=15 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #200 of 230 (+67.2m, mine); the next call that ended without one: dig_down([-56]) no_tool; pickaxes in last pick snapshot: {"stone_pickaxe":1,"iron_pickaxe":1} calls without a pickaxe before end: 29
+   pickaxe-less from +67.2m; current life started at +2.4m; run ended +68.4m; calls: {"dig_down":1,"craft":23,"recover":1,"explore":4}
+   final inv (materials): {"cobbled_deepslate":606,"cobblestone":38,"oak_log":1,"stone_sword":1,"stick":9,"birch_log":1,"mossy_cobblestone":6,"redstone":22,"acacia_planks":2,"crafting_table":1,"acacia_log":2}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+-- slot110-1791209001486 slot 110 min=85.8 deaths=0 deposited=0 decisions=176 stuckResets={"1":3,"2":2,"3":5} armorEnd=0 recoveries=["go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=183
+   +81.8m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7139,-46,-2027 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +82.3m go_up([70]) ok=false reason=not_reached ticks=607 pos=-7139,-46,-2027 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +83.0m go_up([70]) ok=false reason=not_reached ticks=906 pos=-7139,-46,-2027 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +83.8m go_up([70]) ok=false reason=not_reached ticks=909 pos=-7139,-46,-2027 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +83.8m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7139,-46,-2027 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +84.3m go_up([70]) ok=false reason=not_reached ticks=610 pos=-7139,-46,-2027 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +85.0m go_up([70]) ok=false reason=not_reached ticks=906 pos=-7139,-46,-2027 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +85.8m go_up([70]) ok=false reason=not_reached ticks=906 pos=-7139,-46,-2027 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #129 of 183 (+43.0m, explore); the next call that ended without one: go_up([70]) not_reached; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 53
+   pickaxe-less from +43.0m; current life started at +0.0m; run ended +85.8m; calls: {"go_up":40,"recover":2,"shelter":6,"explore":5}
+   final inv (materials): {"stone_sword":1,"acacia_planks":1,"redstone":17,"stick":1,"diamond":1,"crafting_table":1,"cobbled_deepslate":246}
+   last-12 histogram: go_up:not_reachedx9 explore:no_toolx3
+
+-- slot119-1791226076230 slot 119 min=82.4 deaths=0 deposited=2 decisions=209 stuckResets={"1":7,"2":6,"3":9} armorEnd=0 recoveries=["craft:no_tool>table_spot","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=225
+   +81.0m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=1025,-46,-7207 moved=0.0 hp=20 food=20 pick=none table=2 night=false
+   +81.2m go_up([70]) ok=false reason=not_reached ticks=220 pos=1025,-46,-7207 moved=0.0 hp=20 food=20 pick=none table=2 night=false
+   +81.5m go_up([70]) ok=false reason=not_reached ticks=307 pos=1025,-46,-7207 moved=0.0 hp=20 food=20 pick=none table=2 night=false
+   +81.7m go_up([70]) ok=false reason=not_reached ticks=309 pos=1025,-46,-7207 moved=0.0 hp=20 food=20 pick=none table=2 night=false
+   +81.7m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=1025,-46,-7207 moved=0.0 hp=20 food=20 pick=none table=2 night=false
+   +81.9m go_up([70]) ok=false reason=not_reached ticks=207 pos=1025,-46,-7207 moved=0.0 hp=20 food=20 pick=none table=2 night=false
+   +82.2m go_up([70]) ok=false reason=not_reached ticks=307 pos=1025,-46,-7207 moved=0.0 hp=20 food=20 pick=none table=2 night=false
+   +82.4m go_up([70]) ok=false reason=not_reached ticks=308 pos=1025,-46,-7207 moved=0.0 hp=20 food=20 pick=none table=2 night=false
+   last snapshot WITH a pickaxe: call #142 of 225 (+48.8m, explore); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 82
+   pickaxe-less from +48.8m; current life started at +0.0m; run ended +82.4m; calls: {"explore":9,"go_up":62,"shelter":6,"recover":5}
+   final inv (materials): {"redstone":5,"spruce_log":6,"cobbled_deepslate":323,"diamond":2,"raw_iron":5,"crafting_table":2,"stone_sword":1,"cobblestone":10,"stick":5,"spruce_planks":2}
+   last-12 histogram: go_up:not_reachedx9 explore:no_toolx3
+
+-- slot122-1791226076230 slot 122 min=87.9 deaths=2 deposited=5 decisions=318 stuckResets={"1":2,"2":1,"3":4} armorEnd=0 recoveries=["craft:no_tool>table_spot"] skillCalls=323
+   +87.9m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=7172,-20,-7168 moved=0.0 hp=8 food=13 pick=none table=1 night=false
+   +87.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7172,-20,-7168 moved=0.0 hp=8 food=13 pick=none table=1 night=false
+   +87.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7172,-20,-7168 moved=0.0 hp=8 food=13 pick=none table=1 night=false
+   +87.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7172,-20,-7168 moved=0.0 hp=8 food=13 pick=none table=1 night=false
+   +87.9m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=7172,-20,-7168 moved=0.0 hp=8 food=13 pick=none table=1 night=false
+   +87.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7172,-20,-7168 moved=0.0 hp=8 food=13 pick=none table=1 night=false
+   +87.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7172,-20,-7168 moved=0.0 hp=8 food=13 pick=none table=1 night=false
+   +87.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7172,-20,-7168 moved=0.0 hp=8 food=13 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #293 of 323 (+85.7m, shelter); the next call that ended without one: dig_down([-57]) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1,"stone_pickaxe":1} calls without a pickaxe before end: 29
+   pickaxe-less from +85.7m; current life started at +24.8m; run ended +87.9m; calls: {"dig_down":1,"craft":23,"recover":1,"explore":4}
+   final inv (materials): {"cobblestone":91,"stone_sword":1,"coal":7,"dripstone_block":1,"birch_log":2,"raw_iron":6,"redstone":32,"stick":11,"crafting_table":1,"cobbled_deepslate":45,"oak_log":2}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+######## gift=armor: stuck runs=11 of 24; minutes median=31.1; deaths>0: 0
+
+-- slot100-1791231558329 slot 100 min=25.4 deaths=0 deposited=5 decisions=84 stuckResets={"1":1,"2":1,"3":4} armorEnd=15 recoveries=["craft:no_tool>table_spot"] skillCalls=89
+   +25.3m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=6178,-46,7187 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=6178,-46,7187 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=6178,-46,7187 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=6178,-46,7187 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.3m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=6178,-46,7187 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=6178,-46,7187 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=6178,-46,7187 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +25.4m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=6178,-46,7187 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #62 of 89 (+22.4m, craft); the next call that ended without one: dig_down([-59]) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1,"stone_pickaxe":1} calls without a pickaxe before end: 26
+   pickaxe-less from +22.4m; current life started at +0.0m; run ended +25.4m; calls: {"dig_down":1,"craft":20,"recover":1,"explore":4}
+   final inv (materials): {"stick":9,"oak_log":2,"birch_log":2,"cobbled_deepslate":519,"crafting_table":1,"coal":1,"cobblestone":132,"birch_planks":2,"stone_sword":1}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+-- slot101-1791231558329 slot 101 min=65.7 deaths=0 deposited=0 decisions=200 stuckResets={"1":15,"2":13,"3":21} armorEnd=15 recoveries=["go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=234
+   +64.4m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=14 pos=3060,-29,7189 moved=2.8 hp=15 food=15 pick=none table=1 night=false
+   +64.5m go_up([100]) ok=false reason=not_reached ticks=216 pos=3058,-29,7189 moved=2.6 hp=15 food=15 pick=none table=1 night=false
+   +64.8m go_up([100]) ok=false reason=not_reached ticks=306 pos=3058,-29,7189 moved=0.1 hp=15 food=15 pick=none table=1 night=false
+   +65.0m go_up([100]) ok=false reason=not_reached ticks=306 pos=3058,-29,7189 moved=0.1 hp=15 food=15 pick=none table=1 night=false
+   +65.1m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=no_tool ticks=14 pos=3058,-29,7191 moved=2.7 hp=15 food=15 pick=none table=1 night=false
+   +65.2m go_up([100]) ok=false reason=not_reached ticks=215 pos=3058,-29,7189 moved=2.7 hp=15 food=15 pick=none table=1 night=false
+   +65.5m go_up([100]) ok=false reason=not_reached ticks=305 pos=3058,-29,7189 moved=0.1 hp=15 food=15 pick=none table=1 night=false
+   +65.7m go_up([100]) ok=false reason=not_reached ticks=305 pos=3058,-29,7189 moved=0.1 hp=15 food=15 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #35 of 234 (+13.7m, explore); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) timeout; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 198
+   pickaxe-less from +13.7m; current life started at +0.0m; run ended +65.7m; calls: {"explore":22,"go_up":157,"fight":5,"recover":13,"shelter":1}
+   final inv (materials): {"stick":1,"raw_iron":2,"cobbled_deepslate":423,"redstone":10,"coal":6,"crafting_table":1,"stone_sword":1,"cobblestone":29}
+   last-12 histogram: go_up:not_reachedx9 explore:no_toolx3
+
+-- slot102-1791231558329 slot 102 min=12.0 deaths=0 deposited=1 decisions=58 stuckResets={"1":1,"2":1,"3":4} armorEnd=15 recoveries=["craft:no_tool>table_spot"] skillCalls=63
+   +12.0m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=2029,-4,7118 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.0m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=2029,-4,7118 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.0m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=2029,-4,7118 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.0m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=2029,-4,7118 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.0m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=2029,-4,7118 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.0m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=2029,-4,7118 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.0m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=2029,-4,7118 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.0m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=2029,-4,7118 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   last snapshot WITH a pickaxe: call #36 of 63 (+9.6m, craft); the next call that ended without one: dig_down([-57]) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1,"stone_pickaxe":1} calls without a pickaxe before end: 26
+   pickaxe-less from +9.6m; current life started at +0.0m; run ended +12.0m; calls: {"dig_down":1,"craft":20,"recover":1,"explore":4}
+   final inv (materials): {"stone_sword":1,"stick":11,"crafting_table":1,"coal":2,"raw_iron":4,"cobblestone":76,"cobbled_deepslate":176,"oak_log":2,"birch_log":2}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+-- slot104-1791231558329 slot 104 min=21.9 deaths=0 deposited=2 decisions=78 stuckResets={"1":1,"2":1,"3":4} armorEnd=15 recoveries=["craft:no_tool>table_spot"] skillCalls=83
+   +21.9m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-4091,-44,7176 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +21.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4091,-44,7176 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +21.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4091,-44,7176 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +21.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4091,-44,7176 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +21.9m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-4091,-44,7176 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +21.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4091,-44,7176 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +21.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4091,-44,7176 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +21.9m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4091,-44,7176 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #56 of 83 (+19.0m, craft); the next call that ended without one: dig_down([-56]) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1,"stone_pickaxe":1} calls without a pickaxe before end: 26
+   pickaxe-less from +19.0m; current life started at +0.0m; run ended +21.9m; calls: {"dig_down":1,"craft":20,"recover":1,"explore":4}
+   final inv (materials): {"crafting_table":1,"stick":9,"stone_sword":1,"cobbled_deepslate":614,"spruce_log":1,"raw_iron":6,"spruce_planks":2,"cobblestone":41}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+-- slot111-1791231558329 slot 111 min=31.1 deaths=0 deposited=0 decisions=86 stuckResets={"1":4,"2":1,"3":4} armorEnd=15 recoveries=["go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=92
+   +31.1m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=hazard ticks=0 pos=-7158,-11,-3030 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +31.1m go_up([67]) ok=false reason=not_reached ticks=5 pos=-7158,-11,-3030 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +31.1m go_up([67]) ok=false reason=not_reached ticks=4 pos=-7158,-11,-3030 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +31.1m go_up([67]) ok=false reason=not_reached ticks=4 pos=-7158,-11,-3030 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +31.1m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=hazard ticks=0 pos=-7158,-11,-3030 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +31.1m go_up([67]) ok=false reason=not_reached ticks=5 pos=-7158,-11,-3030 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +31.1m go_up([67]) ok=false reason=not_reached ticks=4 pos=-7158,-11,-3030 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +31.1m go_up([67]) ok=false reason=not_reached ticks=3 pos=-7158,-11,-3030 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   last snapshot WITH a pickaxe: call #33 of 92 (+2.9m, go_up); the next call that ended without one: dig_down([-56]) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 58
+   pickaxe-less from +2.9m; current life started at +0.0m; run ended +31.1m; calls: {"dig_down":1,"go_up":51,"recover":2,"explore":4}
+   final inv (materials): {"cobblestone":41,"raw_iron":2,"cobbled_deepslate":97}
+   last-12 histogram: go_up:not_reachedx9 explore:hazardx3
+
+-- slot113-1791214523142 slot 113 min=43.0 deaths=0 deposited=0 decisions=114 stuckResets={"1":4,"2":2,"3":4} armorEnd=15 recoveries=["go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=125
+   +41.4m go_up([63]) ok=false reason=not_reached ticks=204 pos=-7195,18,-5123 moved=0.0 hp=3 food=13 pick=none table=0 night=false
+   +41.7m go_up([63]) ok=false reason=not_reached ticks=204 pos=-7195,18,-5123 moved=0.0 hp=3 food=13 pick=none table=0 night=false
+   +41.9m go_up([63]) ok=false reason=not_reached ticks=204 pos=-7195,18,-5123 moved=0.0 hp=3 food=13 pick=none table=0 night=false
+   +42.2m go_up([63]) ok=false reason=not_reached ticks=224 pos=-7195,18,-5123 moved=0.0 hp=3 food=13 pick=none table=0 night=false
+   +42.2m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":2,"maxBlocks":64,"maxAbove":3}]) ok=false reason=not_found ticks=32 pos=-7195,18,-5123 moved=0.0 hp=3 food=13 pick=none table=0 night=false
+   +42.4m go_up([63]) ok=false reason=not_reached ticks=348 pos=-7195,18,-5123 moved=0.0 hp=3 food=13 pick=none table=0 night=false
+   +42.7m go_up([63]) ok=false reason=not_reached ticks=352 pos=-7195,18,-5123 moved=0.0 hp=3 food=13 pick=none table=0 night=false
+   +43.0m go_up([63]) ok=false reason=not_reached ticks=232 pos=-7195,18,-5123 moved=0.0 hp=3 food=13 pick=none table=0 night=false
+   last snapshot WITH a pickaxe: call #68 of 125 (+28.2m, explore); the next call that ended without one: explore([{"target":["iron_ore","deepslate_iron_ore"],"mode":"branch") no_tool; pickaxes in last pick snapshot: {"stone_pickaxe":1} calls without a pickaxe before end: 56
+   pickaxe-less from +28.2m; current life started at +0.0m; run ended +43.0m; calls: {"explore":5,"go_up":41,"shelter":7,"recover":3}
+   final inv (materials): {"cobbled_deepslate":903,"stick":5,"stone_sword":1,"redstone":23,"iron_ingot":1,"oak_planks":2}
+   last-12 histogram: go_up:not_reachedx10 explore:not_foundx2
+
+-- slot116-1791214523142 slot 116 min=35.5 deaths=0 deposited=0 decisions=53 stuckResets={"1":3,"2":2,"3":5} armorEnd=15 recoveries=["go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=60
+   +31.5m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-4103,-15,-7161 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +32.0m go_up([84]) ok=false reason=not_reached ticks=603 pos=-4103,-15,-7161 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +32.8m go_up([84]) ok=false reason=not_reached ticks=904 pos=-4103,-15,-7161 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +33.5m go_up([84]) ok=false reason=not_reached ticks=903 pos=-4103,-15,-7161 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +33.5m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-4103,-15,-7161 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +34.0m go_up([84]) ok=false reason=not_reached ticks=605 pos=-4103,-15,-7161 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +34.8m go_up([84]) ok=false reason=not_reached ticks=904 pos=-4103,-15,-7161 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   +35.5m go_up([84]) ok=false reason=not_reached ticks=902 pos=-4103,-15,-7161 moved=0.0 hp=20 food=20 pick=none table=0 night=true
+   last snapshot WITH a pickaxe: call #9 of 60 (+3.8m, dig_down); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 50
+   pickaxe-less from +3.8m; current life started at +0.0m; run ended +35.5m; calls: {"explore":6,"go_up":42,"recover":2}
+   final inv (materials): {"cobbled_deepslate":158,"stick":8}
+   last-12 histogram: go_up:not_reachedx9 explore:no_toolx3
+
+-- slot118-1791214523142 slot 118 min=8.5 deaths=0 deposited=1 decisions=41 stuckResets={"1":1,"2":1,"3":4} armorEnd=15 recoveries=["craft:no_tool>table_spot"] skillCalls=46
+   +8.5m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=10,-54,-7184 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +8.5m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=10,-54,-7184 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +8.5m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=10,-54,-7184 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +8.5m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=10,-54,-7184 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +8.5m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=10,-54,-7184 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +8.5m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=10,-54,-7184 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +8.5m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=10,-54,-7184 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +8.5m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=10,-54,-7184 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #19 of 46 (+5.8m, craft); the next call that ended without one: dig_down([-59]) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1,"stone_pickaxe":1} calls without a pickaxe before end: 26
+   pickaxe-less from +5.8m; current life started at +0.0m; run ended +8.5m; calls: {"dig_down":1,"craft":20,"recover":1,"explore":4}
+   final inv (materials): {"stick":9,"stone_sword":1,"raw_iron":1,"cobblestone":70,"cobbled_deepslate":84,"oak_planks":2,"crafting_table":1}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+-- slot120-1791214523142 slot 120 min=68.3 deaths=0 deposited=0 decisions=67 stuckResets={"1":4,"2":4,"3":8} armorEnd=15 recoveries=["go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=87
+   +60.5m go_up([69]) ok=false reason=not_reached ticks=902 pos=4939,30,-7219 moved=9.9 hp=20 food=20 pick=none table=0 night=false
+   +61.3m go_up([69]) ok=false reason=not_reached ticks=906 pos=4939,30,-7219 moved=0.1 hp=20 food=20 pick=none table=0 night=false
+   +62.1m go_up([69]) ok=false reason=not_reached ticks=923 pos=4938,30,-7219 moved=0.2 hp=20 food=20 pick=none table=0 night=false
+   +62.8m go_up([69]) ok=false reason=not_reached ticks=903 pos=4939,30,-7220 moved=0.6 hp=20 food=20 pick=none table=0 night=false
+   +65.8m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":1,"maxBlocks":64,"maxAbove":3}]) ok=false reason=not_found ticks=3524 pos=4939,31,-7219 moved=1.3 hp=20 food=20 pick=none table=0 night=false
+   +66.8m go_up([69]) ok=false reason=not_reached ticks=764 pos=4932,32,-7217 moved=7.7 hp=20 food=20 pick=none table=0 night=false
+   +67.6m go_up([69]) ok=false reason=not_reached ticks=576 pos=4932,32,-7217 moved=0.1 hp=20 food=20 pick=none table=0 night=false
+   +68.3m go_up([69]) ok=false reason=not_reached ticks=576 pos=4932,32,-7218 moved=0.1 hp=20 food=20 pick=none table=0 night=false
+   last snapshot WITH a pickaxe: call #1 of 87 (+2.9m, explore); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) timeout; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 85
+   pickaxe-less from +2.9m; current life started at +0.0m; run ended +68.3m; calls: {"explore":17,"go_up":63,"shelter":1,"recover":4}
+   final inv (materials): {"cobbled_deepslate":80,"redstone":17,"sandstone":11}
+   last-12 histogram: go_up:not_reachedx10 explore:timeoutx1 explore:not_foundx1
+
+-- slot121-1791214523142 slot 121 min=84.7 deaths=0 deposited=1 decisions=176 stuckResets={"1":2,"2":1,"3":4} armorEnd=15 recoveries=["go_up:not_reached>pillar_out"] skillCalls=181
+   +79.6m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=6177,-59,-7114 moved=0.0 hp=17 food=17 pick=none table=1 night=true
+   +80.4m go_up([66]) ok=false reason=not_reached ticks=1013 pos=6177,-59,-7114 moved=0.0 hp=17 food=17 pick=none table=1 night=false
+   +81.3m go_up([66]) ok=false reason=not_reached ticks=1018 pos=6177,-59,-7114 moved=0.0 hp=17 food=17 pick=none table=1 night=false
+   +82.1m go_up([66]) ok=false reason=not_reached ticks=1013 pos=6177,-59,-7114 moved=0.0 hp=17 food=17 pick=none table=1 night=false
+   +82.1m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=6177,-59,-7114 moved=0.0 hp=17 food=17 pick=none table=1 night=false
+   +83.0m go_up([66]) ok=false reason=not_reached ticks=1017 pos=6177,-59,-7114 moved=0.0 hp=17 food=17 pick=none table=1 night=false
+   +83.8m go_up([66]) ok=false reason=not_reached ticks=1014 pos=6177,-59,-7114 moved=0.0 hp=17 food=17 pick=none table=1 night=false
+   +84.7m go_up([66]) ok=false reason=not_reached ticks=1015 pos=6177,-59,-7114 moved=0.0 hp=17 food=17 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #146 of 181 (+53.8m, explore); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) no_tool; pickaxes in last pick snapshot: {"stone_pickaxe":1,"iron_pickaxe":1} calls without a pickaxe before end: 34
+   pickaxe-less from +53.8m; current life started at +0.0m; run ended +84.7m; calls: {"explore":5,"shelter":4,"go_up":24,"recover":1}
+   final inv (materials): {"cobbled_deepslate":805,"coal":2,"diamond":2,"mossy_cobblestone":2,"stick":1,"raw_iron":4,"jungle_log":2,"redstone":36,"crafting_table":1,"cobblestone":15,"stone_sword":1,"jungle_planks":2}
+   last-12 histogram: go_up:not_reachedx9 explore:no_toolx3
+
+-- slot122-1791214523142 slot 122 min=12.7 deaths=0 deposited=7 decisions=51 stuckResets={"1":1,"2":1,"3":4} armorEnd=15 recoveries=["craft:no_tool>table_spot"] skillCalls=56
+   +12.7m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=7161,-34,-7172 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.7m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7161,-34,-7172 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.7m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7161,-34,-7172 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.7m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7161,-34,-7172 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.7m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=7161,-34,-7172 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.7m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7161,-34,-7172 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.7m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7161,-34,-7172 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   +12.7m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=7161,-34,-7172 moved=0.0 hp=20 food=20 pick=none table=1 night=true
+   last snapshot WITH a pickaxe: call #29 of 56 (+10.4m, deposit); the next call that ended without one: dig_down([-57]) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1,"stone_pickaxe":1} calls without a pickaxe before end: 26
+   pickaxe-less from +10.4m; current life started at +0.0m; run ended +12.7m; calls: {"dig_down":1,"craft":20,"recover":1,"explore":4}
+   final inv (materials): {"crafting_table":1,"cobblestone":83,"dripstone_block":2,"stick":3,"stone_sword":1,"cobbled_deepslate":159,"redstone":5}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+######## gift=spare: stuck runs=6 of 24; minutes median=54.9; deaths>0: 1
+
+-- slot101-1791209002642 slot 101 min=70.7 deaths=1 deposited=1 decisions=213 stuckResets={"1":2,"2":1,"3":4} armorEnd=0 recoveries=["craft:no_tool>table_spot"] skillCalls=218
+   +69.9m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=3087,-51,7168 moved=0.0 hp=11 food=12 pick=none table=1 night=false
+   +70.0m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=165 pos=3087,-51,7168 moved=0.0 hp=11 food=12 pick=none table=1 night=false
+   +70.1m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=163 pos=3087,-51,7168 moved=0.0 hp=11 food=12 pick=none table=1 night=false
+   +70.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=162 pos=3087,-51,7168 moved=0.0 hp=11 food=12 pick=none table=1 night=false
+   +70.3m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=3087,-51,7168 moved=0.0 hp=11 food=12 pick=none table=1 night=false
+   +70.4m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=165 pos=3087,-51,7168 moved=0.0 hp=11 food=12 pick=none table=1 night=false
+   +70.6m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=165 pos=3087,-51,7168 moved=0.0 hp=11 food=12 pick=none table=1 night=false
+   +70.7m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=163 pos=3087,-51,7168 moved=0.0 hp=11 food=12 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #186 of 218 (+65.4m, explore); the next call that ended without one: explore([{"target":["iron_ore","deepslate_iron_ore"],"mode":"branch") no_tool; pickaxes in last pick snapshot: {"stone_pickaxe":1} calls without a pickaxe before end: 31
+   pickaxe-less from +65.4m; current life started at +22.0m; run ended +70.7m; calls: {"explore":5,"craft":25,"recover":1}
+   final inv (materials): {"coal":2,"iron_ingot":1,"stick":5,"stone_sword":1,"pale_oak_planks":2,"redstone":14,"cobbled_deepslate":165,"cobblestone":27,"crafting_table":1,"pale_oak_log":1}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+-- slot102-1791209002642 slot 102 min=64.5 deaths=0 deposited=9 decisions=174 stuckResets={"1":4,"2":3,"3":10} armorEnd=0 recoveries=["go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=187
+   +63.1m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=2031,-27,7173 moved=0.0 hp=20 food=19 pick=none table=1 night=false
+   +63.3m go_up([64]) ok=false reason=not_reached ticks=205 pos=2031,-27,7173 moved=0.0 hp=20 food=19 pick=none table=1 night=false
+   +63.5m go_up([64]) ok=false reason=not_reached ticks=317 pos=2031,-27,7173 moved=0.0 hp=20 food=19 pick=none table=1 night=false
+   +63.8m go_up([64]) ok=false reason=not_reached ticks=311 pos=2031,-27,7173 moved=0.0 hp=20 food=19 pick=none table=1 night=false
+   +63.8m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=2031,-27,7173 moved=0.0 hp=20 food=19 pick=none table=1 night=false
+   +64.0m go_up([64]) ok=false reason=not_reached ticks=205 pos=2031,-27,7173 moved=0.0 hp=20 food=19 pick=none table=1 night=false
+   +64.2m go_up([64]) ok=false reason=not_reached ticks=307 pos=2031,-27,7173 moved=0.0 hp=20 food=19 pick=none table=1 night=false
+   +64.5m go_up([64]) ok=false reason=not_reached ticks=306 pos=2031,-27,7173 moved=0.0 hp=20 food=19 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #113 of 187 (+41.6m, explore); the next call that ended without one: go_up([64]) not_reached; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 73
+   pickaxe-less from +41.6m; current life started at +0.0m; run ended +64.5m; calls: {"go_up":56,"recover":3,"explore":10,"shelter":4}
+   final inv (materials): {"cobbled_deepslate":371,"stick":5,"birch_log":1,"sandstone":1,"redstone":42,"raw_iron":1,"oak_log":4,"oak_planks":2,"diamond":6,"crafting_table":1,"cobblestone":12,"stone_sword":1}
+   last-12 histogram: go_up:not_reachedx9 explore:no_toolx3
+
+-- slot103-1791209002642 slot 103 min=45.3 deaths=0 deposited=0 decisions=69 stuckResets={"1":1,"2":1,"3":4} armorEnd=0 recoveries=["go_up:not_reached>pillar_out"] skillCalls=74
+   +40.2m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-23,-58,7093 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +41.1m go_up([89]) ok=false reason=not_reached ticks=1018 pos=-23,-58,7093 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +41.9m go_up([89]) ok=false reason=not_reached ticks=1008 pos=-23,-58,7093 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +42.8m go_up([89]) ok=false reason=not_reached ticks=1005 pos=-23,-58,7093 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +42.8m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-23,-58,7093 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +43.6m go_up([89]) ok=false reason=not_reached ticks=1060 pos=-23,-58,7093 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +44.5m go_up([89]) ok=false reason=not_reached ticks=1006 pos=-23,-58,7093 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +45.3m go_up([89]) ok=false reason=not_reached ticks=1007 pos=-23,-58,7093 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   last snapshot WITH a pickaxe: call #39 of 74 (+13.7m, explore); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 34
+   pickaxe-less from +13.7m; current life started at +0.0m; run ended +45.3m; calls: {"explore":5,"shelter":7,"go_up":21,"recover":1}
+   final inv (materials): {"cobbled_deepslate":604,"redstone":18,"diamond":12,"coal":1,"cobblestone":63,"raw_iron":2}
+   last-12 histogram: go_up:not_reachedx7 shelter:okx2 explore:no_toolx2 shelter:no_toolx1
+
+-- slot104-1791209002642 slot 104 min=43.2 deaths=0 deposited=1 decisions=138 stuckResets={"1":2,"2":1,"3":4} armorEnd=0 recoveries=["craft:no_tool>table_spot"] skillCalls=143
+   +43.2m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-4104,-56,7181 moved=0.0 hp=1 food=15 pick=none table=1 night=false
+   +43.2m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4104,-56,7181 moved=0.0 hp=1 food=15 pick=none table=1 night=false
+   +43.2m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4104,-56,7181 moved=0.0 hp=1 food=15 pick=none table=1 night=false
+   +43.2m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4104,-56,7181 moved=0.0 hp=1 food=15 pick=none table=1 night=false
+   +43.2m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-4104,-56,7181 moved=0.0 hp=1 food=15 pick=none table=1 night=false
+   +43.2m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4104,-56,7181 moved=0.0 hp=1 food=15 pick=none table=1 night=false
+   +43.2m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4104,-56,7181 moved=0.0 hp=1 food=15 pick=none table=1 night=false
+   +43.2m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-4104,-56,7181 moved=0.0 hp=1 food=15 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #110 of 143 (+41.8m, dig_down); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) no_tool; pickaxes in last pick snapshot: {"stone_pickaxe":2,"iron_pickaxe":1} calls without a pickaxe before end: 32
+   pickaxe-less from +41.8m; current life started at +0.0m; run ended +43.2m; calls: {"explore":5,"shelter":2,"craft":24,"recover":1}
+   final inv (materials): {"cobbled_deepslate":498,"stick":3,"crafting_table":1,"stone_sword":1,"redstone":48,"raw_iron":2,"spruce_planks":2,"cobblestone":14,"spruce_log":4}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+-- slot114-1791226075252 slot 114 min=27.3 deaths=0 deposited=3 decisions=83 stuckResets={"1":1,"2":1,"3":4} armorEnd=0 recoveries=["craft:no_tool>table_spot"] skillCalls=88
+   +27.3m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7138,-35,-6118 moved=0.0 hp=20 food=18 pick=none table=1 night=false
+   +27.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7138,-35,-6118 moved=0.0 hp=20 food=18 pick=none table=1 night=false
+   +27.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7138,-35,-6118 moved=0.0 hp=20 food=18 pick=none table=1 night=false
+   +27.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7138,-35,-6118 moved=0.0 hp=20 food=18 pick=none table=1 night=false
+   +27.3m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":1,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7138,-35,-6118 moved=0.0 hp=20 food=18 pick=none table=1 night=false
+   +27.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7138,-35,-6118 moved=0.0 hp=20 food=18 pick=none table=1 night=false
+   +27.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7138,-35,-6118 moved=0.0 hp=20 food=18 pick=none table=1 night=false
+   +27.3m craft(["stone_pickaxe",1]) ok=false reason=no_tool ticks=0 pos=-7138,-35,-6118 moved=0.0 hp=20 food=18 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #61 of 88 (+25.0m, shelter); the next call that ended without one: dig_down([-58]) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1,"stone_pickaxe":1} calls without a pickaxe before end: 26
+   pickaxe-less from +25.0m; current life started at +0.0m; run ended +27.3m; calls: {"dig_down":1,"craft":20,"recover":1,"explore":4}
+   final inv (materials): {"cobbled_deepslate":722,"redstone":10,"stone_sword":1,"oak_log":4,"crafting_table":1,"stick":9,"cobblestone":102}
+   last-12 histogram: craft:no_toolx9 explore:no_toolx3
+
+-- slot122-1791226075252 slot 122 min=68.0 deaths=0 deposited=1 decisions=108 stuckResets={"1":2,"2":1,"3":4} armorEnd=0 recoveries=["go_up:not_reached>pillar_out"] skillCalls=113
+   +62.9m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=7266,-57,-7117 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +63.8m go_up([67]) ok=false reason=not_reached ticks=1006 pos=7266,-57,-7117 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +64.6m go_up([67]) ok=false reason=not_reached ticks=1005 pos=7266,-57,-7117 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +65.4m go_up([67]) ok=false reason=not_reached ticks=1005 pos=7266,-57,-7117 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +65.4m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":0,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=7266,-57,-7117 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +66.3m go_up([67]) ok=false reason=not_reached ticks=1006 pos=7266,-57,-7117 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +67.1m go_up([67]) ok=false reason=not_reached ticks=1011 pos=7266,-57,-7117 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   +68.0m go_up([67]) ok=false reason=not_reached ticks=1011 pos=7266,-57,-7117 moved=0.0 hp=20 food=20 pick=none table=0 night=false
+   last snapshot WITH a pickaxe: call #76 of 113 (+34.9m, explore); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) timeout; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 36
+   pickaxe-less from +34.9m; current life started at +0.0m; run ended +68.0m; calls: {"explore":5,"shelter":6,"go_up":24,"recover":1}
+   final inv (materials): {"cobbled_deepslate":1034,"raw_iron":6,"stick":3,"coal":4,"diamond":5,"redstone":56,"cobblestone":71,"stone_sword":1}
+   last-12 histogram: go_up:not_reachedx9 explore:no_toolx3
+
+######## gift=fortune2: stuck runs=7 of 24; minutes median=48.4; deaths>0: 2
+
+-- slot101-1791209032282 slot 101 min=48.4 deaths=0 deposited=0 decisions=103 stuckResets={"1":5,"2":3,"3":6} armorEnd=0 recoveries=["go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=118
+   +46.1m go_up([100]) ok=false reason=not_reached ticks=207 pos=3082,24,7151 moved=0.0 hp=20 food=17 pick=none table=0 night=false
+   +46.4m go_up([100]) ok=false reason=not_reached ticks=196 pos=3082,24,7151 moved=0.0 hp=20 food=17 pick=none table=0 night=false
+   +46.7m go_up([100]) ok=false reason=not_reached ticks=204 pos=3082,24,7151 moved=0.0 hp=20 food=17 pick=none table=0 night=false
+   +46.9m go_up([100]) ok=false reason=not_reached ticks=204 pos=3082,24,7151 moved=0.0 hp=20 food=17 pick=none table=0 night=false
+   +47.6m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":1,"maxBlocks":64,"maxAbove":3}]) ok=false reason=timeout ticks=1195 pos=3082,24,7152 moved=0.9 hp=20 food=17 pick=none table=0 night=false
+   +47.9m go_up([100]) ok=false reason=not_reached ticks=225 pos=3082,24,7152 moved=0.9 hp=20 food=17 pick=none table=0 night=false
+   +48.1m go_up([100]) ok=false reason=not_reached ticks=180 pos=3082,24,7152 moved=0.0 hp=20 food=17 pick=none table=0 night=false
+   +48.4m go_up([100]) ok=false reason=not_reached ticks=252 pos=3082,24,7152 moved=0.0 hp=20 food=17 pick=none table=0 night=false
+   last snapshot WITH a pickaxe: call #49 of 118 (+21.1m, go_up); the next call that ended without one: go_up([100]) not_reached; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 68
+   pickaxe-less from +21.1m; current life started at +0.0m; run ended +48.4m; calls: {"go_up":55,"recover":3,"explore":6,"shelter":4}
+   final inv (materials): {"cobbled_deepslate":441,"stone_sword":1,"pale_oak_log":2,"pale_oak_planks":2,"diamond":7,"coal":9,"stick":5}
+   last-12 histogram: go_up:not_reachedx10 explore:timeoutx2
+
+-- slot102-1791209032282 slot 102 min=48.4 deaths=0 deposited=0 decisions=109 stuckResets={"1":4,"2":4,"3":9} armorEnd=0 recoveries=["go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out","go_up:not_reached>pillar_out"] skillCalls=131
+   +46.2m go_up([64]) ok=false reason=not_reached ticks=202 pos=2066,34,7172 moved=1.8 hp=20 food=20 pick=none table=1 night=false
+   +46.4m go_up([64]) ok=false reason=not_reached ticks=196 pos=2066,34,7172 moved=0.1 hp=20 food=20 pick=none table=1 night=false
+   +46.7m go_up([64]) ok=false reason=not_reached ticks=204 pos=2066,34,7172 moved=0.1 hp=20 food=20 pick=none table=1 night=false
+   +47.0m go_up([64]) ok=false reason=not_reached ticks=196 pos=2066,34,7172 moved=0.1 hp=20 food=20 pick=none table=1 night=false
+   +47.6m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":0,"maxBlocks":64,"maxAbove":3}]) ok=false reason=timeout ticks=1198 pos=2065,34,7171 moved=1.5 hp=20 food=20 pick=none table=1 night=false
+   +47.8m go_up([64]) ok=false reason=not_reached ticks=182 pos=2067,34,7173 moved=2.3 hp=20 food=20 pick=none table=1 night=false
+   +48.1m go_up([64]) ok=false reason=not_reached ticks=180 pos=2067,34,7173 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +48.4m go_up([64]) ok=false reason=not_reached ticks=200 pos=2067,34,7173 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #51 of 131 (+18.0m, shelter); the next call that ended without one: go_up([64]) not_reached; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 79
+   pickaxe-less from +18.0m; current life started at +0.0m; run ended +48.4m; calls: {"go_up":63,"recover":4,"explore":9,"shelter":3}
+   final inv (materials): {"cobbled_deepslate":505,"raw_iron":2,"oak_log":1,"stone_sword":1,"oak_planks":2,"stick":3,"crafting_table":1,"diamond":6}
+   last-12 histogram: go_up:not_reachedx10 explore:timeoutx2
+
+-- slot109-1791209032282 slot 109 min=45.2 deaths=0 deposited=0 decisions=64 stuckResets={"1":1,"2":1,"3":4} armorEnd=0 recoveries=["go_up:not_reached>pillar_out"] skillCalls=69
+   +40.1m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7188,-56,4070 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +41.0m go_up([63]) ok=false reason=not_reached ticks=1008 pos=-7188,-56,4070 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +41.8m go_up([63]) ok=false reason=not_reached ticks=1010 pos=-7188,-56,4070 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +42.6m go_up([63]) ok=false reason=not_reached ticks=1008 pos=-7188,-56,4070 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +42.7m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7188,-56,4070 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +43.5m go_up([63]) ok=false reason=not_reached ticks=1008 pos=-7188,-56,4070 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +44.3m go_up([63]) ok=false reason=not_reached ticks=1008 pos=-7188,-56,4070 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   +45.2m go_up([63]) ok=false reason=not_reached ticks=1009 pos=-7188,-56,4070 moved=0.0 hp=20 food=20 pick=none table=1 night=false
+   last snapshot WITH a pickaxe: call #35 of 69 (+13.9m, mine); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 33
+   pickaxe-less from +13.9m; current life started at +0.0m; run ended +45.2m; calls: {"explore":5,"shelter":6,"go_up":21,"recover":1}
+   final inv (materials): {"cobbled_deepslate":548,"redstone":6,"crafting_table":1,"diamond":3,"stone_sword":1,"stick":1,"cobblestone":31}
+   last-12 histogram: go_up:not_reachedx7 shelter:okx2 explore:no_toolx2 shelter:no_toolx1
+
+-- slot115-1791219986208 slot 115 min=84.8 deaths=4 deposited=1 decisions=341 stuckResets={"1":2,"2":2,"3":5} armorEnd=0 recoveries=["go_up:not_reached>pillar_out"] skillCalls=348
+   +83.7m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":2,"maxBlocks":16}]) ok=false reason=not_found ticks=76 pos=-7155,-58,-7189 moved=16.1 hp=6 food=15 pick=none table=0 night=false
+   +83.9m go_up([68]) ok=false reason=not_reached ticks=240 pos=-7139,-58,-7190 moved=16.0 hp=6 food=15 pick=none table=0 night=false
+   +84.1m go_up([68]) ok=false reason=not_reached ticks=256 pos=-7138,-58,-7190 moved=0.1 hp=6 food=15 pick=none table=0 night=false
+   +84.3m go_up([68]) ok=false reason=not_reached ticks=256 pos=-7138,-58,-7190 moved=0.0 hp=6 food=15 pick=none table=0 night=false
+   +84.3m explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"branch","dir":3,"maxBlocks":16}]) ok=false reason=no_tool ticks=0 pos=-7138,-58,-7190 moved=0.0 hp=6 food=15 pick=none table=0 night=false
+   +84.5m go_up([68]) ok=false reason=not_reached ticks=250 pos=-7138,-58,-7190 moved=0.0 hp=6 food=15 pick=none table=0 night=false
+   +84.6m go_up([68]) ok=false reason=not_reached ticks=205 pos=-7138,-58,-7190 moved=0.0 hp=6 food=15 pick=none table=0 night=false
+   +84.8m go_up([68]) ok=false reason=not_reached ticks=205 pos=-7138,-58,-7190 moved=0.0 hp=6 food=15 pick=none table=0 night=false
+   last snapshot WITH a pickaxe: call #320 of 348 (+79.5m, mine); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 27
+   pickaxe-less from +79.5m; current life started at +50.0m; run ended +84.8m; calls: {"explore":5,"go_up":21,"recover":1}
+   final inv (materials): {"cobbled_deepslate":531,"pointed_dripstone":2,"dripstone_block":54,"raw_iron":1,"stick":3,"diamond":1,"cobblestone":57,"stone_sword":1,"oak_planks":2}
+   last-12 histogram: go_up:not_reachedx9 explore:no_toolx2 explore:not_foundx1
+
+-- slot118-1791219986208 slot 118 min=56.8 deaths=0 deposited=1 decisions=179 stuckResets={"1":2,"2":1,"3":4} armorEnd=0 recoveries=undefined skillCalls=187
+   +55.8m return_home([{"x":2,"y":63,"z":-7168}]) ok=false reason=no_path [Took to long to decide path to goal!] ticks=104 pos=195,63,-7176 moved=0.8 hp=17 food=15 pick=none table=0 night=true
+   +55.9m return_home([{"x":2,"y":63,"z":-7168}]) ok=false reason=no_path [Took to long to decide path to goal!] ticks=102 pos=195,63,-7176 moved=0.0 hp=17 food=15 pick=none table=0 night=true
+   +55.9m return_home([{"x":2,"y":63,"z":-7168}]) ok=false reason=no_path [Took to long to decide path to goal!] ticks=102 pos=195,63,-7176 moved=0.0 hp=17 food=15 pick=none table=0 night=true
+   +55.9m go_up([63]) ok=true reason=null ticks=0 pos=195,63,-7176 moved=0.0 hp=17 food=15 pick=none table=0 night=true
+   +56.5m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":1,"maxBlocks":64,"maxAbove":3}]) ok=false reason=timeout ticks=720 pos=196,63,-7175 moved=1.7 hp=17 food=15 pick=none table=0 night=true
+   +56.6m return_home([{"x":2,"y":63,"z":-7168}]) ok=false reason=no_path [Took to long to decide path to goal!] ticks=102 pos=195,63,-7175 moved=1.9 hp=17 food=15 pick=none table=0 night=true
+   +56.7m return_home([{"x":2,"y":63,"z":-7168}]) ok=false reason=no_path [Took to long to decide path to goal!] ticks=103 pos=194,63,-7175 moved=0.1 hp=17 food=15 pick=none table=0 night=true
+   +56.8m return_home([{"x":2,"y":63,"z":-7168}]) ok=false reason=no_path [Took to long to decide path to goal!] ticks=102 pos=194,63,-7175 moved=0.1 hp=17 food=15 pick=none table=0 night=true
+   last snapshot WITH a pickaxe: call #152 of 187 (+50.1m, explore); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) no_tool; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 34
+   pickaxe-less from +50.1m; current life started at +0.0m; run ended +56.8m; calls: {"explore":5,"go_up":5,"return_home":24}
+   final inv (materials): {"cobbled_deepslate":842,"stone_sword":1,"raw_iron":2,"redstone":12,"diamond":9,"stick":3,"cobblestone":182,"oak_planks":2}
+   last-12 histogram: return_home:no_pathx8 go_up:okx2 explore:timeoutx2
+
+-- slot119-1791219986208 slot 119 min=45.7 deaths=4 deposited=0 decisions=255 stuckResets={"1":2,"2":2,"3":5} armorEnd=0 recoveries=undefined skillCalls=265
+   +45.7m deposit([{"x":1026,"y":70,"z":-7168}]) ok=false reason=no_chest ticks=0 pos=1028,70,-7169 moved=0.0 hp=20 food=16 pick=iron table=1 night=false
+   +45.7m deposit([{"x":1026,"y":70,"z":-7168}]) ok=false reason=no_chest ticks=0 pos=1028,70,-7169 moved=0.0 hp=20 food=16 pick=iron table=1 night=false
+   +45.7m deposit([{"x":1026,"y":70,"z":-7168}]) ok=false reason=no_chest ticks=0 pos=1028,70,-7169 moved=0.0 hp=20 food=16 pick=iron table=1 night=false
+   +45.7m go_up([70]) ok=true reason=null ticks=0 pos=1028,70,-7169 moved=0.0 hp=20 food=16 pick=iron table=1 night=false
+   +45.7m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":2,"maxBlocks":64,"maxAbove":3}]) ok=true reason=null ticks=0 pos=1028,70,-7169 moved=0.0 hp=20 food=16 pick=iron table=1 night=false
+   +45.7m deposit([{"x":1026,"y":70,"z":-7168}]) ok=false reason=no_chest ticks=0 pos=1028,70,-7169 moved=0.0 hp=20 food=16 pick=iron table=1 night=false
+   +45.7m deposit([{"x":1026,"y":70,"z":-7168}]) ok=false reason=no_chest ticks=0 pos=1028,70,-7169 moved=0.0 hp=20 food=16 pick=iron table=1 night=false
+   +45.7m deposit([{"x":1026,"y":70,"z":-7168}]) ok=false reason=no_chest ticks=0 pos=1028,70,-7169 moved=0.0 hp=20 food=16 pick=iron table=1 night=false
+   last snapshot WITH a pickaxe: call #264 of 265 (+45.7m, deposit); the next call that ended without one: none; pickaxes in last pick snapshot: {"stone_pickaxe":1,"iron_pickaxe":1} calls without a pickaxe before end: 0
+   final inv (materials): {"crafting_table":1,"cobbled_deepslate":129,"redstone":18,"diamond":1,"stone_pickaxe":1,"stick":5,"cobblestone":29,"iron_pickaxe":1,"stone_sword":1}
+   last-12 histogram: deposit:no_chestx8 go_up:okx2 explore:okx2
+
+-- slot120-1791219986208 slot 120 min=63.9 deaths=0 deposited=0 decisions=84 stuckResets={"1":3,"2":1,"3":4} armorEnd=0 recoveries=undefined skillCalls=92
+   +59.8m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":1,"maxBlocks":64,"maxAbove":3}]) ok=false reason=timeout ticks=726 pos=4972,64,-7105 moved=0.0 hp=9 food=14 pick=none table=0 night=true
+   +60.4m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":2,"maxBlocks":96,"maxAbove":3}]) ok=false reason=timeout ticks=727 pos=4972,64,-7105 moved=0.0 hp=9 food=14 pick=none table=0 night=false
+   +61.0m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":3,"maxBlocks":128,"maxAbove":3}]) ok=false reason=timeout ticks=726 pos=4972,64,-7105 moved=0.0 hp=9 food=14 pick=none table=0 night=false
+   +61.5m go_up([69]) ok=false reason=not_reached ticks=600 pos=4972,64,-7105 moved=0.0 hp=9 food=14 pick=none table=0 night=false
+   +62.1m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":1,"maxBlocks":64,"maxAbove":3}]) ok=false reason=timeout ticks=722 pos=4972,64,-7105 moved=0.0 hp=9 food=14 pick=none table=0 night=false
+   +62.7m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":1,"maxBlocks":64,"maxAbove":3}]) ok=false reason=timeout ticks=726 pos=4972,64,-7105 moved=0.0 hp=9 food=14 pick=none table=0 night=false
+   +63.3m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":2,"maxBlocks":96,"maxAbove":3}]) ok=false reason=timeout ticks=727 pos=4972,64,-7105 moved=0.0 hp=9 food=14 pick=none table=0 night=false
+   +63.9m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":3,"maxBlocks":128,"maxAbove":3}]) ok=false reason=timeout ticks=726 pos=4972,64,-7105 moved=0.0 hp=9 food=14 pick=none table=0 night=false
+   last snapshot WITH a pickaxe: call #1 of 92 (+2.8m, explore); the next call that ended without one: explore([{"target":["diamond_ore","deepslate_diamond_ore"],"mode":"b) not_found; pickaxes in last pick snapshot: {"iron_pickaxe":1} calls without a pickaxe before end: 90
+   pickaxe-less from +2.8m; current life started at +0.0m; run ended +63.9m; calls: {"explore":60,"go_up":6,"dig_down":2,"fight":2,"shelter":18,"hunt":1,"eat":1}
+   final inv (materials): {"sandstone":11,"redstone":19,"cobbled_deepslate":88}
+   last-12 histogram: explore:timeoutx7 shelter:okx3 shelter:no_toolx1 go_up:not_reachedx1
+
+######## gift=diamondpick: stuck runs=1 of 24; minutes median=85.4; deaths>0: 0
+
+-- slot108-1791214507019 slot 108 min=85.4 deaths=0 deposited=2 decisions=275 stuckResets={"1":4,"2":2,"3":6} armorEnd=0 recoveries=undefined skillCalls=287
+   +85.4m deposit([{"x":-7166,"y":94,"z":6144}]) ok=false reason=no_chest ticks=0 pos=-7166,94,6141 moved=0.0 hp=9 food=20 pick=diamond table=1 night=false
+   +85.4m deposit([{"x":-7166,"y":94,"z":6144}]) ok=false reason=no_chest ticks=0 pos=-7166,94,6141 moved=0.0 hp=9 food=20 pick=diamond table=1 night=false
+   +85.4m deposit([{"x":-7166,"y":94,"z":6144}]) ok=false reason=no_chest ticks=0 pos=-7166,94,6141 moved=0.0 hp=9 food=20 pick=diamond table=1 night=false
+   +85.4m go_up([94]) ok=true reason=null ticks=0 pos=-7166,94,6141 moved=0.0 hp=9 food=20 pick=diamond table=1 night=false
+   +85.4m explore([{"target":["oak_log","spruce_log","birch_log","jungle_log","acacia_log","dark_oak_log","mangrove_log","cherry_log","pale_oak_log"],"mode":"surface","dir":3,"maxBlocks":64,"maxAbove":3}]) ok=false reason=burning ticks=4 pos=-7166,94,6141 moved=0.0 hp=8 food=20 pick=diamond table=1 night=false
+   +85.4m deposit([{"x":-7166,"y":94,"z":6144}]) ok=false reason=no_chest ticks=0 pos=-7166,94,6141 moved=0.0 hp=8 food=20 pick=diamond table=1 night=false
+   +85.4m deposit([{"x":-7166,"y":94,"z":6144}]) ok=false reason=no_chest ticks=0 pos=-7166,94,6141 moved=0.0 hp=8 food=20 pick=diamond table=1 night=false
+   +85.4m deposit([{"x":-7166,"y":94,"z":6144}]) ok=false reason=no_chest ticks=0 pos=-7166,94,6141 moved=0.0 hp=8 food=20 pick=diamond table=1 night=false
+   last snapshot WITH a pickaxe: call #286 of 287 (+85.4m, deposit); the next call that ended without one: none; pickaxes in last pick snapshot: {"diamond_pickaxe":1} calls without a pickaxe before end: 0
+   final inv (materials): {"redstone":23,"crafting_table":1,"diamond":5,"cobblestone":38,"cobbled_deepslate":871,"stone_sword":1,"diamond_pickaxe":1,"iron_ingot":2,"stick":3}
+   last-12 histogram: deposit:no_chestx8 go_up:okx2 explore:burningx2
+
+== dominant (skill:reason) in last 12 calls, count of stuck runs per arm
+{
+ "gift=base": {
+  "craft:no_tool": 3,
+  "go_up:not_reached": 4
+ },
+ "gift=armor": {
+  "craft:no_tool": 5,
+  "go_up:not_reached": 6
+ },
+ "gift=spare": {
+  "craft:no_tool": 3,
+  "go_up:not_reached": 3
+ },
+ "gift=fortune2": {
+  "go_up:not_reached": 4,
+  "return_home:no_path": 1,
+  "deposit:no_chest": 1,
+  "explore:timeout": 1
+ },
+ "gift=diamondpick": {
+  "deposit:no_chest": 1
+ }
+}
