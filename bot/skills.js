@@ -892,7 +892,7 @@ async function mine(bot, name, maxAbove = null) {
   }
   await attempt('reach_failed', () => reach(bot, block))
   await attempt('dig_timeout', () => breakBlock(bot, block))
-  if (bot.skillTele) bot.skillTele.ore = block.name
+  if (bot.skillTele && block.name.endsWith('_ore')) bot.skillTele.ore = block.name
   await attempt('pickup_failed', () => pickUpDrop(bot, block.position))
 }
 
@@ -1662,7 +1662,7 @@ function endTelemetry(bot, name, tele) {
   if ('hostileDist' in tele) Object.assign(out, { hostileDist: tele.hostileDist, startHealth: tele.start.health, startFood: tele.start.food })
   if (tele.sealFails.length) out.sealFails = tele.sealFails
   if (name === 'mine') {
-    out.mine = { heldStart: tele.held, picks: tele.picks, ore: tele.ore ?? null, oresBroken: tele.ore ? 1 : 0, pick: T.itemInfo(bot.heldItem, bot.registry), diamondsGained: countItem(bot, 'diamond') - (tele.start.inv.diamond ?? 0) }
+    out.mine = { heldStart: tele.held, picks: tele.picks, ore: tele.ore ?? null, oresBroken: tele.ore ? 1 : 0, pick: T.isPickaxe(bot.heldItem) ? T.itemInfo(bot.heldItem, bot.registry) : null, diamondsGained: countItem(bot, 'diamond') - (tele.start.inv.diamond ?? 0) }
   }
   const lost = T.lostPicks(tele.picks, T.pickList(bot.inventory.items(), bot.registry), tele.lastSeen, name)
   if (lost.length) out.pickLost = lost
