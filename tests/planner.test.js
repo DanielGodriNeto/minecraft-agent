@@ -815,3 +815,57 @@ test('pickFirst: off by default (unless PICKFIRST=1); on, a pickaxe-less bot wit
   const armed = nextAction(state({ ...bare, inv: { ...bare.inv, iron_pickaxe: 1 }, params: { ...DEFAULT_PARAMS, pickFirst: true } }))
   assert.strictEqual(armed.skill, 'go_up') // with a pickaxe the home trip still goes first
 })
+
+// ---- earlySeal ----
+const EARLY = { ...DEFAULT_PARAMS, earlySeal: true }
+const cover = { hostileNear: true, hostileDist: 8, hostileCount: 1, canShelter: true, y: -58, surfaceY: 70, now: 1e6 }
+const early = (over = {}, params = EARLY) => nextAction(state({ ...cover, ...over, params }))
+
+test('earlySeal: off by default, normalized, and with it off the action choice is unchanged on a table of states', () => {
+  if (process.env.EARLYSEAL !== '1') assert.strictEqual(DEFAULT_PARAMS.earlySeal, false)
+  assert.strictEqual(normalizeParams({ earlySeal: 1 }).earlySeal, true)
+  const OFF = { ...DEFAULT_PARAMS, earlySeal: false }
+  const without = { ...DEFAULT_PARAMS }
+  delete without.earlySeal
+  for (const health of [20, 12, 6]) for (const hostileDist of [1.5, 3.5, 8]) for (const hostileCount of [1, 3]) for (const hostileRanged of [false, true]) {
+    const over = { hostileClose: hostileDist <= 4, hostileDist, hostileCount, hostileRanged, health }
+    assert.deepStrictEqual(early(over, OFF), early(over, without), JSON.stringify(over))
+    assert.notStrictEqual(early(over, OFF)?.key, 'early_seal')
+  }
+})
+
+test('earlySeal on: seals for each trigger (health, crowd, ranged) and tags the reason', () => {
+  assert.deepStrictEqual(early({ health: 12 }), { skill: 'shelter', args: [0, 'early', 'health'], key: 'early_seal' })
+  assert.deepStrictEqual(early({ hostileCount: 2 }), { skill: 'shelter', args: [0, 'early', 'crowd'], key: 'early_seal' })
+  assert.deepStrictEqual(early({ hostileRanged: true }), { skill: 'shelter', args: [0, 'early', 'ranged'], key: 'early_seal' })
+  assert.strictEqual(early({ health: 12, hostileClose: true, hostileDist: 3.5 }).key, 'early_seal') // preempts the fight branch
+  assert.deepStrictEqual(early({ health: 12, y: 80, surfaceY: 80, memory: { leg: 0, baseDir: 2, surfaceDir: 3, surfaceLeg: 0 } }).args, [3, 'early', 'health'])
+})
+
+test('earlySeal on: a lone weak mob at high health is fought, not sealed from', () => {
+  assert.strictEqual(early({ health: 20, hostileClose: true, hostileDist: 3.5 })?.skill, 'fight')
+  assert.notStrictEqual(early({ health: 20 })?.key, 'early_seal')
+  assert.notStrictEqual(early({ health: 14 })?.key, 'early_seal')
+})
+
+test('earlySeal on: never starts with a hostile within 3 blocks, without blocks, in a wet or lava cell, or while enclosed', () => {
+  const near = { hostileClose: true, hostileDist: 2.9, hostileCount: 3, hostileRanged: true, health: 10 }
+  assert.strictEqual(early(near)?.skill, 'fight')
+  assert.strictEqual(early({ ...near, health: 6 }).key, undefined) // existing behaviour: takeCover
+  assert.strictEqual(early({ ...near, hostileDist: 3 })?.key, 'early_seal')
+  assert.notStrictEqual(early({ health: 10, canShelter: false })?.key, 'early_seal')
+  assert.notStrictEqual(early({ health: 10, cellUnsafe: true })?.key, 'early_seal')
+  assert.notStrictEqual(early({ health: 10, enclosed: true })?.key, 'early_seal')
+  assert.notStrictEqual(early({ health: 10, hostileDist: undefined })?.key, 'early_seal')
+})
+
+test('earlySeal on: at most 6 early seals in 10 minutes', () => {
+  const stamps = (n, ago) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, earlySeals: Array(n).fill(1e6 - ago) })
+  assert.strictEqual(early({ health: 10, memory: stamps(5, 1000) }).key, 'early_seal')
+  assert.notStrictEqual(early({ health: 10, memory: stamps(6, 1000) })?.key, 'early_seal')
+  assert.strictEqual(early({ health: 10, memory: stamps(6, 600001) }).key, 'early_seal')
+})
+
+test('earlySeal on: ignores the noShelter pause that follows ordinary shelters', () => {
+  assert.strictEqual(early({ health: 10, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, noShelter: 3 } }).key, 'early_seal')
+})

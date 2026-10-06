@@ -574,3 +574,14 @@ test('post-bank restock: with no pickaxe after a no_tool dig the planner restock
   const wood = nextAction(plannerState(run, 100, { inv: {}, visible: { log: true }, distHome: 0 }))
   assert.strictEqual(wood.skill, 'mine')
 })
+
+test('remember: early seals neither count toward the shelter pause nor reset it, and are timestamped (trimmed to the 10 minute window)', () => {
+  const memory = { shelters: 1, optionalFails: {}, earlySeals: [Date.now() - 700000] }
+  const run = { memory }
+  remember(run, { skill: 'shelter', args: [0, 'early', 'health'], key: 'early_seal' }, { ok: true })
+  assert.strictEqual(memory.shelters, 1)
+  assert.strictEqual(memory.noShelter ?? 0, 0)
+  assert.strictEqual(memory.earlySeals.length, 1)
+  remember(run, { skill: 'shelter', args: [0] }, { ok: true })
+  assert.strictEqual(memory.noShelter, 5) // the second ordinary shelter still triggers the pause
+})

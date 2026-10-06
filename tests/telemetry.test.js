@@ -220,3 +220,21 @@ test('safe: returns the value, or the fallback when fn throws', () => {
   assert.strictEqual(T.safe(() => { throw undefined }, 'x'), 'x')
   assert.strictEqual(T.safe(() => { throw new Error('e') }), null)
 })
+
+test('runSkill: a shelter with until=early logs early:true and the reason in telemetry only when TELEMETRY is on', async () => {
+  const fs = require('node:fs')
+  const os = require('node:os')
+  const path = require('node:path')
+  const { runSkill } = require('../bot/skills.js')
+  const logPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'early-')), 'skills.jsonl')
+  const bot = (on) => ({
+    username: 'b', skillLogPath: logPath, health: 20, food: 20, time: { timeOfDay: 6000 }, heldItem: null, registry: { foodsByName: {} },
+    objectiveRun: { params: { telemetry: on } }, entity: { position: { x: 0, y: 10, z: 0 } },
+    inventory: { items: () => [], on() {}, off() {} }, pathfinder: { setGoal() {} }, clearControlStates() {}, on() {}, off() {}, nearestEntity: () => null,
+  })
+  await runSkill(bot(true), 'shelter', 0, 'early', 'crowd') // no blocks: falls back to flee, which has nothing to flee
+  await runSkill(bot(false), 'shelter', 0, 'early', 'crowd')
+  const [on, off] = fs.readFileSync(logPath, 'utf8').trim().split(String.fromCharCode(10)).map(l => JSON.parse(l))
+  assert.deepStrictEqual([on.telemetry.early, on.telemetry.earlyReason], [true, 'crowd'])
+  assert.strictEqual(off.telemetry, undefined)
+})

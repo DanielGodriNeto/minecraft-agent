@@ -1310,3 +1310,74 @@ test('shoreHop: the heading is kept unless water lies ahead; then the dry, green
   assert.strictEqual(shoreHop(0, ahead({ 0: ['water'], 1: ['water'], 3: ['water'], 2: [] })), 0) // all wet: keep the heading, never turn back
   assert.strictEqual(shoreHop(3, ahead({ 3: ['water'] })), 0) // wraps: sides of 3 are 0 and 2
 })
+
+test('shelter early: holds while a hostile is near or health is below the rest target, digs out at the cap, leaves at once when safe', async () => {
+  const { ms } = SHELTER_WAITS.early
+  assert.strictEqual(ms, 90000)
+  try {
+    SHELTER_WAITS.early.ms = 40
+    const zombie = { type: 'hostile', name: 'zombie', position: new Vec3(4.5, 10, 0.5) }
+    const held = shelterBot({ hostile: zombie })
+    const t0 = Date.now()
+    await run(held.bot, () => SKILLS.shelter(held.bot, 1, 'early', 'crowd'), false)
+    assert.ok(Date.now() - t0 >= 35, 'a hostile within range holds until the cap')
+    assert.strictEqual(held.dug.size, 2) // then the existing exit logic digs out
+    const hurt = shelterBot()
+    hurt.bot.registry = { foodsByName: {} }
+    hurt.bot.health = 12
+    hurt.bot.food = 10
+    const t1 = Date.now()
+    await run(hurt.bot, () => SKILLS.shelter(hurt.bot, 1, 'early', 'health'), false)
+    assert.ok(Date.now() - t1 >= 35, 'health below the rest target holds even with no hostile')
+    const healed = shelterBot()
+    healed.bot.registry = { foodsByName: {} }
+    const t2 = Date.now()
+    await run(healed.bot, () => SKILLS.shelter(healed.bot, 1, 'early', 'ranged'), false)
+    assert.ok(Date.now() - t2 < 30, 'safe and healthy leaves at once')
+    assert.strictEqual(healed.dug.size, 2)
+  } finally {
+    SHELTER_WAITS.early.ms = ms
+  }
+})
+
+test('shelter early: eats inside when hungry with no hostile adjacent to the cell, not with one adjacent', async () => {
+  const { ms } = SHELTER_WAITS.early
+  SHELTER_WAITS.early.ms = 30
+  const withFood = (hostile) => {
+    const b = shelterBot({ hostile })
+    b.bot.food = 10
+    b.bot.health = 20
+    b.bot.registry = { foodsByName: { bread: {} } }
+    const base = b.bot.inventory.items
+    b.bot.inventory.items = () => [...base(), { name: 'bread', count: 3, type: 99 }]
+    b.eaten = 0
+    b.bot.consume = async () => { b.eaten++; b.bot.food = 20 }
+    return b
+  }
+  try {
+    const free = withFood(null)
+    await run(free.bot, () => SKILLS.shelter(free.bot, 1, 'early', 'health'), false)
+    assert.strictEqual(free.eaten, 1)
+    const adjacent = withFood({ type: 'hostile', name: 'zombie', position: new Vec3(1.5, 10, 0.5) })
+    await run(adjacent.bot, () => SKILLS.shelter(adjacent.bot, 1, 'early', 'health'), false)
+    assert.strictEqual(adjacent.eaten, 0)
+  } finally {
+    SHELTER_WAITS.early.ms = ms
+  }
+})
+
+test('unsafeCell: water or lava in or next to the cell; rangedInSight: skeleton in line of sight only', () => {
+  const { unsafeCell, rangedInSight } = require('../bot/skills.js')
+  const feet = new Vec3(0, 10, 0)
+  const bot = (names) => ({ blockAt: (p) => ({ name: names[`${p.x},${p.y},${p.z}`] ?? 'air' }) })
+  assert.strictEqual(unsafeCell(bot({}), feet), false)
+  assert.strictEqual(unsafeCell(bot({ '1,10,0': 'water' }), feet), true)
+  assert.strictEqual(unsafeCell(bot({ '0,11,1': 'lava' }), feet), true)
+  assert.strictEqual(unsafeCell(bot({ '0,12,0': 'water' }), feet), true)
+  const mob = (name, x) => ({ type: 'hostile', name, position: new Vec3(x, 10, 0) })
+  const sight = (mobs, blocked) => ({ entity: { position: feet }, entities: Object.fromEntries(mobs.map((m, i) => [i, m])), world: { raycast: () => (blocked ? {} : null) } })
+  assert.strictEqual(rangedInSight(sight([mob('skeleton', 9)], false)), true)
+  assert.strictEqual(rangedInSight(sight([mob('skeleton', 9)], true)), false)
+  assert.strictEqual(rangedInSight(sight([mob('zombie', 9)], false)), false)
+  assert.strictEqual(rangedInSight(sight([mob('skeleton', 20)], false)), false)
+})

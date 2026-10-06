@@ -1,10 +1,10 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
-const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, clearUnreachable, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
+const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, rangedInSight, unsafeCell, placeableCount, isDrowning, sealed, isNight, clearUnreachable, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
 const T = require('./telemetry.js')
 const fs = require('node:fs')
 const path = require('node:path')
 const { stuckEscalation, newHistory, fruitlessDeaths, clearLoopMemory, gearSnapshot, longrunFields, GEAR_INTERVAL_MIN, HOP_BLOCKS, SURFACE_BLOCKS } = require('./longrun.js')
-const { nextAction, walkAfter, lingerHeldReturn, recoveryFor, GROUPS, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams } = require('./planner.js')
+const { nextAction, walkAfter, lingerHeldReturn, recoveryFor, GROUPS, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, normalizeParams, EARLY_SEAL_WINDOW_MS } = require('./planner.js')
 
 const STUCK_FAILURES = 3
 const STUCK_MOVE = 5
@@ -160,6 +160,12 @@ function ironLeft(bot) {
 const CROWD_RANGE = 8
 const countHostiles = (bot) => Object.values(bot.entities).filter(e => e.type === 'hostile' && e.position.distanceTo(bot.entity.position) <= CROWD_RANGE).length
 
+// params.earlySeal inputs: nearest hostile distance, a skeleton in sight, and water/lava at the cell (reads only).
+const earlySealFields = (bot, pos) => {
+  const mob = nearestHostile(bot)
+  return { hostileDist: mob ? mob.position.distanceTo(pos) : null, hostileRanged: rangedInSight(bot), cellUnsafe: unsafeCell(bot, pos.floored()) }
+}
+
 function observe(bot, run) {
   const pos = bot.entity.position
   const y = Math.floor(pos.y)
@@ -183,6 +189,7 @@ function observe(bot, run) {
     hostileCount: countHostiles(bot),
     hostileClose: nearestHostile(bot, FIGHT_RANGE) !== null,
     canShelter: placeableCount(bot) >= SHELTER_MIN,
+    ...(run.params.earlySeal && earlySealFields(bot, pos)),
     animalNear: nearestAnimal(bot) !== null,
     visible,
     tableNear: near('crafting_table', STATION_NEAR),
@@ -207,6 +214,11 @@ function observe(bot, run) {
 // Sheltering again and again next to a hostile that never leaves achieves nothing: after a few in a row the planner fights instead.
 function trackShelter(memory, action) {
   if (memory.noShelter > 0) memory.noShelter--
+  if (action.key === 'early_seal') {
+    const now = Date.now()
+    memory.earlySeals = [...(memory.earlySeals ?? []).filter(t => now - t < EARLY_SEAL_WINDOW_MS), now]
+    return
+  }
   if (action.skill !== 'shelter' || action.key) {
     memory.shelters = 0
     return

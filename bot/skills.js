@@ -80,6 +80,8 @@ const FIGHT_MS = 15000
 const FIGHT_MIN_HEALTH = 8
 const SAFE_HEALTH = 16
 const SAFE_FOOD = 18
+const EARLY_HOLD_MS = 90000 // earlySeal: the longest a cell holds against a hostile that stays near
+const EARLY_EAT_CLEAR = 3 // no hostile within this many blocks of the cell: safe to eat inside
 
 class Fail extends Error {
   constructor(reason, detail) { super(reason); this.reason = reason; this.detail = detail }
@@ -361,6 +363,13 @@ const isLava = (block) => block !== null && LAVA.has(block.name)
 const nearLava = (bot, pos) => isLava(bot.blockAt(pos)) || FACES.some(f => isLava(at(bot, pos, ...f)))
 const isWet = (block) => block !== null && WET.has(block.name)
 const nearWater = (bot, pos) => isWet(bot.blockAt(pos)) || FACES.some(f => isWet(at(bot, pos, ...f)))
+// params.earlySeal: water or lava in or next to the cell (feet, head, roof) makes a sealed cell a trap.
+const unsafeCell = (bot, feet) => [0, 1, 2].some(dy => nearLava(bot, feet.offset(0, dy, 0)) || nearWater(bot, feet.offset(0, dy, 0)))
+
+// A ranged hostile within HOSTILE_RANGE with a clear shot at the bot.
+const rangedInSight = (bot) => Object.values(bot.entities).some(e => e.type === 'hostile' && RANGED.has(e.name) &&
+  e.position.distanceTo(bot.entity.position) <= HOSTILE_RANGE && clearShot(bot, e))
+
 const isSolid = (block) => block !== null && block.boundingBox === 'block'
 
 function blockId(bot, name) {
@@ -1432,6 +1441,22 @@ const SHELTER_WAITS = {
   threat: { ms: SHELTER_WAIT_MS, done: safeToLeave },
   dawn: { ms: DAWN_WAIT_MS, done: (bot) => !isNight(bot), holds: true },
   rest: { ms: REST_MS, done: (bot) => bot.health >= REST_HEALTH },
+  early: { ms: EARLY_HOLD_MS, done: (bot) => safeToLeave(bot) && bot.health >= REST_HEALTH && !(bot.food < SAFE_FOOD && hasFood(bot)), eats: true }, // hungry with food: eat before leaving
+}
+
+const hasFood = (bot) => bot.inventory.items().some(i => bot.registry.foodsByName[i.name])
+
+// poll() that also eats inside the sealed cell when hungry and nothing stands next to it (ponytail: no leave-early when regen is impossible, the cap ends it).
+async function holdEating(bot, wait) {
+  const end = Date.now() + wait.ms
+  while (Date.now() < end) {
+    checkCancelled(bot)
+    if (wait.done(bot)) return true
+    const eatable = bot.food < SAFE_FOOD && hasFood(bot) && !nearestHostile(bot, EARLY_EAT_CLEAR)
+    if (eatable) await eat(bot).catch(() => bot.waitForTicks(20))
+    else await bot.waitForTicks(2)
+  }
+  return wait.done(bot)
 }
 
 const shelterCells = (feet) => [0, 1].flatMap(dy => DIRS.map(([dx, dz]) => feet.offset(dx, dy, dz)))
@@ -1467,7 +1492,7 @@ async function shelter(bot, dir = 0, until = 'threat') {
   await wall(bot, feet)
   if (!sealed(bot, feet)) throw new Fail('not_sealed')
   const wait = SHELTER_WAITS[until]
-  const done = await poll(bot, () => wait.done(bot), wait.ms)
+  const done = wait.eats ? await holdEating(bot, wait) : await poll(bot, () => wait.done(bot), wait.ms)
   if (wait.holds && !done) return
   await openSide(bot, feet, dir)
   if (nearestHostile(bot)) throw new Fail('hostile_waiting')
@@ -1646,9 +1671,10 @@ const nearestHostileDist = (bot) => {
 }
 
 // TELEMETRY (reads only): per-skill state kept on bot.skillTele while the skill runs.
-function beginTelemetry(bot, name, before) {
+function beginTelemetry(bot, name, before, args = []) {
   if (!T.telemetryOn(bot)) return null
   const tele = { picks: T.pickList(bot.inventory.items(), bot.registry), held: T.itemInfo(bot.heldItem, bot.registry), lastSeen: {}, sealFails: [], start: before }
+  if (name === 'shelter' && args[1] === 'early') tele.early = { early: true, earlyReason: args[2] ?? null }
   if (name === 'shelter' || name === 'flee') tele.hostileDist = nearestHostileDist(bot)
   tele.onSlot = (_slot, oldItem, newItem) => {
     for (const item of [oldItem, newItem]) if (T.isPickaxe(item) && item.durabilityUsed != null) tele.lastSeen[item.name] = item.durabilityUsed
@@ -1670,6 +1696,7 @@ function endTelemetry(bot, name, tele) {
 function collectTelemetry(bot, name, tele) {
   const out = {}
   if ('hostileDist' in tele) Object.assign(out, { hostileDist: tele.hostileDist, startHealth: tele.start.health, startFood: tele.start.food })
+  if (tele.early) Object.assign(out, tele.early)
   if (tele.sealFails.length) out.sealFails = tele.sealFails
   if (name === 'mine') {
     out.mine = { heldStart: tele.held, picks: tele.picks, ore: tele.ore ?? null, oresBroken: tele.ore ? 1 : 0, pick: T.isPickaxe(bot.heldItem) ? T.itemInfo(bot.heldItem, bot.registry) : null, diamondsGained: countItem(bot, 'diamond') - (tele.start.inv.diamond ?? 0) }
@@ -1681,7 +1708,7 @@ function collectTelemetry(bot, name, tele) {
 
 async function runSkill(bot, name, ...args) {
   const before = snapshot(bot)
-  const tele = T.safe(() => beginTelemetry(bot, name, before))
+  const tele = T.safe(() => beginTelemetry(bot, name, before, args))
   const { damage, ...result } = await run(bot, () => SKILLS[name](bot, ...args), !NON_INTERRUPTIBLE.has(name), ESCAPES.has(name), skillCapFor(bot, name, args))
   const telemetry = tele && T.safe(() => endTelemetry(bot, name, tele))
   if (result.reason === 'suffocating') await freeHead(bot)
@@ -1689,4 +1716,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow, veinDir, veinTarget, surfaceClass, shoreHop }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, unsafeCell, rangedInSight, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow, veinDir, veinTarget, surfaceClass, shoreHop }
