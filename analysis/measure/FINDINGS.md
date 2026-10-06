@@ -46,3 +46,9 @@ Window after first bank is short (timeout median 0.61 h, IQR 0.32-0.64); first d
 1. Death depth is the y where the dying SKILL started (flee/shelter/go_up are long and move the bot); cause "unknown-air" cannot be split into fall vs other; damage log keeps only 10 entries.
 2. Iron ingots are always 3 so rates are 3/duration; extrapolation to 6/15 is an assumption, not an observation. Phase timing uses gaps between skill-log timestamps (includes planner overhead).
 3. Steady-state rate is censored by the 60 min cap and by runs that died/stuck early; rows with other endings include runs ended by the harness for stuck/deaths, so their rate is not comparable per hour. Different eval eras/param arms are pooled (no stratification by commit/arm).
+
+## Gift ablation (LONGRUN, easy, 90 min, slots 100-123, 24 paired slots per arm)
+Reproduce: `node analysis/measure/gift_paired.js` (latest row per arm+slot, invalid rows dropped).
+No arm differs from base on diamonds banked or deaths (all Wilcoxon p >= 0.117; 95% CIs on the log ratio include 1).
+Mean banked per run: base 7.33, armor 4.63, spare 6.08, fortune2 7.46, diamondpick 7.21. Armor looks worse (5 wins / 15 losses, p=0.117) and has the most `stuck` ends (11); diamondpick has 1 stuck but the most deaths (2.08/run).
+Caveats: gifted gear is lost at the first death and is not re-given (~1.4 deaths/run); rows come from several launches (the 4-instance launch lagged at 5-10 tps and the memory guard dropped batches, which were re-run on 1-3 instances), so arm/slot conditions are not perfectly matched; 24 pairs detect only large effects.
