@@ -210,3 +210,18 @@ Cause per unsealed run: a_slow = no placement failed (too slow, or a cell never 
 - Flat SEAL-FAR (8 away) is a coin-flip race: 8/10 here (the unsealed ones are one ghost-zombie fixture artifact and one real loss at adj@68).
 - Fixture artifacts found (both fixed in the test): (1) a killed zombie stays in bot.entities for ~1-2 s and `nearestEntity` returned it as the adjacent zombie of the next trial; (2) the bot's chunk view lags behind /fill, so wall cells were seen stale (column `stale=` / "runs with stale view"; the test now waits until the bot's view matches `/execute if block`). The earlier "SEAL-FAR 0/10 and 6/10" swings and the first run of this task (9/10) came from these. The FIGHT rows changed after the ghost wait (0-1/10 "ok_but_zombie_alive"): the old 3-6/10 wins probably counted ghost zombies vanishing from bot.entities as kills, and the fight win check is not trustworthy; unverified.
 - Once sealed, the test kills the zombie to skip the 30 s wait, so hp lost and ticks are up to the seal.
+
+## Planner decision scenarios (earlySeal off vs on)
+
+Ends at zombie dead, death, 35 s after the seal closed (off digs out at 30 s, on holds up to 90 s) or 75 s. Start hp is set with hunger drained (no regen), no food carried; 16 cobblestone + iron pickaxe.
+
+| scenario | n | survived | sealed | mean ticks to seal | mean hp lost | dug out | zombie killed | first action |
+|---|---|---|---|---|---|---|---|---|
+| PLAN earlySeal=off (12hp, zombie 8 away) | 10 | 10/10 | 10/10 | 70.3 | 2.8 | 10 | 0 | shelterx10 |
+| PLAN earlySeal=on (12hp, zombie 8 away) | 10 | 10/10 | 10/10 | 83.9 | 0.0 | 0 | 0 | early_sealx10 |
+| PLAN earlySeal=off (12hp, zombie 5 away) | 10 | 10/10 | 10/10 | 71.6 | 2.2 | 10 | 0 | shelterx10 |
+| PLAN earlySeal=on (12hp, zombie 5 away) | 10 | 10/10 | 10/10 | 84.0 | 0.0 | 0 | 0 | early_sealx10 |
+| PLAN earlySeal=off (20hp, zombie 8 away) | 10 | 6/10 | 0/10 | - | 10.2 | 0 | 6 | fightx10 |
+| PLAN earlySeal=on (20hp, zombie 8 away) | 10 | 8/10 | 0/10 | - | 7.1 | 0 | 8 | fightx10 |
+| PLAN earlySeal=off (20hp, zombie 5 away) | 10 | 6/10 | 0/10 | - | 9.1 | 0 | 6 | fightx9 nonex1 |
+| PLAN earlySeal=on (20hp, zombie 5 away) | 10 | 5/10 | 0/10 | - | 10.8 | 0 | 5 | fightx10 |

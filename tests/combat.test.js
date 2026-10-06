@@ -6,8 +6,11 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { connect, CENTER } = require('./harness.js')
 const { runSkill, sealed } = require('../bot/skills.js')
+const { observe, afterSkill } = require('../bot/agent.js')
+const { nextAction, DEFAULT_PARAMS } = require('../bot/planner.js')
 
 const RUNS = 10
+const planRows = []
 const OUT = path.join(__dirname, '../analysis/measure/combat_baseline.md')
 const rows = []
 const diag = []
@@ -191,6 +194,97 @@ test('FIGHT-1 pickaxe only', () => scenario('FIGHT-1 iron_pickaxe', { items: [['
 test('FIGHT-1 stone sword', () => scenario('FIGHT-1 stone_sword', { items: [['iron_pickaxe', 1], ['stone_sword', 1]], zombieDx: 2, skill: 'fight' }, fightWin))
 test('FIGHT-1 iron sword', () => scenario('FIGHT-1 iron_sword', { items: [['iron_pickaxe', 1], ['iron_sword', 1]], zombieDx: 2, skill: 'fight' }, fightWin))
 
+// ---- planner decision scenarios: the real observe() -> nextAction() -> runSkill() loop, earlySeal off vs on ----
+// Tunnel with a zombie coming from the east. Ends when the zombie is dead, the bot died, 35 s after the seal closed (the off arm
+// digs out at 30 s, the on arm holds), or at 75 s. `dugOut` = the cell opened again while the zombie was alive.
+const PLAN_SKILLS = new Set(['shelter', 'fight', 'flee', 'eat'])
+const PLAN_CAP_MS = 75000
+const PLAN_HOLD_MS = 35000
+const PLAN_TUNNEL = { west: 15, east: 14 }
+
+function planRun(earlySeal) {
+  const home = { x: CENTER.x, y: CENTER.y, z: CENTER.z }
+  return {
+    params: { ...DEFAULT_PARAMS, earlySeal }, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0 }, home, surfaceY: CENTER.y + 10, // underground: at night on the surface the planner shelters at any health, which would hide the switch
+    objective: { item: 'diamond', count: 'max' }, deposited: 0, deadline: Date.now() + 10 * 60000, deaths: 0,
+  }
+}
+
+async function planTrial({ hp, dist, earlySeal }) {
+  await h.poll(() => h.bot.health > 0)
+  await buildTunnel(PLAN_TUNNEL)
+  for (const [item, n] of COBBLE) await h.give(item, n)
+  await setHealth(hp)
+  await h.poll(() => !Object.values(h.bot.entities).some(e => e.name === 'zombie'), 5000)
+  await syncView(h.bot, h.bot.entity.position.floored())
+  await h.cmd(`/summon zombie ${CENTER.x + 0.5 + dist} ${CENTER.y} ${CENTER.z + 0.5} {PersistenceRequired:1b}`)
+  await h.poll(() => h.bot.nearestEntity(e => e.name === 'zombie'))
+  const bot = h.bot
+  const zombie = bot.nearestEntity(e => e.name === 'zombie')
+  const feet = bot.entity.position.floored()
+  const run = planRun(earlySeal)
+  bot.objectiveRun = run
+  const t = { startHp: bot.health, minHp: bot.health, ticks: 0, sealedTick: null, sealedAt: null, died: false, dugOut: false, actions: [], skillLog: [] }
+  const onTick = () => {
+    t.ticks++
+    const closed = sealed(bot, feet)
+    if (t.sealedTick === null && closed) { t.sealedTick = t.ticks; t.sealedAt = Date.now() }
+    else if (t.sealedTick !== null && !closed && bot.entities[zombie.id]) t.dugOut = true
+  }
+  const onHealth = () => { t.minHp = Math.min(t.minHp, bot.health) }
+  const onDeath = () => { t.died = true }
+  bot.on('physicsTick', onTick); bot.on('health', onHealth); bot.on('death', onDeath)
+  const t0 = Date.now()
+  const zombieDead = () => !bot.entities[zombie.id]
+  const over = () => t.died || zombieDead() || Date.now() - t0 > PLAN_CAP_MS || (t.sealedAt !== null && Date.now() - t.sealedAt > PLAN_HOLD_MS)
+  try {
+    while (!over()) {
+      const action = nextAction(observe(bot, run))
+      if (!action || !PLAN_SKILLS.has(action.skill)) { await bot.waitForTicks(5); continue }
+      t.actions.push(action.key === 'early_seal' ? 'early_seal' : action.skill)
+      const deathsBefore = run.deaths
+      const exec = runSkill(bot, action.skill, ...action.args)
+      let watch
+      const ended = new Promise(resolve => { watch = setInterval(() => { if (over()) resolve(null) }, 200) })
+      const result = await Promise.race([exec, ended])
+      clearInterval(watch)
+      if (!result) { bot.skillCancel && (bot.skillCancel.cancelled = true, bot.skillCancel.reason ??= 'test_end'); await exec; break }
+      t.skillLog.push(`${action.skill}:${result.reason ?? 'ok'}`)
+      afterSkill(run, action, result, deathsBefore)
+    }
+  } finally {
+    bot.off('physicsTick', onTick); bot.off('health', onHealth); bot.off('death', onDeath)
+    bot.objectiveRun = null
+  }
+  return { ...t, zombieKilled: zombieDead() && !t.died, sealedAtEnd: sealed(bot, feet) }
+}
+
+async function planScenario(name, opts) {
+  const rs = []
+  for (let i = 0; i < RUNS; i++) rs.push(await planTrial(opts))
+  const sealedRuns = rs.filter(r => r.sealedTick !== null)
+  planRows.push({
+    name, n: rs.length,
+    survived: rs.filter(r => !r.died).length,
+    sealed: sealedRuns.length,
+    ticks: mean(sealedRuns.map(r => r.sealedTick)),
+    hpLost: mean(rs.map(r => r.startHp - r.minHp)),
+    dugOut: rs.filter(r => r.dugOut).length,
+    killed: rs.filter(r => r.zombieKilled).length,
+    first: tally(rs.map(r => r.actions[0] ?? 'none')),
+  })
+  assert.strictEqual(rs.length, RUNS)
+}
+
+for (const hp of [12, 20]) {
+  for (const dist of [8, 5]) {
+    for (const earlySeal of [false, true]) {
+      const name = `PLAN earlySeal=${earlySeal ? 'on' : 'off'} (${hp}hp, zombie ${dist} away)`
+      test(name, () => planScenario(name, { hp, dist, earlySeal }))
+    }
+  }
+}
+
 const runLine = (r, i) => {
   const p = r.trace.placements
   const errs = [...new Set(p.filter(x => !x.ok).map(x => `${x.cell}${x.occ ? `(${x.occ})` : ''}:${x.err}`))].slice(0, 3).join(' | ')
@@ -211,10 +305,27 @@ function diagnosis() {
 // Static findings appended to the generated md (kept in sync with the last run by hand).
 const FINDINGS = '\n## Findings (shelter)\n\n- Dominant failure: (b) entity in the target cell, in every unsealed run (a/c/d = 0 in all 15 scenarios; no equip errors, no missing items, no other placement errors; all failures are "Server refused to place cobblestone"). Those failures are the zombie standing in E0/E1 (or N1 once) when the bot tries the cell, so it is a race lost to arrival time: placing costs ~11 ticks per block on the flat (~92 ticks for 9 cells), ~21 ticks per block in a tunnel (4 blocks, seal ~66 ticks), and a zombie 8 away is adjacent at ~85 ticks.\n- Zombie 1 away in a tunnel or flat world: never sealed (0/10 everywhere). The zombie spawns inside the first cell to fill (E0), so the cell can never be placed; without killing it, shelter cannot work here. At 8 hp 7-10 of 10 died.\n- Zombie 3 or 8 away in a tunnel: 10/10 sealed at 20 hp and at 8 hp, closed and open-both alike, zero hp lost; the first placement lands at tick 1-4 and the zombie never reaches the bot.\n- Flat SEAL-FAR (8 away) is a coin-flip race: 8/10 here (the unsealed ones are one ghost-zombie fixture artifact and one real loss at adj@68).\n- Fixture artifacts found (both fixed in the test): (1) a killed zombie stays in bot.entities for ~1-2 s and `nearestEntity` returned it as the adjacent zombie of the next trial; (2) the bot\'s chunk view lags behind /fill, so wall cells were seen stale (column `stale=` / "runs with stale view"; the test now waits until the bot\'s view matches `/execute if block`). The earlier "SEAL-FAR 0/10 and 6/10" swings and the first run of this task (9/10) came from these. The FIGHT rows changed after the ghost wait (0-1/10 "ok_but_zombie_alive"): the old 3-6/10 wins probably counted ghost zombies vanishing from bot.entities as kills, and the fight win check is not trustworthy; unverified.\n- Once sealed, the test kills the zombie to skip the 30 s wait, so hp lost and ticks are up to the seal.\n'
 
+const PLAN_MARK = '\n## Planner decision scenarios'
+
+// Real planner loop (observe -> nextAction -> runSkill), tunnel, one zombie. Survived = not dead; sealed = the cell closed at some tick; dug out = the cell opened again with the zombie alive; first = first planner action.
+function planSection() {
+  const lines = planRows.map(r => `| ${r.name} | ${r.n} | ${r.survived}/${r.n} | ${r.sealed}/${r.n} | ${r.ticks} | ${r.hpLost} | ${r.dugOut} | ${r.killed} | ${r.first} |`)
+  return `${PLAN_MARK} (earlySeal off vs on)\n\nEnds at zombie dead, death, 35 s after the seal closed (off digs out at 30 s, on holds up to 90 s) or 75 s. Start hp is set with hunger drained (no regen), no food carried; 16 cobblestone + iron pickaxe.\n\n| scenario | n | survived | sealed | mean ticks to seal | mean hp lost | dug out | zombie killed | first action |\n|---|---|---|---|---|---|---|---|---|\n${lines.join('\n')}\n`
+}
+
 test('report', () => {
+  if (!rows.length && planRows.length) { // only some planner scenarios ran: keep the baseline and the other planner rows, replace the rows that ran
+    const [base, old = ''] = fs.readFileSync(OUT, 'utf8').split(PLAN_MARK)
+    const ran = new Set(planRows.map(r => r.name))
+    const kept = old.split('\n').filter(l => l.startsWith('| PLAN') && !ran.has(l.split(' | ')[0].slice(2)))
+    const fresh = planSection().split('\n')
+    const at = fresh.findIndex(l => l.startsWith('|---'))
+    fs.writeFileSync(OUT, base + [...fresh.slice(0, at + 1), ...kept, ...fresh.slice(at + 1)].join('\n'))
+    return
+  }
   const lines = ['| scenario | n | win/seal | start hp | mean hp lost | mean ticks | deaths | reasons | held |', '|---|---|---|---|---|---|---|---|---|',
     ...rows.map(r => `| ${r.name} | ${r.n} | ${r.wins}/${r.n} | ${r.startHp} | ${r.hpLost} | ${r.ticks} | ${r.deaths} | ${r.reasons} | ${r.held} |`)]
-  const md = `# Combat baseline (existing shelter/fight skills)\n\nSEAL ticks = ticks to first sealed state (else whole skill). Seal win = sealed at some tick and not dead. Fight win = ok, zombie dead or despawned, not dead.\n${notes.join('; ')}\n\n${lines.join('\n')}\n${diagnosis()}${FINDINGS}`
+  const md = `# Combat baseline (existing shelter/fight skills)\n\nSEAL ticks = ticks to first sealed state (else whole skill). Seal win = sealed at some tick and not dead. Fight win = ok, zombie dead or despawned, not dead.\n${notes.join('; ')}\n\n${lines.join('\n')}\n${diagnosis()}${FINDINGS}${planRows.length ? planSection() : ''}`
   console.log('\n' + md)
   fs.writeFileSync(OUT, md)
   assert.ok(rows.length > 0)
