@@ -1,6 +1,7 @@
 const fs = require('node:fs')
 const { AsyncLocalStorage } = require('node:async_hooks')
 const path = require('node:path')
+const T = require('./telemetry.js')
 const { goals, Movements } = require('mineflayer-pathfinder')
 
 const PATH_MS = 30000
@@ -317,7 +318,7 @@ async function run(bot, skill, interruptible, escaping = false, capMs = skillCap
     lastHealth = bot.health
     if (lost <= 0) return
     const entry = damageEntry(bot)
-    damage.push(entry)
+    damage.push(T.telemetryOn(bot) ? { ...entry, ...T.damageFields({ now: Date.now(), tick: ticks, lost, mob: attacker(bot), pos: bot.entity.position, health: bot.health, food: bot.food }) } : entry)
     if (damage.length > DAMAGE_LOG_MAX) damage.shift()
     if (entry.cause === 'drowning') return escaping ? undefined : abort('drowning')
     if (BURNING.has(entry.cause)) return escaping ? undefined : abort('burning')
@@ -325,6 +326,7 @@ async function run(bot, skill, interruptible, escaping = false, capMs = skillCap
     if (!interruptible || cancel.cancelled || !nearestHostile(bot)) return
     abort('attacked')
   }
+  if (bot.skillTele) bot.skillTele.tick = () => ticks
   bot.on('physicsTick', tick)
   bot.on('health', onHealth)
   bot.on('breath', onBreath)
@@ -890,6 +892,7 @@ async function mine(bot, name, maxAbove = null) {
   }
   await attempt('reach_failed', () => reach(bot, block))
   await attempt('dig_timeout', () => breakBlock(bot, block))
+  if (bot.skillTele) bot.skillTele.ore = block.name
   await attempt('pickup_failed', () => pickUpDrop(bot, block.position))
 }
 
@@ -1392,12 +1395,24 @@ const safeToLeave = (bot) => !nearestHostile(bot) && (bot.health >= SAFE_HEALTH 
 // A missed placement (entity in the way, lag) just leaves the cell open for the next pass.
 async function seal(bot, spot) {
   if (isSolid(bot.blockAt(spot))) return true
-  if (!canHold(bot, spot)) return false
+  if (!canHold(bot, spot)) return sealFailed(bot, spot, 'cannot_hold')
   try {
-    return await tryPlace(bot, spot, PLACEABLE.find(n => findItem(bot, n)))
-  } catch {
-    return false
+    const placed = await tryPlace(bot, spot, PLACEABLE.find(n => findItem(bot, n)))
+    if (!placed) sealFailed(bot, spot, 'not_placed')
+    return placed
+  } catch (e) {
+    return sealFailed(bot, spot, e.message)
   }
+}
+
+// TELEMETRY: records a failed seal placement (reads only). Always false, so callers return it.
+function sealFailed(bot, spot, error) {
+  const tele = bot.skillTele
+  if (!tele) return false
+  const feet = bot.entity.position.floored()
+  const sealedCount = [...shelterCells(feet), feet.offset(0, 2, 0)].filter(c => isSolid(bot.blockAt(c))).length
+  tele.sealFails = T.noteSealFail(tele.sealFails, { cell: spot, error, occupied: T.occupant(bot.entities, spot, bot.entity.id), sealedCount, ticks: tele.tick?.() ?? null })
+  return false
 }
 
 // The roof has nothing to lean on until one block stands next to it at head height + 1.
@@ -1622,11 +1637,45 @@ function logSkill(bot, entry) {
 }
 
 // Every skill resolves to { ok, reason, ticks } and never throws.
+const nearestHostileDist = (bot) => {
+  const mob = bot.nearestEntity(e => e.type === 'hostile')
+  return mob ? Math.round(mob.position.distanceTo(bot.entity.position) * 10) / 10 : null
+}
+
+// TELEMETRY (reads only): per-skill state kept on bot.skillTele while the skill runs.
+function beginTelemetry(bot, name, before) {
+  if (!T.telemetryOn(bot)) return null
+  const tele = { picks: T.pickList(bot.inventory.items(), bot.registry), held: T.itemInfo(bot.heldItem, bot.registry), lastSeen: {}, sealFails: [], start: before }
+  if (name === 'shelter' || name === 'flee') tele.hostileDist = nearestHostileDist(bot)
+  tele.onSlot = (_slot, oldItem, newItem) => {
+    for (const item of [oldItem, newItem]) if (T.isPickaxe(item) && item.durabilityUsed != null) tele.lastSeen[item.name] = item.durabilityUsed
+  }
+  bot.inventory.on('updateSlot', tele.onSlot)
+  bot.skillTele = tele
+  return tele
+}
+
+function endTelemetry(bot, name, tele) {
+  bot.inventory.off('updateSlot', tele.onSlot)
+  bot.skillTele = null
+  const out = {}
+  if ('hostileDist' in tele) Object.assign(out, { hostileDist: tele.hostileDist, startHealth: tele.start.health, startFood: tele.start.food })
+  if (tele.sealFails.length) out.sealFails = tele.sealFails
+  if (name === 'mine') {
+    out.mine = { heldStart: tele.held, picks: tele.picks, ore: tele.ore ?? null, oresBroken: tele.ore ? 1 : 0, pick: T.itemInfo(bot.heldItem, bot.registry), diamondsGained: countItem(bot, 'diamond') - (tele.start.inv.diamond ?? 0) }
+  }
+  const lost = T.lostPicks(tele.picks, T.pickList(bot.inventory.items(), bot.registry), tele.lastSeen, name)
+  if (lost.length) out.pickLost = lost
+  return out
+}
+
 async function runSkill(bot, name, ...args) {
   const before = snapshot(bot)
+  const tele = beginTelemetry(bot, name, before)
   const { damage, ...result } = await run(bot, () => SKILLS[name](bot, ...args), !NON_INTERRUPTIBLE.has(name), ESCAPES.has(name), skillCapFor(bot, name, args))
+  const telemetry = tele && endTelemetry(bot, name, tele)
   if (result.reason === 'suffocating') await freeHead(bot)
-  logSkill(bot, { t: Date.now(), bot: bot.username, run: bot.runTag ?? null, skill: name, args: args.map(logArg), result, ...(damage && { damage }), before, after: snapshot(bot) })
+  logSkill(bot, { t: Date.now(), bot: bot.username, run: bot.runTag ?? null, skill: name, args: args.map(logArg), result, ...(damage && { damage }), ...(telemetry && { telemetry }), before, after: snapshot(bot) })
   return result
 }
 

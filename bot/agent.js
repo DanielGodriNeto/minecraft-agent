@@ -1,5 +1,6 @@
 // Objective loop (Phase 2.2/2.3): observe -> planner -> skill, until the objective ends.
 const { runSkill, findVisible, stopPathing, resetTrail, cheapestPickaxe, nearestHostile, nearestAnimal, placeableCount, isDrowning, sealed, isNight, clearUnreachable, SHELTER_MIN, FIGHT_RANGE } = require('./skills.js')
+const T = require('./telemetry.js')
 const fs = require('node:fs')
 const path = require('node:path')
 const { stuckEscalation, newHistory, fruitlessDeaths, clearLoopMemory, gearSnapshot, longrunFields, GEAR_INTERVAL_MIN, HOP_BLOCKS, SURFACE_BLOCKS } = require('./longrun.js')
@@ -324,6 +325,7 @@ async function escalate(bot, run, action, result, exec = runSkill) {
   const snapshot = run.stuckSnapshot ?? (() => stuckSnapshot(bot))
   const step = stuckEscalation(run.longrun.history, snapshot())
   run.longrun.history = step.history
+  if (run.telemetry) run.telemetry.stuck.push(T.stuckRow({ now: Date.now(), level: step.level ?? null, end: Boolean(step.end), recent: run.telemetry.recent, picks: T.pickList(bot.inventory.items(), bot.registry) }))
   if (step.end) return false
   if (step.level !== 1 || !await tryRecovery(bot, run, action, result, exec, true)) {
     clearLoopMemory(run.memory, lifeMemory())
@@ -527,6 +529,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
     objective, home, surfaceY: home.y, params: normalizeParams(params), deadline, deposited: 0, recentlyAttacked: false, recentlyBurned: false, deaths: 0, decisions: 0, stopped: false, recoveries: [],
     memory: { ...lifeMemory(), baseDir: Math.floor(rand() * 4), surfaceDir: Math.floor(rand() * 4), relocations: 0 },
   }
+  if (run.params.telemetry) run.telemetry = { recent: [], stuck: [] }
   if (run.params.longrun) run.longrun = { history: newHistory(), gear: [], deposits: [], startedAt, nextGearMin: GEAR_INTERVAL_MIN, deathLog: [], diamondsFound: 0, hopeless: false }
   bot.objectiveRun = run
   bot.runDeadline = deadline
@@ -562,6 +565,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
       const yBefore = bot.entity?.position.y
       const result = { ...await exec(bot, action.skill, ...action.args), descended: bot.entity?.position.y < yBefore - 1, y: Math.floor(bot.entity?.position.y) }
       run.decisions++
+      if (run.telemetry) T.pushRecent(run.telemetry.recent, action, result)
       if (action.skill === 'deposit' && result.ok) run.deposited += diamondsBefore - (inventoryCounts(bot).diamond ?? 0)
       if (action.skill === 'deposit' && result.ok) startNewTrip(bot, run)
       if (action.skill === 'deposit' && result.reason === 'full') return finish(run, 'chest_full')
@@ -586,7 +590,7 @@ async function runObjective(bot, { objective, home, params = jitterParams(), dea
 }
 
 function finish(run, reason) {
-  return { reason, deposited: run.deposited, deaths: run.deaths, decisions: run.decisions, params: run.params, ...(run.recoveries.length && { recoveries: run.recoveries }), ...longrunFields(run) }
+  return { reason, deposited: run.deposited, deaths: run.deaths, decisions: run.decisions, params: run.params, ...(run.recoveries.length && { recoveries: run.recoveries }), ...longrunFields(run), ...T.telemetryFields(run) }
 }
 
 function stopObjective(bot) {
