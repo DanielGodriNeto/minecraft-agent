@@ -83,3 +83,34 @@ UNKNOWN field: the skill log start state (`before`) has pos, health, food, time,
 - hp [8,12): 18/265 = 6.8% vs 13/2204 = 0.6%. hp [12,16): 6/184 = 3.3% vs 47/1407 = 3.3%. hp [16,20]: 4/100 = 4.0% vs 30/7237 = 0.4%.
 - By mode: threat with proxy 569/1615 = 35.2%; threat without 145/6461 = 2.2%; dawn 10/6014 = 0.2%; rest 4/180.
 - Reading: the high death rate of low-health shelters is concentrated in calls that start right after a hit from an adjacent mob (about 50% regardless of whether hp is <4 or 4-8); without that, low-health shelter calls die 3-5%. Health alone is not the driver in this data. Caveat: the proxy misses hostiles that have not hit yet (ranged, approaching), so the "no proxy" stratum is contaminated and its rate is an upper bound for truly hostile-free starts; the proxy and low health are correlated (being hit lowers hp). A dying bot is also a selection effect on which calls reach shelter at all.
+
+## earlySeal A/B telemetry (arms earlySeal=0 vs 1, slots 100-123, commit 2a0aedd, TELEMETRY=1; no server run)
+Script (repo root): `node analysis/measure/earlyseal_telemetry.js` (full JSON). 24 runs per arm, all with skill logs. Run-hours: off 33.86, on 29.34 (eval `minutes`). Call duration = `result.ticks/20`. Deaths = skill-log entries with a `damage` hp<=0 (deduped on run+t+skill); they undercount eval `deaths` (50 vs 52 off, 36 vs 40 on: deaths outside skill calls are not logged).
+
+| metric | earlySeal=0 | earlySeal=1 |
+|---|---|---|
+| shelter calls/h, early / not early | 0 / 7.00 | 1.87 / 11.69 |
+| early by reason /h (ranged, health, crowd) | - | 1.02, 0.75, 0.10 |
+| flee calls/h (no early flag or reason exists for flee) | 1.57 | 1.29 |
+| early outcomes (n=55) | - | hostile_waiting 29, not_sealed 16, ok 7, died inside 1, no_tool 1, timeout 1 |
+| early shelter median min / total min / % run time | - | 1.51 / 54.7 / 3.1% |
+| deaths/h by skill at death: shelter | 17 (0.50) | 8 (0.27) |
+| flee | 19 (0.56) | 19 (0.65) |
+| fight / mine (+dig_down) / other | 1 / 3 / 10 | 1 / 3 / 5 |
+| hp0 deaths per hour, total | 1.48 | 1.23 |
+| shelter deaths, hostileDist <3 / 3-8 / >8 | 16/30 / 1/46 / 0/161 | 4/16 / 3/70 / 1/312 |
+| shelter deaths by startHealth [0,4) [4,8) [8,12) [12,16) [16,20] | 4/12 12/33 1/20 0/26 0/146 | 2/9 4/66 1/34 0/171 1/118 |
+| early shelters only, by dist 3-8 / >8 | - | 1/23, 0/32 (none <3 by design) |
+| seal-fail placements: entity in cell / other | 67 / 586 | 66 / 1327 |
+| shelter calls with any entity-in-cell fail | 27 of 98 calls with fails | 21 of 251 |
+| early holds that reached the 90 s cap (ticks>=1800) | - | 28 of 55 (hostile_waiting 25, ok 2, no_tool 1) |
+| early fails that start the 5 min lockout | - | 48 (all non-ok) |
+
+Seal-fail detail: non-entity errors are cannot_hold 339 / 844, not_placed 164 / 457, missing 74 / 21, timeout 9 / 5 (off / on). Occupants: zombie 44 / 29, item 20 / 13, skeleton 2 / 12, spider 1 / 3, others rare. Inside early shelters: 4 placements with an entity in the cell, 124 other.
+
+Caveats
+- Lockout and the 2-per-10-min cap suppress shelters that never run, so how often they blocked is NOT observable in the logs. Only counted: 48 early fails that started a lockout; 1 early start inside a 5 min lockout window of a previous failed early on the same run/bot (expected 0; possibly my start-time estimate `t - ticks/20` or a lock reset, not investigated); 18 early seals after which 2 were within 10 min (cap reached).
+- Hold cap = ticks>=1800 is an inference (a timed-out hold logs ~1900-1950 ticks); one of the 28 ended no_tool.
+- Arms differ in run time (off 33.9 h vs on 29.3 h; on has more stuck/early-ending runs, see section B), so per-hour rates are not matched; no CIs or paired tests. Deaths are a few dozen per cell.
+- Most early shelters fail (45 of 55 not ok): hostile_waiting 29 and not_sealed 16. Early shelters had 1 death in 55; the non-early shelter death count dropped 17 to 7 but that is not shown to be caused by earlySeal (different hostileDist mix: <3 calls 30 vs 16).
+- `hostileDist` is the nearest hostile entity at call start, never null in these shelter entries; flee has hostileDist but no reason field. A death in a shelter call is counted by hp<=0 inside it, including deaths after the bot dug out.
