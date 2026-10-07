@@ -1,0 +1,67 @@
+instances: 1 (free RAM 18.3 GB, requested 1)
+2026-10-05T13:44:30.134195700Z ServerMain WARN Advanced terminal features are not available in this environment
+{"slot":100,"bot":"Bot0","run":"slot100-1791207886747","reason":"timeout","deposited":0,"deaths":0,"decisions":7,"params":{"branchY":-59,"spacing":2,"tunnelLength":33,"returnAt":8,"woodStock":9,"fleeHealth":14,"shaft":true,"nightSurf":true,"foodGate":true,"fightGuard":true,"reserve":true,"crowdFlee":true,"nightAscent":true,"branchRelocate":true,"goUpLoop":true,"localSurface":false,"pickFirst":false,"stationAbove":false,"drownCap":false,"hazardGrace":true,"watchdog":0,"recovery":false,"traceLog":false,"earlyBank":false,"spawnEscape":false,"veinScan":false,"spawnWalk":false,"pickReady":false,"spareAlways":false,"longrun":true,"gift":"armor"},"longrun":true,"stuckResets":{"count":0,"levels":{"1":0,"2":0,"3":0}},"gear":[],"deposits":[],"minutes":4.243116666666666,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=armor","gift":"armor","armorPointsEnd":15,"tickRate":{"mean":20,"min":20,"p10":20},"loopDelayMs":{"mean":16,"p99":22.4}}
+{"slot":102,"bot":"Bot2","run":"slot102-1791207886747","reason":"timeout","deposited":0,"deaths":0,"decisions":3,"params":{"branchY":-57,"spacing":3,"tunnelLength":36,"returnAt":8,"woodStock":10,"fleeHealth":14,"shaft":true,"nightSurf":true,"foodGate":true,"fightGuard":true,"reserve":true,"crowdFlee":true,"nightAscent":true,"branchRelocate":true,"goUpLoop":true,"localSurface":false,"pickFirst":false,"stationAbove":false,"drownCap":false,"hazardGrace":true,"watchdog":0,"recovery":false,"traceLog":false,"earlyBank":false,"spawnEscape":false,"veinScan":false,"spawnWalk":false,"pickReady":false,"spareAlways":false,"longrun":true,"gift":"armor"},"longrun":true,"stuckResets":{"count":0,"levels":{"1":0,"2":0,"3":0}},"gear":[],"deposits":[],"minutes":4.500416666666666,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=armor","gift":"armor","armorPointsEnd":15,"tickRate":{"mean":20,"min":19.9,"p10":19.9},"loopDelayMs":{"mean":16.2,"p99":41.3}}
+{"slot":104,"bot":"Bot4","run":"slot104-1791207886747","reason":"timeout","deposited":0,"deaths":0,"decisions":9,"params":{"branchY":-56,"spacing":4,"tunnelLength":36,"returnAt":4,"woodStock":9,"fleeHealth":10,"shaft":true,"nightSurf":true,"foodGate":true,"fightGuard":true,"reserve":true,"crowdFlee":true,"nightAscent":true,"branchRelocate":true,"goUpLoop":true,"localSurface":false,"pickFirst":false,"stationAbove":false,"drownCap":false,"hazardGrace":true,"watchdog":0,"recovery":false,"traceLog":false,"earlyBank":false,"spawnEscape":false,"veinScan":false,"spawnWalk":false,"pickReady":false,"spareAlways":false,"longrun":true,"gift":"armor"},"longrun":true,"stuckResets":{"count":0,"levels":{"1":0,"2":0,"3":0}},"gear":[],"deposits":[],"minutes":4.50045,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=armor","gift":"armor","armorPointsEnd":15,"tickRate":{"mean":20,"min":19.9,"p10":19.9},"loopDelayMs":{"mean":17.4,"p99":97.8}}
+{"slot":101,"bot":"Bot1","run":"slot101-1791207886747","reason":"timeout","deposited":0,"deaths":0,"decisions":3,"params":{"branchY":-59,"spacing":4,"tunnelLength":33,"returnAt":6,"woodStock":9,"fleeHealth":14,"shaft":true,"nightSurf":true,"foodGate":true,"fightGuard":true,"reserve":true,"crowdFlee":true,"nightAscent":true,"branchRelocate":true,"goUpLoop":true,"localSurface":false,"pickFirst":false,"stationAbove":false,"drownCap":false,"hazardGrace":true,"watchdog":0,"recovery":false,"traceLog":false,"earlyBank":false,"spawnEscape":false,"veinScan":false,"spawnWalk":false,"pickReady":false,"spareAlways":false,"longrun":true,"gift":"armor"},"longrun":true,"stuckResets":{"count":0,"levels":{"1":0,"2":0,"3":0}},"gear":[],"deposits":[],"minutes":4.5018666666666665,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=armor","gift":"armor","armorPointsEnd":15,"tickRate":{"mean":20,"min":0,"p10":0},"loopDelayMs":{"mean":16.2,"p99":41.3}}
+{"slot":103,"bot":"Bot3","run":"slot103-1791207886747","reason":"timeout","deposited":0,"deaths":0,"decisions":6,"params":{"branchY":-58,"spacing":4,"tunnelLength":26,"returnAt":8,"woodStock":8,"fleeHealth":11,"shaft":true,"nightSurf":true,"foodGate":true,"fightGuard":true,"reserve":true,"crowdFlee":true,"nightAscent":true,"branchRelocate":true,"goUpLoop":true,"localSurface":false,"pickFirst":false,"stationAbove":false,"drownCap":false,"hazardGrace":true,"watchdog":0,"recovery":false,"traceLog":false,"earlyBank":false,"spawnEscape":false,"veinScan":false,"spawnWalk":false,"pickReady":false,"spareAlways":false,"longrun":true,"gift":"armor"},"longrun":true,"stuckResets":{"count":0,"levels":{"1":0,"2":0,"3":0}},"gear":[],"deposits":[],"minutes":4.5019,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=armor","gift":"armor","armorPointsEnd":15,"tickRate":{"mean":20,"min":19.9,"p10":19.9},"loopDelayMs":{"mean":17.4,"p99":97.8}}
+{"slot":105,"bot":"Bot5","run":"slot105-1791207886747","reason":"timeout","deposited":0,"deaths":0,"decisions":6,"params":{"branchY":-59,"spacing":2,"tunnelLength":40,"returnAt":7,"woodStock":9,"fleeHealth":12,"shaft":true,"nightSurf":true,"foodGate":true,"fightGuard":true,"reserve":true,"crowdFlee":true,"nightAscent":true,"branchRelocate":true,"goUpLoop":true,"localSurface":false,"pickFirst":false,"stationAbove":false,"drownCap":false,"hazardGrace":true,"watchdog":0,"recovery":false,"traceLog":false,"earlyBank":false,"spawnEscape":false,"veinScan":false,"spawnWalk":false,"pickReady":false,"spareAlways":false,"longrun":true,"gift":"armor"},"longrun":true,"stuckResets":{"count":0,"levels":{"1":0,"2":0,"3":0}},"gear":[],"deposits":[],"minutes":4.503316666666667,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=armor","gift":"armor","armorPointsEnd":15,"tickRate":{"mean":20,"min":0,"p10":0},"loopDelayMs":{"mean":17.4,"p99":98}}
+{"batch":[100,101,102,103,104,105],"arm":"gift=armor","tps":[12.7,20,20]}
+[i1] free RAM 18.7 GB, fits 4 instance(s), running 1
+2026-10-05T13:49:39.147254900Z ServerMain WARN Advanced terminal features are not available in this environment
+{"slot":104,"bot":"Bot4","run":"slot104-1791208196253","reason":"stuck","deposited":0,"deaths":0,"decisions":21,"params":{"branchY":-56,"spacing":4,"tunnelLength":36,"returnAt":4,"woodStock":9,"fleeHealth":10,"shaft":true,"nightSurf":true,"foodGate":true,"fightGuard":true,"reserve":true,"crowdFlee":true,"nightAscent":true,"branchRelocate":true,"goUpLoop":true,"localSurface":false,"pickFirst":false,"stationAbove":false,"drownCap":false,"hazardGrace":true,"watchdog":0,"recovery":false,"traceLog":false,"earlyBank":false,"spawnEscape":false,"veinScan":false,"spawnWalk":false,"pickReady":false,"spareAlways":false,"longrun":true,"gift":"fortune2"},"longrun":true,"stuckResets":{"count":6,"levels":{"1":1,"2":1,"3":4}},"gear":[],"deposits":[],"minutes":0.07588333333333333,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=fortune2","gift":"fortune2","armorPointsEnd":0,"tickRate":{"mean":0,"min":0,"p10":0},"loopDelayMs":{"mean":null,"p99":0}}
+<repo>\bot\node_modules\prismarine-block\index.js:86
+    for (const enchInfo of enchantments) {
+                           ^
+
+TypeError: enchantments is not iterable
+    at getEnchantmentLevel (<repo>\bot\node_modules\prismarine-block\index.js:86:28)
+    at Block.digTime (<repo>\bot\node_modules\prismarine-block\index.js:320:31)
+    at EventEmitter.digTime (<repo>\bot\node_modules\mineflayer\lib\plugins\digging.js:248:18)
+    at EventEmitter.dig (<repo>\bot\node_modules\mineflayer\lib\plugins\digging.js:27:26)
+    at breakBlock (<repo>\bot\skills.js:423:27)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async tunnelStep (<repo>\bot\skills.js:716:26)
+    at async stairStep (<repo>\bot\skills.js:965:5)
+    at async Object.digDown [as dig_down] (<repo>\bot\skills.js:1042:19)
+    at async run (<repo>\bot\skills.js:333:5)
+
+Node.js v24.21.0
+{"slot":102,"bot":"Bot2","run":"slot102-1791208196253","reason":"stuck","deposited":0,"deaths":0,"decisions":21,"params":{"branchY":-57,"spacing":3,"tunnelLength":36,"returnAt":8,"woodStock":10,"fleeHealth":14,"shaft":true,"nightSurf":true,"foodGate":true,"fightGuard":true,"reserve":true,"crowdFlee":true,"nightAscent":true,"branchRelocate":true,"goUpLoop":true,"localSurface":false,"pickFirst":false,"stationAbove":false,"drownCap":false,"hazardGrace":true,"watchdog":0,"recovery":false,"traceLog":false,"earlyBank":false,"spawnEscape":false,"veinScan":false,"spawnWalk":false,"pickReady":false,"spareAlways":false,"longrun":true,"gift":"fortune2"},"longrun":true,"stuckResets":{"count":6,"levels":{"1":1,"2":1,"3":4}},"gear":[],"deposits":[],"minutes":0.1088,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=fortune2","gift":"fortune2","armorPointsEnd":0,"tickRate":{"mean":1.2,"min":1.2,"p10":1.2},"loopDelayMs":{"mean":409.1,"p99":409.2}}
+<repo>\bot\node_modules\prismarine-block\index.js:86
+    for (const enchInfo of enchantments) {
+                           ^
+
+TypeError: enchantments is not iterable
+    at getEnchantmentLevel (<repo>\bot\node_modules\prismarine-block\index.js:86:28)
+    at Block.digTime (<repo>\bot\node_modules\prismarine-block\index.js:320:31)
+    at EventEmitter.digTime (<repo>\bot\node_modules\mineflayer\lib\plugins\digging.js:248:18)
+    at EventEmitter.dig (<repo>\bot\node_modules\mineflayer\lib\plugins\digging.js:27:26)
+    at breakBlock (<repo>\bot\skills.js:423:27)
+    at async attempt (<repo>\bot\skills.js:884:7)
+    at async Object.mine (<repo>\bot\skills.js:892:3)
+    at async run (<repo>\bot\skills.js:333:5)
+    at async runSkill (<repo>\bot\skills.js:1627:33)
+    at async Object.runObjective (<repo>\bot\agent.js:563:27)
+
+Node.js v24.21.0
+{"slot":100,"bot":"Bot0","reason":"harness","detail":"worker exited before reporting","deposited":0,"deaths":0,"decisions":0,"invalid":true,"minutes":0.1106,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=fortune2"}
+{"slot":101,"bot":"Bot1","reason":"harness","detail":"worker exited before reporting","deposited":0,"deaths":0,"decisions":0,"invalid":true,"minutes":0.1119,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=fortune2"}
+{"slot":103,"bot":"Bot3","reason":"harness","detail":"worker exited before reporting","deposited":0,"deaths":0,"decisions":0,"invalid":true,"minutes":0.11316666666666667,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=fortune2"}
+{"slot":105,"bot":"Bot5","reason":"harness","detail":"worker exited before reporting","deposited":0,"deaths":0,"decisions":0,"invalid":true,"minutes":0.11441666666666667,"difficulty":"easy","commit":"b0f3ee6","env":{"LONGRUN":"1"},"arm":"gift=fortune2"}
+{"batch":[100,101,102,103,104,105],"arm":"gift=fortune2","tps":[13.9,null,14.4]}
+{
+ "difficulty": "easy",
+ "runs": 8,
+ "successRate": 0,
+ "successCI": [
+  0,
+  0
+ ],
+ "diamondsPerHour": 0,
+ "deathsPerHour": 0,
+ "stuckRate": 0.25,
+ "invalidRuns": 4,
+ "diamondsBanked60to": null,
+ "diamondsBanked60toRuns": 0
+}
