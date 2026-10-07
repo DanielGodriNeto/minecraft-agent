@@ -264,9 +264,9 @@ LEGEND.forEach(c => {
     nodesDS.update(updates);
     updateSelectAllState();
   });
-  item.innerHTML = `<div class="legend-dot" style="background:${c.color}"></div>
-    <span class="legend-label">${c.label}</span>
-    <span class="legend-count">${c.count}</span>`;
+  item.innerHTML = `<div class="legend-dot" style="background:${esc(c.color)}"></div>
+    <span class="legend-label">${esc(c.label)}</span>
+    <span class="legend-count">${esc(c.count)}</span>`;
   item.prepend(cb);
   item.onclick = (e) => {
     if (e.target === cb) return;
