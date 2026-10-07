@@ -1,0 +1,17 @@
+---
+source_file: "bot/eval.js"
+type: "code"
+community: "Eval harness"
+location: "L20"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Eval_harness
+---
+
+# { botsPerProc, startMeter, runInProcs }
+
+## Connections
+- [[eval.js]] - `contains` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Eval_harness
