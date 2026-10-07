@@ -114,3 +114,26 @@ Caveats
 - Arms differ in run time (off 33.9 h vs on 29.3 h; on has more stuck/early-ending runs, see section B), so per-hour rates are not matched; no CIs or paired tests. Deaths are a few dozen per cell.
 - Most early shelters fail (45 of 55 not ok): hostile_waiting 29 and not_sealed 16. Early shelters had 1 death in 55; the non-early shelter death count dropped 17 to 7 but that is not shown to be caused by earlySeal (different hostileDist mix: <3 calls 30 vs 16).
 - `hostileDist` is the nearest hostile entity at call start, never null in these shelter entries; flee has hostileDist but no reason field. A death in a shelter call is counted by hp<=0 inside it, including deaths after the bot dug out.
+
+## earlySeal stuck diagnosis (7 stuck runs of the A/B, slots 100-123; no server run)
+Script (repo root): `node analysis/measure/earlyseal_stuck.js [--all]` (all 48 runs; `--all` adds detail for non-stuck runs). Pickaxes come from skill-log inventories, `pickLost` from `telemetry.pickLost`, stuck context from `telemetry.stuck` (row of the final detection has `end:true`).
+
+Per-run (minute = eval `minutes`; all 7 have 0 pickaxes in the final inventory and `pickaxes: []` in every stuck row):
+| arm | slot | min | last 5 skills before end | last pickaxe seen | final pickaxe lost | early shelters (in last 10 min) | class |
+|---|---|---|---|---|---|---|---|
+| on | 108 | 26.1 | craft:no_tool x4 + explore:no_tool, y=-23 | 24.4 | iron 249/250 + stone 130/131 worn_out, dig_down, 26.1 | 2 (one at 23.4 min, hostile_waiting 96 s, ~2.7 min before the end) | (b) |
+| on | 100 | 26.3 | same craft:no_tool loop, y=-58 | 23.3 | iron 249/250 + stone worn_out, dig_down | 0 | (b) |
+| on | 105 | 50.0 | go_up:not_reached x4 + explore:no_tool, y=-28 | 41.5 | iron 249/250 worn_out, go_up, 42.2 | 1 (none in last 10 min) | (b) |
+| on | 106 | 61.3 | go_up:not_reached, y=-44 | 44.5 | iron worn_out, go_up, 45.7 | 1 (none) | (b) |
+| on | 101 | 87.6 | go_up:not_reached, y=-39 | 76.5 | iron worn_out, go_up, 78.1 | 0 | (b) |
+| off | 121 | 64.0 | craft:no_tool, y=-29 | 62.1 | iron + stone worn_out, dig_down, 63.9 | 0 | (b) |
+| off | 117 | 67.7 | go_up:not_reached, y=-22 | 59.4 | iron + stone worn_out, go_up, 61.8 | 0 | (b) |
+
+Counts: (a) earlySeal-induced 0, (b) no pickaxe 7, (c) other 0. (a) cannot be fully excluded for slot108 (early shelter 2.7 min before the pickaxe ran out); the pickaxe wear itself (iron 249/250 on a dig_down at y=-23) is not shelter related.
+- Tracker view: every end row has the same inventory and position (pos moved <5 blocks, same `inv` in 4 of 7 tails; in the other 3 the tail includes an `explore:no_tool` that changes nothing in inv) and a repeated failure (`craft no_tool` x5 or `go_up not_reached` x5). After 6-10 escalations (`stuckResets` total 6-10, levels 1-3) with no progress >= 30 blocks (PROGRESS_MOVE) the run ends. No `recent` entry is a shelter in any of the 7.
+- pickLost: in all 48 runs the pickaxe wears out regularly (wooden 58/59, stone 130/131, iron 249/250 = `worn_out`; `unknown` = inventory delta with a lower last-seen durability, e.g. 63/131). The bot normally replaces them; the run is stuck when the final iron pickaxe wears out and `craft stone_pickaxe` returns `no_tool` (materials present, e.g. slot108 had cobblestone 232, stick 11, crafting_table 1) or `go_up` cannot reach the surface without a pickaxe. Why craft says no_tool is still UNKNOWN (Step 0 B hypothesis: no table placeable in the shaft).
+- Runs that lose their last pickaxe (had one earlier, none in the last log entry): earlySeal=0 9/24, earlySeal=1 9/24; of those, stuck 2 vs 5, the rest end as timeout/lost (7 vs 4; e.g. earlySeal=1 slot110 has no pickaxe from 39.4 min and survives to 90 min; the escalation freed it). Same loss rate in both arms.
+- Correlation with early-shelter count (earlySeal=1 only; off arm has 0): early<=2: 8/14 lost the pickaxe, early>2: 1/10. This points the opposite way and is confounded by run length (runs that end early have fewer shelters); no causal reading. Fisher exact for stuck 5/24 vs 2/24: p = 0.42, so the stuck difference is not distinguishable from noise.
+- Cost: the 4.6 alive hours are runs ended early by the pickaxe-loss stuck; no data show that earlySeal makes the pickaxe wear out sooner. UNKNOWN: pickaxe use per minute by arm (no durability-per-action log), position/depth at the moment of the wear-out beyond the logged y, and why the on-arm stuck runs end earlier (26, 26, 50, 61, 88 vs 64, 68 min).
+
+Verdict: main cause is (b), the known pickaxe wear-out with no recoverable replacement; the 90 s hold, repeated early shelters and the lockout are not in the final minutes of 6 of 7 runs and not in any stuck row. A fix in the hold (bot/skills.js:83 EARLY_HOLD_MS, SHELTER_WAITS.early at 1444, bot/agent.js lockout) would not remove these stucks. The place to look is the craft `no_tool` path (bot/skills.js:1253 craft, `nearbyOrPlaced` at 1264) and spare-pickaxe logic before the iron pickaxe wears out.
