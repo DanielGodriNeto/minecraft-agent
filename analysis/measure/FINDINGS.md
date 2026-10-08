@@ -177,3 +177,18 @@ Fisher exact (two-sided): stuck on vs off replication 9/24 vs 4/24 p=0.19; poole
 - Deaths before the stuck: on-arm stuck runs 0.56 deaths (replication) / 0.36 (pooled); off-arm 0.25 / 0.33. No fewer deaths in on-arm stuck runs. Time of the last pickaxe (class b): on 65.7 min (replication) / 55.8 (pooled), off 43.9 / 50.6; stuck minute on 69.5 / 62.6 vs off 55.9 / 59.2. The on-arm runs lose the last pickaxe later (not earlier), consistent with surviving longer before it runs out; n is 3-12 so this is suggestive only.
 - Stratified by deaths (pooled 100-223): 0-death runs stuck off 4/10 vs on 11/19 (Fisher p=0.45); 1+ death runs stuck off 2/38 vs on 3/29 (p=0.65). Nearly all stuck runs have 0-1 deaths (presumably because a respawn restarts the pickaxe chain; not checked in the logs), and the on arm has twice as many 0-death runs (19 vs 10; replication 9 vs 5), which accounts for most of the stuck difference. Within 0-death runs the stuck rate is not clearly different (58% vs 40%, p=0.45).
 - Answer: the data fit "earlySeal lets more runs live long enough to wear out the last pickaxe" better than "earlySeal causes stuck": 12/14 on-arm stuck runs are the known pickaxe wear-out (class b, not shelter loops), the rest are 1 (a) and 1 (c), and the extra stuck runs sit in the 0-death stratum. This is not proven: the stuck increase itself is not significant (p=0.077 pooled), stratified cells are tiny, and a direct earlySeal effect on pickaxe wear (no durability-per-action log) cannot be excluded. Practical consequence unchanged from the first diagnosis: the stuck cost is the craft `no_tool` / `go_up not_reached` recovery path, not the hold.
+
+## SPAREPICK A/B
+Script: `node analysis/measure/sparepick_paired.js` (SLOT_MIN/SLOT_MAX env, default 100-123). Arms are labelled `SPAREPICK=0/1` in `logs/eval.jsonl`. Complete: 24/24 pairs, no missing or invalid slot in either arm (launches: off 100-111 and 112-123, on 100-111 and 112-123).
+
+| metric | off | on | paired result |
+|---|---|---|---|
+| deaths (sum) | 66 | 40 | wins/losses 3/13, Wilcoxon p=0.049 |
+| banked (deposited, sum) | 139 | 174 | mean diff +1.46, wins/losses 12/9, Wilcoxon p=0.614 |
+| stuck | 3/24 | 5/24 | Fisher p=0.701 |
+| class b (no pickaxe at end) | 2 | 4 | Fisher p=0.666 |
+| class hold / other | 0 / 1 | 0 / 1 | |
+
+- Mean minute of the last pickLost event: off 77.3, on 79.3 (22/24 runs each with pickLost telemetry). The spare did not delay losing the last pickaxe.
+- On-arm stuck runs are still mostly pickaxe wear-out (4/5), so SPAREPICK did not remove class b; stuck is not reduced (5 vs 3, n.s.).
+- Reading: banked gain is not significant, stuck not reduced. The deaths p=0.049 is one uncorrected test among several and each arm was one launch pair (time-of-day/server confound), so treat it as a hint, not a result. One replication on 200-223 would settle it.
