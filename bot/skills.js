@@ -423,7 +423,8 @@ const isHome = (bot, pos) => {
   return home?.x === pos.x && home.y === pos.y && home.z === pos.z
 }
 
-async function breakBlock(bot, block) {
+// byHand: the drop is not needed (a wall dug only to make room), so a missing pickaxe is no reason to refuse.
+async function breakBlock(bot, block, byHand = false) {
   if (isHome(bot, block.position)) throw new Fail('home')
   for (let tries = 0; tries < 5 && !OPEN.has(bot.blockAt(block.position)?.name); tries++) {
     checkCancelled(bot)
@@ -431,7 +432,7 @@ async function breakBlock(bot, block) {
     if (!current.diggable) throw new Fail('undiggable')
     const tool = toolFor(bot, current)
     if (tool) await guard(bot.equip(tool, 'hand'))
-    if (needsPickaxe(current) && !current.canHarvest(bot.heldItem?.type)) throw new Fail('no_tool')
+    if (!byHand && needsPickaxe(current) && !current.canHarvest(bot.heldItem?.type)) throw new Fail('no_tool')
     await withTimeout(bot.dig(current, true), bot.digTime(current) * 2 + 1000, () => bot.stopDigging())
   }
   if (!OPEN.has(bot.blockAt(block.position)?.name)) throw new Fail('dig_failed')
@@ -503,7 +504,7 @@ async function digSpot(bot, feet) {
   const wall = DIRS.map(([dx, dz]) => bot.blockAt(feet.offset(dx, 0, dz)))
     .find(b => b?.diggable && !nearLava(bot, b.position))
   if (!wall) throw new Fail('no_space')
-  await breakBlock(bot, wall)
+  await breakBlock(bot, wall, true)
   return wall.position
 }
 

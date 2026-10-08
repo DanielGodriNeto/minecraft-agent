@@ -1381,3 +1381,16 @@ test('unsafeCell: water or lava in or next to the cell; rangedInSight: skeleton 
   assert.strictEqual(rangedInSight(sight([mob('zombie', 9)], false)), false)
   assert.strictEqual(rangedInSight(sight([mob('skeleton', 20)], false)), false)
 })
+
+test('breakBlock: a pickaxe block fails no_tool by default, but byHand digs it (a side wall for the crafting table)', async () => {
+  const mined = new Set()
+  const stone = { name: 'stone', position: new Vec3(1, 10, 0), diggable: true, harvestTools: { 1: true }, material: 'mineable/pickaxe', canHarvest: () => false }
+  const bot = {
+    inventory: { items: () => [] }, heldItem: null, pathfinder: { bestHarvestTool: () => null }, digTime: () => 1,
+    blockAt: (p) => (mined.has(p.toString()) ? { name: 'air', position: p } : stone),
+    dig: async () => { mined.add(stone.position.toString()) }, stopDigging() {},
+  }
+  await assert.rejects(() => breakBlock(bot, stone), { reason: 'no_tool' })
+  await breakBlock(bot, stone, true)
+  assert.ok(mined.has(stone.position.toString()))
+})
