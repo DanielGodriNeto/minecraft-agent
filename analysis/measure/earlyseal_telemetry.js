@@ -5,7 +5,9 @@ const { skillsByRun, median } = require('./gift_common')
 const ARMS = ['earlySeal=0', 'earlySeal=1']
 const HOLD_TICKS = 1800 // EARLY_HOLD_MS 90 s; a hold that times out logs ~1900 ticks (seen: 1903, 1949)
 const LOCK_MS = 300000 // EARLY_SEAL_LOCK_MS in bot/agent.js
-const rows = evalRows().filter(r => ARMS.includes(r.arm) && r.slot >= 100 && r.slot <= 123 && !r.invalid)
+// latest non-invalid row per (arm,slot), as earlyseal_paired.js (rows from several launches)
+const latest = (l) => [...new Map(l.map(r => [r.arm + "|" + r.slot, r])).values()]
+const rows = latest(evalRows().filter(r => ARMS.includes(r.arm) && r.slot >= +(process.env.SLOT_MIN || 100) && r.slot <= +(process.env.SLOT_MAX || 123) && !r.invalid))
 const skillsOf = async () => skillsByRun(new Set(rows.map(r => r.run)))
 const died = (e) => (e.damage ?? []).some(d => d.hp <= 0)
 const sec = (e) => (e.result?.ticks ?? 0) / 20

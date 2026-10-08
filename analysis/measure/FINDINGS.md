@@ -137,3 +137,43 @@ Counts: (a) earlySeal-induced 0, (b) no pickaxe 7, (c) other 0. (a) cannot be fu
 - Cost: the 4.6 alive hours are runs ended early by the pickaxe-loss stuck; no data show that earlySeal makes the pickaxe wear out sooner. UNKNOWN: pickaxe use per minute by arm (no durability-per-action log), position/depth at the moment of the wear-out beyond the logged y, and why the on-arm stuck runs end earlier (26, 26, 50, 61, 88 vs 64, 68 min).
 
 Verdict: main cause is (b), the known pickaxe wear-out with no recoverable replacement; the 90 s hold, repeated early shelters and the lockout are not in the final minutes of 6 of 7 runs and not in any stuck row. A fix in the hold (bot/skills.js:83 EARLY_HOLD_MS, SHELTER_WAITS.early at 1444, bot/agent.js lockout) would not remove these stucks. The place to look is the craft `no_tool` path (bot/skills.js:1253 craft, `nearbyOrPlaced` at 1264) and spare-pickaxe logic before the iron pickaxe wears out.
+
+## earlySeal replication (slots 200-223) and pooled 48 pairs (no server run)
+Scripts (repo root): `SLOT_MIN=200 SLOT_MAX=223 node analysis/measure/earlyseal_paired.js` and `.../earlyseal_telemetry.js` (pooled: `SLOT_MIN=100 SLOT_MAX=223`). Both now keep the latest non-invalid row per (arm,slot); `earlyseal_telemetry.js` previously used every row, which double counted slots re-run in other launches (76 rows for 48 slot-arm cells in 200-223). Default 100-123 output is unchanged (no duplicates there).
+Data caveats: the rows come from several launches (pairing is by slot, not by launch; arms of one slot can have run on different servers/days). 4 early-ending earlySeal=0 rows from a batch interrupted by the memory guard were superseded by the re-run (latest row wins). Paired Wilcoxon tests are on 24 / 48 pairs; the paired mean differences (-0.58 and -0.54 deaths/run) are about as large as their reported spread (+-0.68 / +-0.70 in the script output), so 24-48 pairs can only confirm effects clearly larger than that; a true effect of about 0.5 deaths/run is not distinguishable from noise here (p about 0.10-0.12).
+
+| metric | 200-223 off | 200-223 on | pooled 48 off | pooled 48 on |
+|---|---|---|---|---|
+| deaths (eval) | 45 | 31 | 97 | 71 |
+| paired deaths (on-off per run) | -0.58, Wilcoxon p=0.117 | | -0.54, p=0.100 | |
+| deposited | 204 | 171 | 347 | 336 |
+| paired deposited | -1.38/run, p=0.43 | | -0.23/run, p=0.72 | |
+| runs ending stuck | 4 | 9 | 6 | 14 |
+| run-hours / alive minutes diff | 32.4 / 31.8 h, p=0.57 | | 66.3 / 61.2 h, p=0.13 | |
+| zero-death runs | 5 | 9 | 10 | 19 |
+
+Reading: deaths are lower in both rounds (replication direction matches slots 100-123) but neither round nor the pool reaches p<0.05; deposited shows no gain and is slightly lower (not significant). Stuck endings go up (see the next section).
+
+Telemetry per arm (pooled 48 / replication):
+- Early shelters (on only): 110 pooled (1.80/h) / 55 (1.73/h); by reason pooled ranged 0.98/h, health 0.72/h, crowd 0.10/h (replication 0.94, 0.69, 0.09). Median 1.0 min (replication 0.26 min); total 94.9 min = 2.6% of run time (replication 40.2 min, 2.1%).
+- Outcomes pooled: not_sealed 39, hostile_waiting 45, ok 17, no_tool 4, died_inside 3, timeout 1, suffocating 1 (replication: not_sealed 23, hostile_waiting 16, ok 10, no_tool 3, died_inside 2, suffocating 1). Only 17/110 (15%) pooled are a sealed `ok`.
+- Holds at the 90 s cap (ticks>=1800): 51/110 pooled (23/55 replication; mostly hostile_waiting 40 and 15, ok 8 and 6). Early fails that started the 5 min lockout: 93 pooled (45 replication). 29 early seals were followed by the 2-per-10-min cap being reached. 1 early start inside a lockout window (expected 0, as before). Lockout blocks themselves are not observable in the logs.
+- Deaths by skill at death per run-hour, pooled off vs on: flee 0.63 vs 0.52, shelter 0.47 vs 0.34, mine 0.08 vs 0.08, other 0.23 vs 0.13 (+ fight 0.02 each). Replication: flee 0.71 vs 0.41, shelter 0.43 vs 0.41, other 0.15 vs 0.09. In the replication the shelter-death rate is NOT lower in the on arm, unlike slots 100-123; the pooled drop is carried by flee and by the first round.
+- Shelter death rate by hostileDist (all shelter calls), pooled off vs on: <3 29/64 (45%) vs 12/33 (36%); 3-8 1/91 (1%) vs 5/116 (4%); >8 1/351 (0.3%) vs 4/468 (0.9%). Early shelters alone, pooled: 3-8 2/47, >8 1/63, none <3 (by design). By startHealth, early shelters pooled: [0,4) 1/2, [4,8) 1/14, [8,12) 0/25, [12,16) 1/16, [16,20] 0/53; non-early on arm [4,8) 11/77 (14%) vs off 22/83 (27%). Cells are small (a handful of deaths each): descriptive only, no tests.
+- Early shelters are mostly cheap in time and mostly do not seal, yet deaths are not higher inside them (3 died_inside of 110).
+
+## earlySeal stuck diagnosis, replication
+Script: `SLOT_MIN=200 SLOT_MAX=223 node analysis/measure/earlyseal_stuck.js` (default 100-123; `100 223` pools). Added: latest-row-per-(arm,slot), a classification block, and a two-sided Fisher exact test computed in the script. Classes (b takes precedence): (b) no pickaxe at the end (end stuck-row `pickaxes` empty, had one earlier), (a) otherwise an early shelter in the last 10 min before the end, (c) other.
+
+| set | arm | stuck | (a) | (b) | (c) |
+|---|---|---|---|---|---|
+| 200-223 | off | 4/24 | 0 | 3 | 1 |
+| 200-223 | on | 9/24 | 1 | 7 | 1 |
+| pooled | off | 6/48 | 0 | 5 | 1 |
+| pooled | on | 14/48 | 1 | 12 | 1 |
+
+Fisher exact (two-sided): stuck on vs off replication 9/24 vs 4/24 p=0.19; pooled 14/48 vs 6/48 p=0.077; class (b) replication 7/24 vs 3/24 p=0.29, pooled 12/48 vs 5/48 p=0.107. None significant.
+- (a): only slot223 (on), no pickaxe problem in its end row (pickaxe held, early shelter within 10 min); not shown to be a loop (no shelter in its last 5 skills). (c): slot204 (on, `toss:error` loop with an iron pickaxe held) and slot203 (off, craft/no_tool, one death). 5 of 7 (b) on-arm stuck runs in the replication (6 of 12 pooled) had a short early shelter in the last 10 min, but those end `no_tool` (no pickaxe, so the shelter cannot dig), i.e. a symptom of the missing pickaxe, not a cause; last-5 skills are never shelter.
+- Deaths before the stuck: on-arm stuck runs 0.56 deaths (replication) / 0.36 (pooled); off-arm 0.25 / 0.33. No fewer deaths in on-arm stuck runs. Time of the last pickaxe (class b): on 65.7 min (replication) / 55.8 (pooled), off 43.9 / 50.6; stuck minute on 69.5 / 62.6 vs off 55.9 / 59.2. The on-arm runs lose the last pickaxe later (not earlier), consistent with surviving longer before it runs out; n is 3-12 so this is suggestive only.
+- Stratified by deaths (pooled 100-223): 0-death runs stuck off 4/10 vs on 11/19 (Fisher p=0.45); 1+ death runs stuck off 2/38 vs on 3/29 (p=0.65). Nearly all stuck runs have 0-1 deaths (presumably because a respawn restarts the pickaxe chain; not checked in the logs), and the on arm has twice as many 0-death runs (19 vs 10; replication 9 vs 5), which accounts for most of the stuck difference. Within 0-death runs the stuck rate is not clearly different (58% vs 40%, p=0.45).
+- Answer: the data fit "earlySeal lets more runs live long enough to wear out the last pickaxe" better than "earlySeal causes stuck": 12/14 on-arm stuck runs are the known pickaxe wear-out (class b, not shelter loops), the rest are 1 (a) and 1 (c), and the extra stuck runs sit in the 0-death stratum. This is not proven: the stuck increase itself is not significant (p=0.077 pooled), stratified cells are tiny, and a direct earlySeal effect on pickaxe wear (no durability-per-action log) cannot be excluded. Practical consequence unchanged from the first diagnosis: the stuck cost is the craft `no_tool` / `go_up not_reached` recovery path, not the hold.

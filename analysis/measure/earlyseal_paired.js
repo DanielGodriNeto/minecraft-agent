@@ -1,7 +1,7 @@
-// Paired analysis of the earlySeal A/B (arm earlySeal=0 vs earlySeal=1, slots 100-123). Run from the repo root.
+// Paired analysis of the earlySeal A/B (arm earlySeal=0 vs earlySeal=1, slots 100-123 by default; SLOT_MIN and SLOT_MAX override). Run from the repo root.
 const fs = require('fs')
 const rows = fs.readFileSync('logs/eval.jsonl', 'utf8').trim().split('\n').map(l => { try { return JSON.parse(l) } catch {} })
-  .filter(r => r && r.slot >= 100 && r.slot <= 123 && /^earlySeal=[01]$/.test(r.arm || '') && !r.invalid)
+  .filter(r => r && r.slot >= +(process.env.SLOT_MIN || 100) && r.slot <= +(process.env.SLOT_MAX || 123) && /^earlySeal=[01]$/.test(r.arm || '') && !r.invalid)
 const by = { 'earlySeal=0': {}, 'earlySeal=1': {} }
 for (const r of rows) by[r.arm][r.slot] = r // latest row per (arm,slot)
 const mean = a => a.reduce((s, x) => s + x, 0) / a.length
