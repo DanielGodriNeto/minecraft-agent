@@ -14,3 +14,4 @@ logs/
 .env*
 graphify-out/
 scripts/.rerun_earlyseal_done
+scripts/.sparepick_done
