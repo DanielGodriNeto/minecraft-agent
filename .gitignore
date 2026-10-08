@@ -13,3 +13,4 @@ logs/
 *.npz
 .env*
 graphify-out/
+scripts/.rerun_earlyseal_done
