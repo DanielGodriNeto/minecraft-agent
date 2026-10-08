@@ -878,3 +878,17 @@ test('earlySeal on: after a failed hold the lockout blocks every reason (incl. r
 test('earlySeal on: ignores the noShelter pause that follows ordinary shelters', () => {
   assert.strictEqual(early({ health: 10, memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, noShelter: 3 } }).key, 'early_seal')
 })
+
+test('sparePick: the only pickaxe is nearly worn out, so the spare is crafted before diamonds and past the 2-failure cap; OFF keeps the old order', () => {
+  const inv = { iron_pickaxe: 1, cobblestone: 5, crafting_table: 1, stick: 4 }
+  const craft = { skill: 'craft', args: ['stone_pickaxe', 1], optional: true }
+  const low = (params, over = {}) => nextAction(state({ inv, y: -20, pickLeft: 10, visible: { diamond: true }, params: { ...DEFAULT_PARAMS, ...params }, ...over }))
+  assert.strictEqual(low({ sparePick: false }).skill, 'mine')
+  assert.deepStrictEqual(low({ sparePick: true }), craft)
+  const failed = (n) => ({ memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: { stone_pickaxe: n } } })
+  assert.deepStrictEqual(low({ sparePick: true }, failed(2)), craft)
+  assert.deepStrictEqual(low({ sparePick: true }, failed(5)), craft)
+  assert.strictEqual(low({ sparePick: true }, failed(6)).skill, 'mine')
+  assert.strictEqual(low({ sparePick: true }, { pickLeft: 100 }).skill, 'mine')
+  assert.strictEqual(low({ sparePick: true }, { hostileNear: true }).skill !== 'craft', true)
+})

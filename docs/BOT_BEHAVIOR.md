@@ -483,3 +483,10 @@ Observation only (`bot/telemetry.js`): reads bot state, adds no waits or packets
 
 ## gift (ARMS gift=...)
 Ablation harness, absent = no change. `gift=base|armor|spare|fortune2|diamondpick` makes eval.js `give` the preset right after placement (base = 1 iron pickaxe; armor = base + iron set, worn by `equipGift` at run start; spare = 3 iron pickaxes; fortune2 = one Fortune II iron pickaxe; diamondpick = one diamond pickaxe). Mining already uses the cheapest pickaxe that can dig a block, so single-pickaxe arms use that pickaxe for everything. Armor is never tossed or crafted over (junk list is dirt/stone only). Rows carry `gift` and `armorPointsEnd`. Gear is not re-given after a death. The `enchantments={"minecraft:fortune":2}` give syntax is unit-tested as a string only and needs one live check.
+
+---
+
+## Addendum: last-pickaxe stuck endings (craft no_tool)
+
+- Fix (unconditional): `digSpot` (S, `skills.js`) now breaks the side wall by hand. With no pickaxe left, a table in the bag could not be placed in a 1-wide shaft (no free cell, wall dig refused `no_tool`), so `craft stone_pickaxe` returned `no_tool` with materials present. Hand-digging stone is slow but needs no drop.
+- Switch `SPAREPICK` (`sparePick`, OFF): with exactly one pickaxe and <= 40 uses left, the spare stone pickaxe/sticks (`spareStep`) is crafted before visible diamonds and a home trip, and its failure cap is 6 instead of 2. Details: `analysis/measure/sparepick.md`. Not yet measured.
