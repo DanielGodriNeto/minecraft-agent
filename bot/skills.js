@@ -1337,7 +1337,7 @@ function nearestAnimal(bot, range = ANIMAL_RANGE) {
 }
 
 // Follows a fleeing animal until it is within reach, then swings on the attack cooldown. Resolves whether it is chasing.
-async function strike(bot, animal, chasing) {
+async function strike(bot, animal, chasing, swingTicks = ATTACK_TICKS) {
   const near = bot.entity.position.distanceTo(animal.position) <= ATTACK_REACH
   if (near === chasing) bot.pathfinder.setGoal(near ? null : new goals.GoalFollow(animal, 2), true)
   if (!near) {
@@ -1346,13 +1346,37 @@ async function strike(bot, animal, chasing) {
   }
   await guard(bot.lookAt(animal.position.offset(0, animal.height * 0.7, 0)))
   bot.attack(animal)
-  await bot.waitForTicks(ATTACK_TICKS)
+  await bot.waitForTicks(swingTicks)
   return false
 }
 
 async function arm(bot) {
   const weapon = bestWeapon(bot.inventory.items())
   await guard(weapon ? bot.equip(weapon, 'hand') : bot.unequip('hand'))
+  return weapon?.name
+}
+
+// params.fightFix: ticks between swings = 20 / attack speed, so no swing lands on a half-charged weapon (the old fixed 12 suits a sword only).
+function attackTicks(name) {
+  if (/_sword$/.test(name)) return 13
+  if (/^(wooden|stone)_axe$/.test(name)) return 25
+  if (name === 'iron_axe') return 22
+  if (/_axe$/.test(name)) return 20
+  return /_pickaxe$/.test(name) ? 17 : 5 // bare hands: 5
+}
+
+// params.fightFix planner inputs (reads only): distance of the nearest creeper, whether the threat is melee-only, and whether the bot stands in a 1-wide corridor.
+function fightFields(bot, pos) {
+  const here = bot.entity.position
+  const creepers = Object.values(bot.entities).filter(e => e.type === 'hostile' && e.name === 'creeper').map(e => e.position.distanceTo(here))
+  const mob = nearestHostile(bot)
+  const feet = pos.floored()
+  const walled = ([dx, dz]) => [0, 1].every(dy => isSolid(bot.blockAt(feet.offset(dx, dy, dz))) && isSolid(bot.blockAt(feet.offset(-dx, dy, -dz))))
+  return {
+    creeperDist: creepers.length ? Math.min(...creepers) : null,
+    hostileMelee: mob !== null && !RANGED.has(mob.name) && mob.name !== 'creeper' && !rangedInSight(bot),
+    inTunnel: [[1, 0], [0, 1]].some(walled),
+  }
 }
 
 // Kills the nearest hostile that came within reach; ends when it is dead, out of range, or after ms.
@@ -1363,7 +1387,8 @@ async function fight(bot, ms = FIGHT_MS) {
   const guarded = bot.objectiveRun?.params?.fightGuard !== false
   const target = () => guarded ? nearestHostile(bot, FIGHT_RANGE)
     : bot.entities[first.id] && first.position.distanceTo(bot.entity.position) <= FIGHT_RANGE ? first : null
-  await arm(bot)
+  const weapon = await arm(bot)
+  const swing = bot.objectiveRun?.params?.fightFix ? attackTicks(weapon) : ATTACK_TICKS
   const end = Date.now() + ms
   let chasing = false
   let mob = first
@@ -1375,7 +1400,7 @@ async function fight(bot, ms = FIGHT_MS) {
       chasing = false
       stopPathing(bot)
     }
-    chasing = await strike(bot, mob, chasing)
+    chasing = await strike(bot, mob, chasing, swing)
   }
   stopPathing(bot)
   if (target()) throw new Fail('not_killed')
@@ -1717,4 +1742,4 @@ async function runSkill(bot, name, ...args) {
   return result
 }
 
-module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, unsafeCell, rangedInSight, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow, veinDir, veinTarget, surfaceClass, shoreHop }
+module.exports = { run, isDrowning, ownOxygen, skillCapMs, pickupStalled, Fail, checkCancelled, clearUnreachable, FIGHT_MIN_HEALTH, runSkill, SKILLS, findVisible, trackRecipeBook, stopPathing, cheapestPickaxe, stairRefusal, tunnelSafe, arrived, dropLoops, resetTrail, placeSpot, placeFace, pickupGoalY, onCanopy, mostCommon, resetStaleTrail, facing, damageCause, patchFaces, ledgeFloor, skillMovements, scaffoldMovements, pickUpDrop, retrieveStation, floored, placeableCount, safeToLeave, unsafeCell, rangedInSight, sealed, isNight, SHELTER_WAITS, SHELTER_MIN, FIGHT_RANGE, nearestHostile, bestWeapon, attackTicks, fightFields, nearestAnimal, breakBlock, MAX_TUNNEL_OUTS, skillCapFor, goto, stalled, watchdogWindow, veinDir, veinTarget, surfaceClass, shoreHop }

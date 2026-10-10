@@ -26,7 +26,7 @@ const STATION_NEAR = 6 // a table seen from a tunnel through 10 blocks of rock i
 //   per-run:  baseDir, surfaceDir, relocations   (directions keep rotating so a new life does not retry the failed one)
 //   per-trip: restock, nightDigs, optionalFails, fightFails  (also reset by a successful deposit)
 //   per-life: localSurfaceY, goUpFails, goUpY, homeTimeouts, homePause, homeAdopt, leg, surfaceLeg, shelters, noShelter, drownings, mineDrownings, digFails, lastDigReason, hazards, hazardUp, relocFailed,
-//             homeFails, hopsSinceDescent, burnUps, crowdFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs, failSigs, recovered, spawnEscapes, escapeStart, walk, pickUps, spareSince   (the respawn is at home: nothing of the old position applies)
+//             homeFails, hopsSinceDescent, burnUps, crowdFlees, creeperFlees, relocHazards, ascentDelayMs, branchMisses, branchRelocs, failSigs, recovered, spawnEscapes, escapeStart, walk, pickUps, spareSince   (the respawn is at home: nothing of the old position applies)
 //   hopsSinceDescent deliberately survives a deposit: it counts hops since the last real descent, and any descent zeroes it.
 const lifeMemory = () => ({
   leg: 0, surfaceLeg: 0, shelters: 0, noShelter: 0, drownings: 0, mineDrownings: 0, digFails: 0, lastDigReason: undefined, hazards: 0, hazardUp: false,
@@ -191,6 +191,7 @@ function observe(bot, run) {
     hostileClose: nearestHostile(bot, FIGHT_RANGE) !== null,
     canShelter: placeableCount(bot) >= SHELTER_MIN,
     ...(run.params.earlySeal && earlySealFields(bot, pos)),
+    ...(run.params.fightFix && fightFields(bot, pos)),
     animalNear: nearestAnimal(bot) !== null,
     visible,
     tableNear: near('crafting_table', STATION_NEAR),
@@ -377,6 +378,7 @@ function remember(run, action, result) {
   trackDigging(run.memory, action, result)
   if (action.skill === 'fight') run.memory.fightFails = result.ok ? 0 : (run.memory.fightFails ?? 0) + 1
   if (action.key === 'crowd_flee') run.memory.crowdFlees = (run.memory.crowdFlees ?? 0) + 1
+  if (action.key === 'creeper_flee') run.memory.creeperFlees = (run.memory.creeperFlees ?? 0) + 1
   if (action.key === 'burn_up') run.memory.burnUps = (run.memory.burnUps ?? 0) + 1
   if (action.key === 'night_dig') run.memory.nightDigs = (run.memory.nightDigs ?? 0) + 1
   if (action.skill === 'explore' && !LEG_BLOCKED.has(result.reason)) run.memory.hazards = 0

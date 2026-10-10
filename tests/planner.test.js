@@ -892,3 +892,23 @@ test('sparePick: the only pickaxe is nearly worn out, so the spare is crafted be
   assert.strictEqual(low({ sparePick: true }, { pickLeft: 100 }).skill, 'mine')
   assert.strictEqual(low({ sparePick: true }, { hostileNear: true }).skill !== 'craft', true)
 })
+
+test('fightFix: a creeper under 5 blocks is retreated from (capped), a lone melee mob in a tunnel is fought instead of sealing out; OFF keeps the old plan', () => {
+  const on = { ...DEFAULT_PARAMS, fightFix: true, earlySeal: true }
+  const creeper = { hostileNear: true, hostileClose: true, canShelter: true, creeperDist: 4 }
+  assert.strictEqual(nextAction(state({ ...creeper, params: DEFAULT_PARAMS })).skill, 'fight')
+  const flee = nextAction(state({ ...creeper, params: on }))
+  assert.deepStrictEqual([flee.skill, flee.key], ['flee', 'creeper_flee'])
+  assert.strictEqual(nextAction(state({ ...creeper, params: on, creeperDist: 6 })).skill, 'fight')
+  assert.strictEqual(nextAction(state({ ...creeper, params: on, memory: { ...state().memory, creeperFlees: 3 } })).skill, 'fight')
+
+  const tunnel = { hostileNear: true, canShelter: true, inTunnel: true, hostileMelee: true, hostileCount: 1, recentlyAttacked: true, hostileDist: 6, inv: { stone_pickaxe: 1 } }
+  assert.strictEqual(nextAction(state({ ...tunnel, params: DEFAULT_PARAMS })).skill, 'shelter')
+  assert.notStrictEqual(nextAction(state({ ...tunnel, params: on })).skill, 'shelter')
+  assert.notStrictEqual(nextAction(state({ ...tunnel, params: on, health: 12 })).skill, 'shelter')
+  assert.strictEqual(nextAction(state({ ...tunnel, params: on, hostileClose: true })).skill, 'fight')
+  assert.strictEqual(nextAction(state({ ...tunnel, params: on, inTunnel: false })).skill, 'shelter')
+  assert.strictEqual(nextAction(state({ ...tunnel, params: on, hostileMelee: false })).skill, 'shelter')
+  assert.strictEqual(nextAction(state({ ...tunnel, params: on, hostileCount: 2 })).skill, 'shelter')
+  assert.strictEqual(nextAction(state({ ...tunnel, params: on, health: 7 })).skill, 'shelter')
+})
