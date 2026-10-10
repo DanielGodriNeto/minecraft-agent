@@ -892,3 +892,26 @@ test('sparePick: the only pickaxe is nearly worn out, so the spare is crafted be
   assert.strictEqual(low({ sparePick: true }, { pickLeft: 100 }).skill, 'mine')
   assert.strictEqual(low({ sparePick: true }, { hostileNear: true }).skill !== 'craft', true)
 })
+
+test('noToolFix: with no pickaxe the replacement is the first action (stone, else wooden), capped at 6 failures; OFF keeps the old order', () => {
+  const run = (params, inv, over = {}) => nextAction(state({ inv, y: -20, pickLeft: 0, visible: { diamond: true }, params: { ...DEFAULT_PARAMS, ...params }, ...over }))
+  const stone = { cobblestone: 5, crafting_table: 1, stick: 4 }
+  assert.deepStrictEqual(run({ noToolFix: true }, stone), { skill: 'craft', args: ['stone_pickaxe', 1], optional: true })
+  assert.deepStrictEqual(run({ noToolFix: true }, { crafting_table: 1, oak_planks: 5 }), { skill: 'craft', args: ['stick', 4], optional: true })
+  assert.notStrictEqual(run({ noToolFix: false }, stone)?.optional, true)
+  const failed = (n) => ({ memory: { leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, optionalFails: { stone_pickaxe: n } } })
+  assert.deepStrictEqual(run({ noToolFix: true }, stone, failed(5)), { skill: 'craft', args: ['stone_pickaxe', 1], optional: true })
+  assert.notStrictEqual(run({ noToolFix: true }, stone, failed(6))?.optional, true)
+})
+
+test('noToolFix: the spare is also made with two nearly worn pickaxes and keeps 3 sticks in reserve', () => {
+  const inv = { stone_pickaxe: 1, iron_pickaxe: 1, cobblestone: 5, crafting_table: 1, stick: 2, oak_planks: 4 }
+  const low = (params) => nextAction(state({ inv, y: -20, pickLeft: 10, visible: { diamond: true }, params: { ...DEFAULT_PARAMS, ...params } }))
+  assert.strictEqual(low({ noToolFix: false }).skill, 'mine')
+  assert.deepStrictEqual(low({ noToolFix: true }), { skill: 'craft', args: ['stick', 4], optional: true })
+})
+
+test('noToolFix is a declared switch', () => {
+  assert.strictEqual(normalizeParams({ noToolFix: 1 }).noToolFix, true)
+  assert.strictEqual(DEFAULT_PARAMS.noToolFix, false)
+})

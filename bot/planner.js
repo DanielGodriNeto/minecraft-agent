@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1', veinScan: process.env.VEINSCAN === '1', spawnWalk: process.env.SPAWNWALK === '1', pickReady: process.env.PICKREADY === '1', spareAlways: process.env.SPAREALWAYS === '1', earlySeal: process.env.EARLYSEAL === '1', sparePick: process.env.SPAREPICK === '1', ...(process.env.LONGRUN === '1' && { longrun: true }), ...(process.env.TELEMETRY === '1' && { telemetry: true }) }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1', veinScan: process.env.VEINSCAN === '1', spawnWalk: process.env.SPAWNWALK === '1', pickReady: process.env.PICKREADY === '1', spareAlways: process.env.SPAREALWAYS === '1', earlySeal: process.env.EARLYSEAL === '1', sparePick: process.env.SPAREPICK === '1', noToolFix: process.env.NOTOOLFIX === '1', ...(process.env.LONGRUN === '1' && { longrun: true }), ...(process.env.TELEMETRY === '1' && { telemetry: true }) }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -58,9 +58,10 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   SPAREALWAYS  spareAlways (OFF by default; =1 enables, needs pickReady) makes the spare iron pickaxe deliberate: after the first iron pickaxe and above y0 the bot goes to the iron band (y16), mines 3 iron, smelts, crafts sticks and the spare, within an 8 minute budget and only with 20+ minutes left and fuel on hand
 //   EARLYSEAL  earlySeal (OFF by default; =1 enables) a hostile 3+ blocks away with health < 14, 2+ hostiles or a skeleton in sight starts the shelter before the fight branch; the cell holds up to 90 s (no dig-out near a hostile or below 14 hp) and eats inside; max 2 per 10 min, 5 min lockout after a hold that fails, exempt from the shelter pause
 //   SPAREPICK  sparePick (OFF by default; =1 enables) with one pickaxe left and <= 40 uses on it, the spare (stone pickaxe, sticks) is crafted before visible diamonds are mined, and its failure cap is 6 instead of 2, so the last pickaxe never wears out with materials in the bag (stuck endings)
+//   NOTOOLFIX  noToolFix (OFF by default; =1 enables) no pickaxe left is recoverable: with no pickaxe the replacement (stone, else wooden, from what is carried) is crafted right after danger and food; the spare also fires with two pickaxes and <= 40 uses on the cheapest, with a 6-failure cap and 3 sticks kept for it
 //   LONGRUN    longrun (OFF by default; =1 enables) hours-long runs: deaths are not terminal, a stuck detection escalates (recover, clear loop memory, forced escape) and only 6 no-progress escalations in a row end the run; adds gear/deposit telemetry to the row (longrun.js)
 //   TELEMETRY  telemetry (OFF by default; =1 enables) observation only: detailed damage, seal-failure, pickaxe/ore, pickaxe-loss and stuck-context fields in the skill log and result row (telemetry.js); no decision changes
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk', 'pickReady', 'spareAlways', 'earlySeal', 'sparePick', 'longrun', 'telemetry']
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk', 'pickReady', 'spareAlways', 'earlySeal', 'sparePick', 'noToolFix', 'longrun', 'telemetry']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 // watchdog is the one multi-value param (0 off, 1-5 variants), so it is coerced to an integer instead.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])), ...('watchdog' in params && { watchdog: Number(params.watchdog) || 0 }) })
@@ -83,6 +84,7 @@ const SURFACE_SLACK = 8
 const MAX_SPARE_FAILS = 2
 const SPARE_PICK_FAILS = 6 // params.sparePick
 const SPARE_PICK_AT = 40 // params.sparePick: uses left on the only pickaxe
+const NO_TOOL_STICKS = 3 // params.noToolFix: sticks kept for the spare
 const MAX_HUNT_FAILS = 4
 const EAT_AT = 17 // natural regeneration needs food >= 18
 const WEAK_HEALTH = 12
@@ -339,19 +341,35 @@ function junkAction(s) {
 function spareStep(s) {
   const picks = pickaxeCount(s)
   const wantsSpare = picks < 2 || (s.pickLeft < LOW_PICK && picks < 3)
-  const sticksWanted = atSurface(s) ? SURFACE_STICKS : wantsSpare ? 2 : 0
+  const sticksWanted = atSurface(s) ? SURFACE_STICKS : wantsSpare ? (s.params.noToolFix ? NO_TOOL_STICKS : 2) : 0
   const sticks = s.inv.stick ?? 0
   const woodOnHand = count(s, 'planks') >= 2 || has(s, 'log')
   const tableOk = s.tableNear || has(s, 'crafting_table') || count(s, 'planks') >= 4 || has(s, 'log')
   let step = null
   if (sticks < sticksWanted && woodOnHand) step = obtain(s, 'stick', sticksWanted)
   else if (wantsSpare && sticks >= 2 && count(s, 'stone') >= 3 && tableOk) step = obtain(s, 'stone_pickaxe', count(s, 'stone_pickaxe') + 1)
-  if (!step || (s.memory.optionalFails?.[step.args[0]] ?? 0) >= (s.params.sparePick ? SPARE_PICK_FAILS : MAX_SPARE_FAILS)) return null
+  if (!step || (s.memory.optionalFails?.[step.args[0]] ?? 0) >= (s.params.sparePick || s.params.noToolFix ? SPARE_PICK_FAILS : MAX_SPARE_FAILS)) return null
   return { ...step, optional: true }
 }
 
 // params.sparePick: the only pickaxe is nearly worn out, so the spare comes before diamonds and a trip home.
-const sparePickStep = (s) => (s.params.sparePick && !s.hostileNear && pickaxeCount(s) === 1 && s.pickLeft < SPARE_PICK_AT ? spareStep(s) : null)
+const sparePickStep = (s) => {
+  const picks = pickaxeCount(s)
+  const wanted = s.params.sparePick ? picks === 1 : s.params.noToolFix && picks >= 1 && picks <= 2
+  return wanted && !s.hostileNear && s.pickLeft < SPARE_PICK_AT ? spareStep(s) : null
+}
+
+// params.noToolFix: no pickaxe at all. The replacement comes from carried materials before anything else (it needs no pickaxe;
+// craft hand-digs a table cell), stone tier when 3 stone are at hand, else wooden. Nothing carried: the normal plan goes on.
+function noPickStep(s) {
+  if (!s.params.noToolFix || s.hostileNear || pickaxeCount(s) > 0) return null
+  const sticksOk = (s.inv.stick ?? 0) >= 2 || count(s, 'planks') >= 2 || has(s, 'log')
+  const tableOk = s.tableNear || has(s, 'crafting_table') || count(s, 'planks') >= 4 || has(s, 'log')
+  const tier = count(s, 'stone') >= 3 ? 'stone_pickaxe' : count(s, 'planks') >= 3 || has(s, 'log') ? 'wooden_pickaxe' : null
+  const step = sticksOk && tableOk && tier ? obtain(s, tier, 1) : null
+  if (!step || (s.memory.optionalFails?.[step.args[0]] ?? 0) >= SPARE_PICK_FAILS) return null
+  return { ...step, optional: true }
+}
 
 // A sword right after the stone pickaxe, from stone in hand or in view; never worth a dig or a trip for wood.
 function swordStep(s) {
@@ -565,6 +583,8 @@ function nextAction(s) {
   if (danger) return danger
   const food = foodStep(s)
   if (food) return food
+  const noPick = noPickStep(s)
+  if (noPick) return noPick
   const upgrade = s.memory.digFails > 0 && s.memory.lastDigReason === 'no_tool' ? pickaxeUpgrade(s) : null
   if (upgrade) return upgrade
   const waiting = restStep(s) ?? nightStep(s)
