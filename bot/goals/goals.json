@@ -1,0 +1,25 @@
+{
+  "mcVersion": "1.21.11",
+  "tiers": ["wooden", "stone", "iron", "diamond", "netherite"],
+  "stations": ["crafting_table", "furnace"],
+  "fuel": { "item": "coal", "smelts": 8 },
+  "classes": { "planks": "_planks", "log": "_log" },
+  "goals": {
+    "log": { "aliases": ["tronco", "troncos", "madeira", "wood", "log", "logs"], "source": { "collect_wood": true } },
+    "cobblestone": { "aliases": ["cobblestone", "pedregulho", "pedregulhos", "cobble"], "source": { "mine": "stone", "tool_min": "wooden_pickaxe" } },
+    "coal": { "aliases": ["coal", "carvao"], "source": { "mine": "coal_ore", "tool_min": "wooden_pickaxe" } },
+    "charcoal": { "aliases": ["charcoal", "carvao vegetal"], "source": { "smelt": "log" } },
+    "raw_iron": { "aliases": ["raw iron", "ferro bruto", "minerio de ferro"], "source": { "mine": "iron_ore", "tool_min": "stone_pickaxe" } },
+    "iron_ingot": { "aliases": ["ferro", "iron", "iron ingot", "barra de ferro", "barras de ferro", "lingote de ferro"], "source": { "smelt": "raw_iron" } },
+    "diamond": { "aliases": ["diamante", "diamantes", "diamond", "diamonds"], "source": { "mine": "diamond_ore", "tool_min": "iron_pickaxe" } },
+    "crafting_table": { "aliases": ["crafting table", "mesa de trabalho", "bancada"], "source": { "craft": "auto" } },
+    "furnace": { "aliases": ["furnace", "fornalha", "forno"], "source": { "craft": "auto" } },
+    "wooden_pickaxe": { "aliases": ["wooden pickaxe", "picareta de madeira", "pickaxe de madeira"], "source": { "craft": "auto" } },
+    "stone_pickaxe": { "aliases": ["stone pickaxe", "picareta de pedra", "pickaxe de pedra"], "source": { "craft": "auto" } },
+    "iron_pickaxe": { "aliases": ["iron pickaxe", "picareta de ferro", "pickaxe de ferro"], "source": { "craft": "auto" } },
+    "diamond_pickaxe": { "aliases": ["diamond pickaxe", "picareta de diamante", "pickaxe de diamante"], "source": { "craft": "auto" } },
+    "bucket": { "aliases": ["bucket", "balde"], "source": { "craft": "auto" } },
+    "shield": { "aliases": ["shield", "escudo"], "source": { "craft": "auto" } },
+    "iron_chestplate": { "aliases": ["iron chestplate", "peitoral de ferro"], "source": { "craft": "auto" } }
+  }
+}
