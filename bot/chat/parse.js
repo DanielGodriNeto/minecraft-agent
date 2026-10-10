@@ -63,7 +63,7 @@ function parseCount(tokens) {
   for (const t of tokens) {
     const digits = DIGITS.exec(t)
     if (digits) return Number(digits[1])
-    if (t in NUMBER_WORDS) return NUMBER_WORDS[t]
+    if (Object.hasOwn(NUMBER_WORDS, t)) return NUMBER_WORDS[t]
   }
   return null
 }
@@ -71,11 +71,11 @@ function parseCount(tokens) {
 function parseGoal(tokens, goals) {
   if (!tokens.some(t => GOAL_VERBS.has(t))) return null
   const count = parseCount(tokens)
-  const rest = tokens.filter(t => !GOAL_VERBS.has(t) && !MAX_WORDS.has(t) && !(t in NUMBER_WORDS) && !DIGITS.test(t))
+  const rest = tokens.filter(t => !GOAL_VERBS.has(t) && !MAX_WORDS.has(t) && !Object.hasOwn(NUMBER_WORDS, t) && !DIGITS.test(t))
   const found = matchItem(rest, goals)
   if (!found) return null
   const n = count ?? (found.plural ? 'max' : 1)
-  if (n !== 'max' && (n < 1 || n > MAX_COUNT)) return null
+  if (n !== 'max' && (!Number.isInteger(n) || n < 1 || n > MAX_COUNT)) return null
   return { kind: 'goal', item: found.item, count: n }
 }
 
@@ -103,10 +103,12 @@ function classify(tokens, text, goals) {
   return { kind: 'unknown', text }
 }
 
-function parseChat({ sender, text, botName, owners, limiter, goals = defaultGoals }) {
+function parseChat({ sender, text, botName, owners, isOwner, limiter, goals = defaultGoals }) {
   const ignore = { kind: 'ignore' }
   if (typeof sender !== 'string' || typeof text !== 'string') return ignore
-  if (!owners.some(o => normalize(o) === normalize(sender))) return ignore
+  // isOwner (uuid-aware) wins over the name list when provided.
+  const allowed = typeof isOwner === 'function' ? isOwner(sender) === true : (owners ?? []).some(o => normalize(o) === normalize(sender))
+  if (!allowed) return ignore
   const name = normalize(botName)
   const all = tokenize(text)
   if (!all.includes(name)) return ignore

@@ -106,3 +106,18 @@ test('chat: rate limiter throttles per sender, never stop, unaddressed does not 
   assert.strictEqual(run('ola pessoal').kind, 'ignore')
   assert.strictEqual(run('Bot, status').kind, 'ignore') // the earlier chatter did not reset the window wrongly
 })
+
+test('inherited object keys are not number words', () => {
+  for (const t of ['bot pegue __proto__ diamante', 'bot pegue constructor diamantes', 'bot pegue toString diamante']) {
+    const r = say(t)
+    assert.equal(r.kind, 'goal', t)
+    assert.ok(r.count === 'max' || Number.isInteger(r.count), t)
+  }
+  assert.deepEqual(say('bot pegue __proto__ diamante'), goal('diamond', 1))
+})
+
+test('isOwner predicate takes precedence over owners', () => {
+  const isOwner = s => s === 'Real'
+  assert.equal(say('bot stop', 'Owner', { isOwner }).kind, 'ignore') // in owners but fails predicate
+  assert.equal(say('bot stop', 'Real', { isOwner }).kind, 'stop') // not in owners but passes
+})
