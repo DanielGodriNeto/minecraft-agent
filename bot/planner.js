@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1', veinScan: process.env.VEINSCAN === '1', spawnWalk: process.env.SPAWNWALK === '1', pickReady: process.env.PICKREADY === '1', spareAlways: process.env.SPAREALWAYS === '1', earlySeal: process.env.EARLYSEAL === '1', sparePick: process.env.SPAREPICK === '1', ...(process.env.LONGRUN === '1' && { longrun: true }), ...(process.env.TELEMETRY === '1' && { telemetry: true }) }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1', veinScan: process.env.VEINSCAN === '1', spawnWalk: process.env.SPAWNWALK === '1', pickReady: process.env.PICKREADY === '1', spareAlways: process.env.SPAREALWAYS === '1', earlySeal: process.env.EARLYSEAL === '1', sparePick: process.env.SPAREPICK === '1', nightDeep: process.env.NIGHTDEEP === '1', ...(process.env.LONGRUN === '1' && { longrun: true }), ...(process.env.TELEMETRY === '1' && { telemetry: true }) }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -60,7 +60,8 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   SPAREPICK  sparePick (OFF by default; =1 enables) with one pickaxe left and <= 40 uses on it, the spare (stone pickaxe, sticks) is crafted before visible diamonds are mined, and its failure cap is 6 instead of 2, so the last pickaxe never wears out with materials in the bag (stuck endings)
 //   LONGRUN    longrun (OFF by default; =1 enables) hours-long runs: deaths are not terminal, a stuck detection escalates (recover, clear loop memory, forced escape) and only 6 no-progress escalations in a row end the run; adds gear/deposit telemetry to the row (longrun.js)
 //   TELEMETRY  telemetry (OFF by default; =1 enables) observation only: detailed damage, seal-failure, pickaxe/ore, pickaxe-loss and stuck-context fields in the skill log and result row (telemetry.js); no decision changes
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk', 'pickReady', 'spareAlways', 'earlySeal', 'sparePick', 'longrun', 'telemetry']
+//   NIGHTDEEP  nightDeep (OFF by default; =1 enables) at night, below y=40 with no hostile near and health >= 8 the bot keeps branch-mining (no dawn wait, no night ascent); above y=40 with a route down (no dig failure) and no hostile within fight range it goes down instead of sealing in place. Daytime unchanged (nightDeepRule)
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk', 'pickReady', 'spareAlways', 'earlySeal', 'sparePick', 'nightDeep', 'longrun', 'telemetry']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 // watchdog is the one multi-value param (0 off, 1-5 variants), so it is coerced to an integer instead.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])), ...('watchdog' in params && { watchdog: Number(params.watchdog) || 0 }) })
@@ -296,6 +297,9 @@ const timeOfDayAt = (s, ms) => (s.timeOfDay + ms / 50) % 24000 // 20 ticks per s
 
 // Deep, healthy and fed with a diamond in the pack: climbing now would reach the surface in the dark, so mine on until it would not.
 function lingerUnderground(s) {
+  if (nightDeepRule(s) === 'mine' && count(s, 'diamond') > 0 && !(s.params.earlyBank && s.deposited === 0)) {
+    return s.msLeft >= ascentMs(s) + ASCENT_MARGIN_MS && (s.memory.ascentDelayMs ?? 0) < MAX_ASCENT_DELAY_MS && s.freeSlots > 1
+  }
   if (!s.params.nightAscent || s.timeOfDay === undefined || !has(s, 'iron_pickaxe') || count(s, 'diamond') === 0) return false
   if (s.params.earlyBank && s.deposited === 0) return false // the first diamond is banked now, never held for dawn
   if (s.surfaceY - s.y < ASCENT_DEEP || s.msLeft < ascentMs(s) + ASCENT_MARGIN_MS) return false
@@ -367,6 +371,15 @@ function stickStock(s) {
   return atSurface(s) && (s.inv.stick ?? 0) < SURFACE_STICKS ? obtain(s, 'stick', SURFACE_STICKS) : null
 }
 
+// NIGHTDEEP: 'mine' = deep in its own tunnel, carry on; 'descend' = near the surface, go down to the mine rather than seal in place;
+// null = the existing night/rest/shelter logic decides (day, hostile close, hostile near underground, low health, no route down).
+const NIGHT_DEEP_Y = 40
+function nightDeepRule(s) {
+  if (!s.params.nightDeep || !s.isNight || s.hostileClose || s.health < REST_BELOW) return null
+  if (s.y < NIGHT_DEEP_Y) return s.hostileNear ? null : 'mine'
+  return (s.memory.digFails ?? 0) < MAX_DIG_FAILS ? 'descend' : null
+}
+
 const underground = (s) => s.y < s.surfaceY - 2
 const waitFails = (s, key) => s.memory.optionalFails?.[key] ?? 0
 
@@ -386,6 +399,7 @@ function restStep(s) {
 // The night belongs underground: from the surface dig a short shaft (by hand if there is no pickaxe), then wait for dawn.
 // With the iron pickaxe (nightSurf) the bot already descends, so underground it only digs in; a stuck column at the surface waits for dawn instead of hopping across open ground.
 function nightStep(s) {
+  if (nightDeepRule(s)) return null
   const geared = has(s, 'iron_pickaxe')
   if (!s.isNight || has(s, 'diamond') || (geared && !s.params.nightSurf)) return null
   if (!underground(s)) {
@@ -515,7 +529,7 @@ function dangerStep(s) {
   if (reason) return { ...act('shelter', atSurface(s) ? s.memory.surfaceDir : s.memory.baseDir, 'early', reason), key: 'early_seal' }
   if (s.hostileClose && s.health >= FIGHT_HEALTH && canFight(s)) return act('fight')
   const threatened = s.recentlyAttacked || s.health < s.params.fleeHealth
-    || (s.isNight && s.y >= s.surfaceY - 2 && !surfaceWork(s))
+    || (s.isNight && s.y >= s.surfaceY - 2 && !surfaceWork(s) && nightDeepRule(s) !== 'descend')
   if (!threatened) return null
   return s.memory.noShelter > 0 ? standGround(s) : takeCover(s)
 }
@@ -599,4 +613,4 @@ function recoveryFor(signature, s) {
   return signature === 'explore:hazard' ? 'retreat' : null
 }
 
-module.exports = { EARLY_SEAL_WINDOW_MS, walkAfter, recoveryFor, nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS, lingerUnderground, lingerHeldReturn, ASCENT_MARGIN_MS, MAX_ASCENT_DELAY_MS }
+module.exports = { nightDeepRule,EARLY_SEAL_WINDOW_MS, walkAfter, recoveryFor, nextAction, MAX_DIG_FAILS, DEFAULT_PARAMS, SOURCES, GROUPS, RESERVE, normalizeParams, FIGHT_HEALTH, MAX_FIGHT_FAILS, lingerUnderground, lingerHeldReturn, ASCENT_MARGIN_MS, MAX_ASCENT_DELAY_MS }
