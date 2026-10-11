@@ -490,3 +490,4 @@ Ablation harness, absent = no change. `gift=base|armor|spare|fortune2|diamondpic
 
 - Fix (unconditional): `digSpot` (S, `skills.js`) now breaks the side wall by hand. With no pickaxe left, a table in the bag could not be placed in a 1-wide shaft (no free cell, wall dig refused `no_tool`), so `craft stone_pickaxe` returned `no_tool` with materials present. Hand-digging stone is slow but needs no drop.
 - Switch `SPAREPICK` (`sparePick`, OFF): with exactly one pickaxe and <= 40 uses left, the spare stone pickaxe/sticks (`spareStep`) is crafted before visible diamonds and a home trip, and its failure cap is 6 instead of 2. Details: `analysis/measure/sparepick.md`. Not yet measured.
+- Switch `NOTOOLFIX` (`noToolFix`, OFF): with no pickaxe, the replacement (stone from 3 cobble, else wooden) is crafted right after danger and food (`noPickStep`); the spare also fires with two pickaxes and <= 40 uses on the cheapest, keeps 3 sticks, cap 6. Not yet measured.
