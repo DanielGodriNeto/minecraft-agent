@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 322" width="800" height="322" role="img">
+<rect width="800" height="322" fill="#ffffff" rx="6"/>
+<text x="20" y="28" font-size="16" fill="#1f2933" text-anchor="start" font-weight="bold" font-family="Segoe UI, Helvetica, Arial, sans-serif">Where runs fail</text>
+<text x="20" y="47" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Most common ending and last failure among the 430 runs that banked nothing</text>
+<line x1="250.0" y1="54" x2="250.0" y2="308" stroke="#e4e8ec"/>
+<text x="250.0" y="320" font-size="10" fill="#6b7785" text-anchor="middle" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">0%</text>
+<text x="240" y="77" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">stuck / go_up:not_reached</text>
+<rect x="250" y="62" width="365.2" height="20" fill="#b5532f" rx="2"/>
+<text x="623.2173913043478" y="77" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">79</text>
+<text x="240" y="107" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">stuck / explore:not_found</text>
+<rect x="250" y="92" width="245.0" height="20" fill="#b5532f" rx="2"/>
+<text x="503.01926252063845" y="107" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">53</text>
+<text x="240" y="137" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">timeout / explore:not_found</text>
+<rect x="250" y="122" width="138.7" height="20" fill="#b5532f" rx="2"/>
+<text x="396.6901485965878" y="137" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">30</text>
+<text x="240" y="167" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">deaths / fight:low_health</text>
+<rect x="250" y="152" width="87.8" height="20" fill="#b5532f" rx="2"/>
+<text x="345.8370941111723" y="167" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">19</text>
+<text x="240" y="197" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">stuck / dig_down:blocked</text>
+<rect x="250" y="182" width="87.8" height="20" fill="#b5532f" rx="2"/>
+<text x="345.8370941111723" y="197" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">19</text>
+<text x="240" y="227" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">deaths / shelter:not_sealed</text>
+<rect x="250" y="212" width="83.2" height="20" fill="#b5532f" rx="2"/>
+<text x="341.2140891579527" y="227" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">18</text>
+<text x="240" y="257" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">deaths / flee:timeout</text>
+<rect x="250" y="242" width="83.2" height="20" fill="#b5532f" rx="2"/>
+<text x="341.2140891579527" y="257" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">18</text>
+<text x="240" y="287" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">stuck / go_up:no_progress</text>
+<rect x="250" y="272" width="55.5" height="20" fill="#b5532f" rx="2"/>
+<text x="313.4760594386351" y="287" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">12</text>
+</svg>

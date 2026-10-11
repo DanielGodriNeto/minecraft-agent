@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 322" width="740" height="322" role="img">
+<rect width="740" height="322" fill="#ffffff" rx="6"/>
+<text x="20" y="28" font-size="16" fill="#1f2933" text-anchor="start" font-weight="bold" font-family="Segoe UI, Helvetica, Arial, sans-serif">Progress funnel</text>
+<text x="20" y="47" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Share of runs reaching each milestone, 1329 logged runs</text>
+<line x1="190.0" y1="54" x2="190.0" y2="308" stroke="#e4e8ec"/>
+<text x="190.0" y="320" font-size="10" fill="#6b7785" text-anchor="middle" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">0%</text>
+<line x1="295.0" y1="54" x2="295.0" y2="308" stroke="#e4e8ec"/>
+<text x="295.0" y="320" font-size="10" fill="#6b7785" text-anchor="middle" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">25%</text>
+<line x1="400.0" y1="54" x2="400.0" y2="308" stroke="#e4e8ec"/>
+<text x="400.0" y="320" font-size="10" fill="#6b7785" text-anchor="middle" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">50%</text>
+<line x1="505.0" y1="54" x2="505.0" y2="308" stroke="#e4e8ec"/>
+<text x="505.0" y="320" font-size="10" fill="#6b7785" text-anchor="middle" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">75%</text>
+<line x1="610.0" y1="54" x2="610.0" y2="308" stroke="#e4e8ec"/>
+<text x="610.0" y="320" font-size="10" fill="#6b7785" text-anchor="middle" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">100%</text>
+<text x="180" y="77" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Wood</text>
+<rect x="190" y="62" width="394.7" height="20" fill="#1d6f8f" rx="2"/>
+<text x="592.7178329571107" y="77" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">94.0%</text>
+<text x="180" y="107" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Stone pickaxe</text>
+<rect x="190" y="92" width="384.9" height="20" fill="#1d6f8f" rx="2"/>
+<text x="582.920993227991" y="107" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">91.6%</text>
+<text x="180" y="137" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Iron pickaxe</text>
+<rect x="190" y="122" width="359.0" height="20" fill="#1d6f8f" rx="2"/>
+<text x="557.0067720090293" y="137" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">85.5%</text>
+<text x="180" y="167" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Below y=0</text>
+<rect x="190" y="152" width="359.3" height="20" fill="#1d6f8f" rx="2"/>
+<text x="557.3227990970654" y="167" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">85.6%</text>
+<text x="180" y="197" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Diamond depth</text>
+<rect x="190" y="182" width="350.2" height="20" fill="#1d6f8f" rx="2"/>
+<text x="548.1580135440181" y="197" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">83.4%</text>
+<text x="180" y="227" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">First diamond</text>
+<rect x="190" y="212" width="327.7" height="20" fill="#1d6f8f" rx="2"/>
+<text x="525.7200902934537" y="227" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">78.0%</text>
+<text x="180" y="257" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Three diamonds</text>
+<rect x="190" y="242" width="216.5" height="20" fill="#1d6f8f" rx="2"/>
+<text x="414.47855530474044" y="257" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">51.5%</text>
+<text x="180" y="287" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Diamond deposited</text>
+<rect x="190" y="272" width="284.1" height="20" fill="#1d6f8f" rx="2"/>
+<text x="482.10835214446956" y="287" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">67.6%</text>
+</svg>

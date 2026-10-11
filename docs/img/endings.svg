@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 232" width="740" height="232" role="img">
+<rect width="740" height="232" fill="#ffffff" rx="6"/>
+<text x="20" y="28" font-size="16" fill="#1f2933" text-anchor="start" font-weight="bold" font-family="Segoe UI, Helvetica, Arial, sans-serif">How runs end</text>
+<text x="20" y="47" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">1329 logged runs, all experiment arms pooled</text>
+<line x1="190.0" y1="54" x2="190.0" y2="218" stroke="#e4e8ec"/>
+<text x="190.0" y="230" font-size="10" fill="#6b7785" text-anchor="middle" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">0%</text>
+<line x1="365.0" y1="54" x2="365.0" y2="218" stroke="#e4e8ec"/>
+<text x="365.0" y="230" font-size="10" fill="#6b7785" text-anchor="middle" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">25%</text>
+<line x1="540.0" y1="54" x2="540.0" y2="218" stroke="#e4e8ec"/>
+<text x="540.0" y="230" font-size="10" fill="#6b7785" text-anchor="middle" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">50%</text>
+<text x="180" y="77" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Timeout (60 min)</text>
+<rect x="190" y="62" width="319.2" height="20" fill="#9aa5b1" rx="2"/>
+<text x="517.1873589164786" y="77" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">45.6%  (606)</text>
+<text x="180" y="107" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Stuck tracker</text>
+<rect x="190" y="92" width="267.0" height="20" fill="#9aa5b1" rx="2"/>
+<text x="465.04288939051924" y="107" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">38.1%  (507)</text>
+<text x="180" y="137" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Three deaths</text>
+<rect x="190" y="122" width="105.3" height="20" fill="#9aa5b1" rx="2"/>
+<text x="303.3423626787058" y="137" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">15.0%  (200)</text>
+<text x="180" y="167" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Lost</text>
+<rect x="190" y="152" width="6.3" height="20" fill="#9aa5b1" rx="2"/>
+<text x="204.32054176072234" y="167" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">0.9%  (12)</text>
+<text x="180" y="197" font-size="12" fill="#1f2933" text-anchor="end" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">Disconnected</text>
+<rect x="190" y="182" width="2.1" height="20" fill="#9aa5b1" rx="2"/>
+<text x="200.1068472535741" y="197" font-size="12" fill="#6b7785" text-anchor="start" font-weight="normal" font-family="Segoe UI, Helvetica, Arial, sans-serif">0.3%  (4)</text>
+</svg>
