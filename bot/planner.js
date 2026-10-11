@@ -31,7 +31,7 @@ const SURFACE_GROWTH = 32
 const SURFACE_CAP = 192
 
 const on = (name) => process.env[name] !== '0'
-const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1', veinScan: process.env.VEINSCAN === '1', spawnWalk: process.env.SPAWNWALK === '1', pickReady: process.env.PICKREADY === '1', spareAlways: process.env.SPAREALWAYS === '1', earlySeal: process.env.EARLYSEAL === '1', sparePick: process.env.SPAREPICK === '1', noToolFix: process.env.NOTOOLFIX === '1', nightDeep: process.env.NIGHTDEEP === '1', ...(process.env.LONGRUN === '1' && { longrun: true }), ...(process.env.TELEMETRY === '1' && { telemetry: true }) }
+const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5, woodStock: 9, fleeHealth: 14, shaft: on('SHAFT'), nightSurf: on('NIGHTSURF'), foodGate: on('FOODGATE'), fightGuard: on('FIGHTGUARD'), reserve: on('RESERVE'), crowdFlee: on('CROWDFLEE'), nightAscent: on('NIGHTASCENT'), branchRelocate: on('BRANCHRELOCATE'), goUpLoop: on('GOUPLOOP'), localSurface: process.env.LOCALSURFACE === '1', pickFirst: process.env.PICKFIRST === '1', stationAbove: process.env.STATIONABOVE === '1', drownCap: process.env.DROWNCAP === '1', hazardGrace: on('HAZARDGRACE'), watchdog: Number(process.env.WATCHDOG) || 0, recovery: process.env.RECOVERY === '1', traceLog: process.env.TRACELOG === '1', earlyBank: process.env.EARLYBANK === '1', spawnEscape: process.env.SPAWNESCAPE === '1', veinScan: process.env.VEINSCAN === '1', spawnWalk: process.env.SPAWNWALK === '1', pickReady: process.env.PICKREADY === '1', spareAlways: process.env.SPAREALWAYS === '1', earlySeal: process.env.EARLYSEAL === '1', sparePick: process.env.SPAREPICK === '1', noToolFix: process.env.NOTOOLFIX === '1', nightDeep: process.env.NIGHTDEEP === '1', fightFix: process.env.FIGHTFIX === '1', ...(process.env.LONGRUN === '1' && { longrun: true }), ...(process.env.TELEMETRY === '1' && { telemetry: true }) }
 // A/B switches: env var (=0 turns off) | param key (also the ARM=key=0 name; eval.js records env by the env var name) | effect.
 //   SHAFT      shaft       dig_down as a 1x1 shaft (off = stairs only)
 //   NIGHTSURF  nightSurf   the iron pickaxe does not exempt the bot from digging in / sheltering at night
@@ -57,12 +57,13 @@ const DEFAULT_PARAMS = { branchY: -58, spacing: 3, tunnelLength: 32, returnAt: 5
 //   RECOVERY   recovery (OFF by default; =1 enables) before the stuck tracker ends a run, one named recovery routine per failure signature and life (recoveryFor)
 //   SPAREALWAYS  spareAlways (OFF by default; =1 enables, needs pickReady) makes the spare iron pickaxe deliberate: after the first iron pickaxe and above y0 the bot goes to the iron band (y16), mines 3 iron, smelts, crafts sticks and the spare, within an 8 minute budget and only with 20+ minutes left and fuel on hand
 //   EARLYSEAL  earlySeal (OFF by default; =1 enables) a hostile 3+ blocks away with health < 14, 2+ hostiles or a skeleton in sight starts the shelter before the fight branch; the cell holds up to 90 s (no dig-out near a hostile or below 14 hp) and eats inside; max 2 per 10 min, 5 min lockout after a hold that fails, exempt from the shelter pause
+//   FIGHTFIX   fightFix (OFF by default; =1 enables) fight with a swing pace that matches the weapon (sword 13 ticks, not a fixed 12); a lone melee hostile while in a 1-wide tunnel at health >= FIGHT_HEALTH is fought (or waited for) instead of sealed out; a creeper < 5 blocks away is retreated from (max 3 per life)
 //   SPAREPICK  sparePick (OFF by default; =1 enables) with one pickaxe left and <= 40 uses on it, the spare (stone pickaxe, sticks) is crafted before visible diamonds are mined, and its failure cap is 6 instead of 2, so the last pickaxe never wears out with materials in the bag (stuck endings)
 //   NOTOOLFIX  noToolFix (OFF by default; =1 enables) no pickaxe left is recoverable: with no pickaxe the replacement (stone, else wooden, from what is carried) is crafted right after danger and food; the spare also fires with two pickaxes and <= 40 uses on the cheapest, with a 6-failure cap and 3 sticks kept for it
 //   LONGRUN    longrun (OFF by default; =1 enables) hours-long runs: deaths are not terminal, a stuck detection escalates (recover, clear loop memory, forced escape) and only 6 no-progress escalations in a row end the run; adds gear/deposit telemetry to the row (longrun.js)
 //   TELEMETRY  telemetry (OFF by default; =1 enables) observation only: detailed damage, seal-failure, pickaxe/ore, pickaxe-loss and stuck-context fields in the skill log and result row (telemetry.js); no decision changes
 //   NIGHTDEEP  nightDeep (OFF by default; =1 enables) at night, below y=40 with no hostile near and health >= 8 the bot keeps branch-mining (no dawn wait, no night ascent); above y=40 with a route down (no dig failure) and no hostile within fight range it goes down instead of sealing in place. Daytime unchanged (nightDeepRule)
-const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk', 'pickReady', 'spareAlways', 'earlySeal', 'sparePick', 'noToolFix', 'nightDeep', 'longrun', 'telemetry']
+const SWITCHES = ['shaft', 'nightSurf', 'foodGate', 'fightGuard', 'reserve', 'crowdFlee', 'nightAscent', 'branchRelocate', 'goUpLoop', 'localSurface', 'pickFirst', 'stationAbove', 'drownCap', 'hazardGrace', 'recovery', 'traceLog', 'earlyBank', 'spawnEscape', 'veinScan', 'spawnWalk', 'pickReady', 'spareAlways', 'earlySeal', 'sparePick', 'noToolFix', 'nightDeep', 'fightFix', 'longrun', 'telemetry']
 // ARM values parse to numbers ("shaft=0"); code checks `=== false` in places, so switches are coerced to booleans once, here.
 // watchdog is the one multi-value param (0 off, 1-5 variants), so it is coerced to an integer instead.
 const normalizeParams = (params) => ({ ...params, ...Object.fromEntries(SWITCHES.filter(k => k in params).map(k => [k, Boolean(params[k])])), ...('watchdog' in params && { watchdog: Number(params.watchdog) || 0 }) })
@@ -97,6 +98,8 @@ const EARLY_SEAL_HEALTH = 14 // = fleeHealth; below it a hostile that is still 3
 const EARLY_MIN_DIST = 3
 const EARLY_SEAL_MAX = 2
 const EARLY_SEAL_WINDOW_MS = 600000
+const MAX_CREEPER_FLEES = 3 // params.fightFix, per life
+const CREEPER_RETREAT = 5 // params.fightFix: blocks
 const MAX_CROWD_FLEES = 3 // per life: flights from a crowd of hostiles when there is nothing to seal in with
 const MAX_BURN_UPS = 2 // per life: climbs after a burning abort
 const BURN_RISE = 4
@@ -537,11 +540,17 @@ function earlySealReason(s) {
   return s.health < EARLY_SEAL_HEALTH ? 'health' : null
 }
 
+// params.fightFix: a creeper this close is retreated from; a lone melee mob in a 1-wide tunnel is met with the weapon, not walls that fail with it adjacent.
+const creeperClose = (s) => s.params.fightFix && s.creeperDist < CREEPER_RETREAT && (s.memory.creeperFlees ?? 0) < MAX_CREEPER_FLEES
+const tunnelFight = (s) => s.params.fightFix && s.inTunnel && s.hostileMelee && (s.hostileCount ?? 0) < 2 && s.health >= FIGHT_HEALTH && canFight(s)
+
 // A hostile in reach gets fought first: sealing in or running with it adjacent only gives it free hits.
 function dangerStep(s) {
   if (s.drowning) return act('go_up', s.y + DROWN_RISE)
   if (s.recentlyBurned && underground(s) && (s.memory.burnUps ?? 0) < MAX_BURN_UPS) return { ...act('go_up', s.y + BURN_RISE), key: 'burn_up' }
   if (!s.hostileNear || s.enclosed) return null
+  if (creeperClose(s)) return { ...act('flee'), key: 'creeper_flee' }
+  if (tunnelFight(s)) return s.hostileClose ? act('fight') : null
   if (crowdedOut(s)) return { ...act('flee'), key: 'crowd_flee' }
   const reason = earlySealReason(s)
   if (reason) return { ...act('shelter', atSurface(s) ? s.memory.surfaceDir : s.memory.baseDir, 'early', reason), key: 'early_seal' }

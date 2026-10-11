@@ -1394,3 +1394,39 @@ test('breakBlock: a pickaxe block fails no_tool by default, but byHand digs it (
   await breakBlock(bot, stone, true)
   assert.ok(mined.has(stone.position.toString()))
 })
+
+test('fightFix: attackTicks follows the weapon cooldown and fight swings at that pace only when the switch is on', async () => {
+  const { attackTicks } = require('../bot/skills.js')
+  assert.deepStrictEqual(['stone_sword', 'iron_axe', 'stone_axe', 'diamond_axe', 'stone_pickaxe', undefined].map(attackTicks), [13, 22, 25, 20, 17, 5])
+  const ticksUsed = async (params) => {
+    const { bot } = fightBot({ hits: 2, weapon: 'stone_sword' })
+    const waits = []
+    bot.waitForTicks = (n) => { waits.push(n); return Promise.resolve() }
+    bot.objectiveRun = { params }
+    await run(bot, () => SKILLS.fight(bot), false)
+    return waits
+  }
+  assert.deepStrictEqual(await ticksUsed({}), [12, 12])
+  assert.deepStrictEqual(await ticksUsed({ fightFix: true }), [13, 13])
+})
+
+test('fightFix: fightFields reports the creeper distance, a melee-only threat, and a 1-wide tunnel', () => {
+  const { fightFields } = require('../bot/skills.js')
+  const mk = (mobs, solid) => ({
+    entity: { position: new Vec3(0.5, 10, 0.5) },
+    entities: Object.fromEntries(mobs.map((m, i) => [i, { type: 'hostile', height: 1.9, ...m }])),
+    nearestEntity(match) { return Object.values(this.entities).find(match) ?? null },
+    world: { raycast: () => null },
+    blockAt: (p) => ({ boundingBox: solid(p) ? 'block' : 'empty' }),
+  })
+  const walls = (p) => p.x !== 0 // x = 0 column is open, both x sides solid
+  const feet = new Vec3(0, 10, 0)
+  const zombie = mk([{ name: 'zombie', position: new Vec3(0.5, 10, 2.5) }], walls)
+  assert.deepStrictEqual(fightFields(zombie, feet), { creeperDist: null, hostileMelee: true, inTunnel: true })
+  const open = mk([{ name: 'zombie', position: new Vec3(0.5, 10, 2.5) }], () => false)
+  assert.strictEqual(fightFields(open, feet).inTunnel, false)
+  const creeper = mk([{ name: 'creeper', position: new Vec3(0.5, 10, 3.5) }], walls)
+  assert.deepStrictEqual(fightFields(creeper, feet), { creeperDist: 3, hostileMelee: false, inTunnel: true })
+  const skeleton = mk([{ name: 'skeleton', position: new Vec3(0.5, 10, 5.5) }], walls)
+  assert.strictEqual(fightFields(skeleton, feet).hostileMelee, false)
+})
