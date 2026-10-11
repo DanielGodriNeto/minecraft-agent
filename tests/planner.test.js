@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert')
-const { nextAction, DEFAULT_PARAMS, RESERVE, normalizeParams, walkAfter } = require('../bot/planner.js')
+const { nightDeepRule, nextAction, DEFAULT_PARAMS, RESERVE, normalizeParams, walkAfter } = require('../bot/planner.js')
 
 const WOODS = ['oak', 'spruce', 'birch']
 const sum = (inv, names) => names.reduce((n, k) => n + (inv[k] ?? 0), 0)
@@ -914,4 +914,31 @@ test('noToolFix: the spare is also made with two nearly worn pickaxes and keeps 
 test('noToolFix is a declared switch', () => {
   assert.strictEqual(normalizeParams({ noToolFix: 1 }).noToolFix, true)
   assert.strictEqual(DEFAULT_PARAMS.noToolFix, false)
+})
+
+test('nightDeepRule: deep at night keeps mining, shallow at night descends, everything else is left to the old logic', () => {
+  const rule = (over = {}, params = {}) => nightDeepRule(state({ isNight: true, y: 20, params: { ...DEFAULT_PARAMS, nightDeep: true, ...params }, ...over }))
+  assert.strictEqual(rule(), 'mine')
+  assert.strictEqual(rule({ y: 39 }), 'mine')
+  assert.strictEqual(rule({ y: 40 }), 'descend')
+  assert.strictEqual(rule({ y: 70 }), 'descend')
+  assert.strictEqual(rule({}, { nightDeep: false }), null) // switch off
+  assert.strictEqual(rule({ isNight: false }), null) // day
+  assert.strictEqual(rule({ y: 70, isNight: false }), null)
+  assert.strictEqual(rule({ hostileNear: true }), null) // deep, hostile in sight
+  assert.strictEqual(rule({ hostileNear: true, y: 70 }), 'descend') // not close: still head down
+  assert.strictEqual(rule({ hostileNear: true, hostileClose: true, y: 70 }), null) // adjacent: fight/seal logic
+  assert.strictEqual(rule({ health: 7 }), null) // low hp: restStep
+  assert.strictEqual(rule({ y: 70, memory: { digFails: 1 } }), null) // no route down
+})
+
+test('nightDeep: a stuck surface bot waits for dawn only when OFF or without a route; a shallow bot with a hostile near does not seal in place', () => {
+  const mem = (digFails) => ({ leg: 0, baseDir: 0, surfaceDir: 0, surfaceLeg: 0, digFails })
+  const run = (nightDeep, over) => nextAction(state({ isNight: true, canShelter: true, inv: { iron_pickaxe: 1 }, msLeft: 3600000, params: { ...DEFAULT_PARAMS, nightSurf: true, nightDeep }, ...over }))
+  assert.strictEqual(run(false, { memory: mem(1) }).skill, 'shelter') // old dawn wait
+  assert.strictEqual(run(true, { memory: mem(1) }).skill, 'shelter') // no route down: kept
+  assert.notStrictEqual(run(true, { memory: mem(0) }).skill, 'shelter')
+  assert.strictEqual(run(false, { memory: mem(0), hostileNear: true }).skill, 'shelter') // old night seal
+  assert.notStrictEqual(run(true, { memory: mem(0), hostileNear: true }).skill, 'shelter')
+  assert.notStrictEqual(run(true, { y: 20, memory: mem(0) }).skill, 'shelter') // deep: mines on
 })
